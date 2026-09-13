@@ -17,6 +17,7 @@ import {
   defaultRoleOf, isEverydayRole, isFranchiseRole, isRotationRole, minorRoleOf, roleTier,
 } from "./roles";
 import { placementScore, simAmateurSeason } from "./amateur";
+import { schoolOf } from "./school";
 import { chainByKey, pickChain } from "./events";
 import { judgeSeasonGoal, makeSeasonGoal, newMilestones, rollFeats } from "./records";
 import {
@@ -62,7 +63,7 @@ function log(s: GameState, e: Omit<LogEntry, "year">) {
 /* 새 게임                                                              */
 /* ------------------------------------------------------------------ */
 
-export function newGame(player: Player, wishTeamId: string, seed: number): GameState {
+export function newGame(player: Player, wishTeamId: string, seed: number, schoolName = ""): GameState {
   return {
     id: `${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`,
     seed,
@@ -81,6 +82,7 @@ export function newGame(player: Player, wishTeamId: string, seed: number): GameS
     draftPick: null,
     draftMissed: false,
     wishTeamId,
+    schoolName,
     pendingTraining: null,
     pendingOffers: null,
     lastSeasonIndex: null,
@@ -922,7 +924,7 @@ function runAmateurSeason(s: GameState, rng: RNG, level: LevelTag) {
   const role = defaultRole(p);
 
   // 아마추어 야구는 전국대회가 전부다
-  const am = simAmateurSeason(p, rng, inj.availability, level);
+  const am = simAmateurSeason(p, rng, inj.availability, level, schoolOf(s.schoolName ?? "", level));
   const line: StatLine = am.line;
   const awards = am.awards;
   const tournaments: AmateurTournament[] = am.tournaments;
@@ -1188,9 +1190,14 @@ export function advance(prev: GameState, action: Action): GameState {
         const span = done >= 2 ? 1 : 2; // 4학년을 마치면 졸업까지 한 해
         s.player.age += span;
         s.year += span;
+        // 마지막 한 해분은 아래 훈련으로 대신한다 — 안 그러면 성장이 이중으로 들어가
+        // 대학 경로가 프로(매년 캠프 1회)보다 일방적으로 유리해진다
         const collegeRate = developmentRate("COLLEGE", "주전", s.player.age) * amateurDevBonus(s);
-        for (let i = 0; i < span; i++) grow(s.player, rng, null, collegeRate);
-        s.phase = done >= 2 ? "DRAFT" : "PATH_CHOICE";
+        for (let i = 0; i < span - 1; i++) grow(s.player, rng, null, collegeRate);
+        // 대학에도 비시즌 훈련이 있다. 이게 없으면 매년 캠프를 도는 고졸 프로에 비해
+        // 대학 경로가 일방적으로 불리해진다.
+        s.pendingTraining = makeTrainingOptions(s.player, rng);
+        s.phase = "SPRING_CAMP";
       }
       bump();
       return s;
@@ -1324,6 +1331,14 @@ export function advance(prev: GameState, action: Action): GameState {
         });
       }
       s.pendingTraining = null;
+
+      // 아마추어(대학) 훈련이면 프로 시즌 셋업 없이 진로로 돌아간다
+      if (!s.contract) {
+        const collegeDone = s.seasons.filter((x) => x.level === "COLLEGE").length;
+        s.phase = collegeDone >= 2 ? "DRAFT" : "PATH_CHOICE";
+        bump();
+        return s;
+      }
 
       openSeason(s, rng, campInjury);
       // 대표팀 발탁은 시즌 개막 전에 통보된다 (대회는 시즌 중에 치른다)

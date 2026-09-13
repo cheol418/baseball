@@ -339,6 +339,8 @@ export interface GameState {
   /** 드래프트에서 한 번 미지명됐는가 — 같은 해 재신청을 막는다 */
   draftMissed: boolean;
   wishTeamId: string;
+  /** 출신 고교 이름 — 전력이 여기서 나온다 */
+  schoolName?: string;
   /** 이번 오프시즌에 고를 수 있는 훈련 후보 */
   pendingTraining: TrainingOption[] | null;
   pendingOffers: Offer[] | null;

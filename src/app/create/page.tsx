@@ -10,6 +10,7 @@ import {
   scoutedOverall, scoutedPotential, STYLES, traitById, type CreateOptions,
 } from "@/lib/player";
 import { RNG } from "@/lib/rng";
+import { schoolOf } from "@/lib/school";
 import { saveGame } from "@/lib/storage";
 import { TEAMS } from "@/lib/teams";
 import type { ArmSlot, Hand, Kind, Position } from "@/lib/types";
@@ -20,6 +21,8 @@ export default function CreatePage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
+  const [school, setSchool] = useState("");
+  const schoolInfo = useMemo(() => schoolOf(school), [school]);
   const [number, setNumber] = useState(7);
   const [kind, setKind] = useState<Kind>("HITTER");
   const [position, setPosition] = useState<Position>("CF");
@@ -59,7 +62,7 @@ export default function CreatePage() {
   const start = () => {
     if (picked === null) return;
     const c = candidates[picked];
-    const g = newGame(c.player, wishTeam, new RNG(c.seed).int(1, 2 ** 30));
+    const g = newGame(c.player, wishTeam, new RNG(c.seed).int(1, 2 ** 30), school);
     saveGame(g);
     router.push(`/play/${g.id}`);
   };
@@ -82,6 +85,23 @@ export default function CreatePage() {
                 placeholder="선수 이름 (최대 8자)" maxLength={8}
                 className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2.5 text-[14px] outline-none focus:border-[var(--brand)]"
               />
+            </Field>
+
+            <Field label="출신 고교">
+              <input
+                value={school} onChange={(e) => setSchool(e.target.value.slice(0, 12))}
+                placeholder="예: 백호고 (비워두면 평범한 학교)" maxLength={12}
+                className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2.5 text-[14px] outline-none focus:border-[var(--brand)]"
+              />
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <Pill tone={schoolInfo.elite ? "gold" : schoolInfo.power >= 65 ? "brand" : "neutral"}>
+                  {schoolInfo.elite && "★ "}팀 전력 {schoolInfo.power}
+                </Pill>
+                <span className="text-[11px] text-[var(--ink-3)]">{schoolInfo.note}</span>
+              </div>
+              <p className="mt-1 text-[11px] leading-relaxed text-[var(--ink-3)]">
+                강팀일수록 전국대회 성적이 좋지만 <b>주전 자리를 얻기 어렵습니다.</b>
+              </p>
             </Field>
 
             <Field label="등번호">

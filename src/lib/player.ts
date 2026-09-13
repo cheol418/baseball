@@ -506,7 +506,7 @@ export function developmentRate(
     // 아마추어 시절은 출발점이 이미 높은 대신 성장 폭을 줄였다 —
     // 대학 한 시즌에 OVR이 +16씩 뛰면 성장이 아니라 순간이동처럼 보인다
     case "HS": return 0.78;
-    case "COLLEGE": return 0.88;
+    case "COLLEGE": return 0.74;
     case "MINOR":
       // 유망주 구간에서만 퓨처스 풀타임의 이점이 크다
       if (age <= 21) return 1.4;

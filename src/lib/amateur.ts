@@ -1,5 +1,6 @@
 import { RNG, clamp } from "./rng";
 import { overall } from "./player";
+import { playingShare, type School } from "./school";
 import { isHitterLine, mergeLines, simHitter, simPitcher } from "./sim";
 import type { AmateurTournament, HsRound, LevelTag, Player, StatLine } from "./types";
 
@@ -27,6 +28,8 @@ const COLLEGE_OPPONENTS = [
   "서라벌대", "태산대", "무진대", "덕성대", "운암대",
 ];
 
+const teamPowerOf = (s?: School) => s?.power ?? 55;
+
 /** 레벨별 대회 구성 */
 export const tournamentsOf = (level: LevelTag) =>
   level === "COLLEGE" ? COLLEGE_TOURNAMENTS : HS_TOURNAMENTS;
@@ -44,11 +47,14 @@ export const placementScore = (p: string) => PLACEMENTS.indexOf(p as typeof PLAC
 /** 고교 시즌 한 대회를 치른다 */
 export function simAmateurTournament(
   player: Player, tourney: { id: string; name: string; month: number },
-  level: LevelTag, rng: RNG,
+  level: LevelTag, rng: RNG, school?: School,
 ): AmateurTournament {
-  // 에이스 한 명이 팀을 끌고 가는 게 아마추어 야구다 — 기량이 성적에 크게 반영된다
+  // 에이스 한 명이 팀을 끌고 가는 게 아마추어 야구다 — 기량이 성적에 크게 반영된다.
+  // 다만 혼자 이기는 건 아니라서 학교 전력도 섞인다.
+  const teamPower = school?.power ?? 55;
   const roll = rng.next()
     + (overall(player) - (FIELD_LEVEL[level] ?? 46)) * 0.035
+    + (teamPower - 55) * 0.009
     + rng.normal() * 0.035;
   const placeIdx =
     roll >= 0.84 ? 4 : roll >= 0.65 ? 3 : roll >= 0.4 ? 2 : roll >= 0.16 ? 1 : 0;
@@ -71,11 +77,14 @@ export function simAmateurTournament(
     });
   }
 
-  // 개인 성적 — 그 레벨의 한 시즌 경기 수 중 이 대회 몫
+  // 개인 성적 — 그 레벨의 한 시즌 경기 수 중 이 대회 몫.
+  // 강팀에서는 큰 경기에 다 나가지 못할 수도 있다.
   const seasonGames = level === "COLLEGE" ? 38 : 24;
-  const share = rounds.length / seasonGames;
+  const share = (rounds.length / seasonGames)
+    * (school ? playingShare(school.power, overall(player)) : 1);
   const base = {
-    player, level, teamPower: 62, availability: 1, rng, share,
+    player, level, teamPower: Math.round(56 + (teamPower - 55) * 0.35),
+    availability: 1, rng, share,
     // 전국대회는 상대가 강하다
     extraAdj: -3,
   };
@@ -115,15 +124,19 @@ export interface AmateurSeasonResult {
 /** 아마추어 한 시즌 — 전국대회 3개 + 리그전 */
 export function simAmateurSeason(
   player: Player, rng: RNG, availability: number, level: LevelTag = "HS",
+  school?: School,
 ): AmateurSeasonResult {
-  const tournaments = tournamentsOf(level).map((t) => simAmateurTournament(player, t, level, rng));
+  const tournaments = tournamentsOf(level).map((t) => simAmateurTournament(player, t, level, rng, school));
+  // 강팀일수록 주전 자리를 얻기 어렵다 — 명문고에 간 대가
+  const share = school ? playingShare(school.power, overall(player)) : 1;
   const usedGames = tournaments.reduce((a, t) => a + t.rounds.length, 0);
   const seasonGames = level === "COLLEGE" ? 38 : 24;
 
   // 남은 경기는 리그전
-  const leagueShare = Math.max(0, (seasonGames - usedGames) / seasonGames) * availability;
+  const leagueShare = Math.max(0, (seasonGames - usedGames) / seasonGames) * availability * share;
   const base = {
-    player, level, teamPower: 62, availability: 1, rng, share: leagueShare,
+    player, level, teamPower: Math.round(56 + (teamPowerOf(school) - 55) * 0.35),
+    availability: 1, rng, share: leagueShare,
   };
   const league: StatLine = player.kind === "HITTER"
     ? simHitter({ ...base, role: "주전" })

@@ -9,13 +9,17 @@ function run(seed: number, path: "DRAFT" | "COLLEGE") {
   const p = rollCandidate({ name: "샘플", number: 1, kind: "HITTER", position: "CF", bats: "R", throws: "R", styleId: "toolsy" }, rng);
   let g: GameState = newGame(p, "DAG", seed * 13);
   let guard = 0;
-  while (g.phase !== "SPRING_CAMP" && guard++ < 30) {
+  // 프로 계약이 생길 때까지 (대학 훈련 단계도 SPRING_CAMP라 phase로는 못 멈춘다)
+  while (!g.contract && guard++ < 30) {
     if (g.phase === "HS_SEASON" || g.phase === "COLLEGE_SEASON") g = advance(g, { type: "SIM_AMATEUR" });
     else if (g.phase === "PATH_CHOICE") {
       // 첫 갈림길만 선택을 따르고, 미지명 후에는 대학으로 재도전
       g = advance(g, { type: "CHOOSE_PATH", path: g.draftMissed ? "COLLEGE" : path });
     } else if (g.phase === "DRAFT") g = advance(g, { type: "DO_DRAFT" });
-    else break;
+    // 대학 시즌 뒤에도 훈련 단계를 거친다 (프로 입단 전이면 진로로 돌아온다)
+    else if (g.phase === "SPRING_CAMP" && !g.contract) {
+      g = advance(g, { type: "TRAIN", optionId: g.pendingTraining![0].id });
+    } else break;
   }
   return {
     pick: g.draftPick?.overall ?? -1,
