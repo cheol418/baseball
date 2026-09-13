@@ -1,69 +1,141 @@
-import Image from "next/image";
+"use client";
+
+import Link from "next/link";
+import { AppBar, Column, Empty, Pill, Section } from "@/components/ui";
+import { computeHof, MILITARY_DEADLINE } from "@/lib/career";
+import { gradeOf, overall, POSITION_LABEL } from "@/lib/player";
+import { deleteGame, useGames } from "@/lib/storage";
+import { teamById } from "@/lib/teams";
+
+const PHASE_LABEL: Record<string, string> = {
+  HS_SEASON: "고교 3학년", PATH_CHOICE: "진로 선택", COLLEGE_SEASON: "대학 시절",
+  DRAFT: "드래프트", SPRING_CAMP: "스프링캠프", FIRST_HALF: "전반기",
+  ALL_STAR: "올스타 브레이크", POSTSEASON: "가을야구", SEASON_END: "시즌 종료",
+  INTERNATIONAL: "국가대표", MILITARY_CHOICE: "입영 통지", MILITARY_SEASON: "군 복무",
+  EVENT: "커리어 갈림길", NEGOTIATION: "연봉 협상", STOVE: "스토브리그",
+  FA: "FA 협상", RETIRE_CHOICE: "기로", RETIRED: "은퇴",
+};
 
 export default function Home() {
+  const { games, hydrated } = useGames();
+
+  const active = games.filter((g) => g.phase !== "RETIRED");
+  const retired = games
+    .filter((g) => g.phase === "RETIRED")
+    .sort((a, b) => (b.hofScore ?? 0) - (a.hofScore ?? 0));
+
+  const remove = (id: string) => {
+    if (!confirm("이 선수 기록을 삭제할까요? 되돌릴 수 없습니다.")) return;
+    deleteGame(id);
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+    <main className="pb-16">
+      <AppBar title="이번 생은 야구다!" />
+
+      <div className="bg-[var(--surface)] px-4 pb-6 pt-7">
+        <Column>
+        <div className="eyebrow">New Baseball Life</div>
+        <h2 className="mt-1 text-[26px] font-black leading-tight tracking-tight">
+          이번 생, 다시 시작할까요?
+        </h2>
+        <p className="mt-2 text-[13px] leading-relaxed text-[var(--ink-2)]">
+          고교 3학년부터 드래프트, 프로 시즌, FA와 은퇴까지.
+          <br />당신의 선택이 커리어를 바꿉니다.
+        </p>
+        <Link href="/create" className="btn btn-primary mt-5 w-full px-5 py-3.5 text-[15px]">
+          ⚾ 새로운 인생 시작 <span aria-hidden>→</span>
+        </Link>
+        </Column>
+      </div>
+      <Column>
+
+      <Section eyebrow="My Lives" title="나의 선수단">
+        {!hydrated ? (
+          <Empty>불러오는 중…</Empty>
+        ) : active.length === 0 ? (
+          <Empty>아직 키우는 선수가 없습니다.<br />새 인생을 시작해보세요.</Empty>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {active.map((g) => {
+              const team = g.contract ? teamById(g.contract.teamId) : null;
+              const ovr = overall(g.player);
+              return (
+                <li key={g.id} className="card flex items-center gap-3 px-3.5 py-3">
+                  <div
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[13px] font-black text-white"
+                    style={{ background: team?.color ?? "var(--brand)" }}
+                  >
+                    {g.player.number}
+                  </div>
+                  <Link href={`/play/${g.id}`} className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate text-[14px] font-extrabold">{g.player.name}</span>
+                      <Pill tone="brand">{gradeOf(ovr)} · {ovr}</Pill>
+                    </div>
+                    <div className="mt-0.5 truncate text-[11.5px] text-[var(--ink-3)]">
+                      {g.year}년 · {g.player.age}세 · {POSITION_LABEL[g.player.position]} ·{" "}
+                      {team?.short ?? "아마추어"} · {PHASE_LABEL[g.phase] ?? g.phase}
+                    </div>
+                  </Link>
+                  <button onClick={() => remove(g.id)} aria-label="삭제"
+                    className="shrink-0 rounded-lg px-2 py-1 text-[11px] text-[var(--ink-3)] hover:text-[var(--danger)]">
+                    삭제
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Section>
+
+      <Section eyebrow="Legends" title="명예의 전당">
+        {retired.length === 0 ? (
+          <Empty>은퇴한 선수가 없습니다.</Empty>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {retired.map((g, i) => {
+              const hof = computeHof(g);
+              return (
+                <li key={g.id}>
+                  <Link href={`/play/${g.id}`} className="card flex items-center gap-3 px-3.5 py-3">
+                    <span className="w-6 text-center text-[14px] font-black text-[var(--gold)]">
+                      {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate text-[14px] font-extrabold">{g.player.name}</span>
+                        <Pill tone="gold">{hof.tier}</Pill>
+                      </div>
+                      <div className="mt-0.5 text-[11.5px] text-[var(--ink-3)]">
+                        {hof.seasons}시즌 · WAR {hof.war} · 수상 {hof.awards}회
+                        {hof.rings > 0 && ` · 우승 ${hof.rings}회`}
+                      </div>
+                    </div>
+                    <span className="tabular text-[13px] font-black">{hof.score}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Section>
+
+      <Section eyebrow="How to play" title="게임 방법">
+        <ol className="card flex flex-col gap-2.5 px-4 py-4 text-[12.5px] leading-relaxed text-[var(--ink-2)]">
+          <li><b className="text-[var(--ink)]">1. 선수 생성</b> — 이름·등번호·투타·포지션과 유형을 정하고, 세 명의 후보 중 하나를 고릅니다.</li>
+          <li><b className="text-[var(--ink)]">2. 고교 시즌</b> — 마지막 고교 시즌 성적이 드래프트 순위를 좌우합니다.</li>
+          <li><b className="text-[var(--ink)]">3. 진로 선택</b> — 바로 드래프트에 도전하거나 대학에서 4년 더 성장합니다.</li>
+          <li><b className="text-[var(--ink)]">4. 시즌</b> — 스프링캠프(훈련) → 전반기 → 올스타 → 후반기 → 가을야구 순으로 한 해를 치릅니다.</li>
+          <li><b className="text-[var(--ink)]">5. 스토브리그</b> — 연봉 협상을 직접 하고, 원하면 다른 구단에 이적을 신청합니다.</li>
+          <li><b className="text-[var(--ink)]">6. 국가대표와 병역</b> — 아시안게임 금메달·올림픽 메달이면 병역이 면제됩니다. {MILITARY_DEADLINE}세까지 못 풀면 상무나 현역으로 입대합니다.</li>
+          <li><b className="text-[var(--ink)]">7. FA와 은퇴</b> — 1군 8시즌을 채우면 FA 자격을 얻고, 은퇴하면 통산 기록으로 평가받습니다.</li>
+        </ol>
+        <p className="mt-3 text-center text-[11px] text-[var(--ink-3)]">
+          모든 기록은 브라우저에만 저장됩니다 (localStorage).
+        </p>
+      </Section>
+      </Column>
+    </main>
   );
 }

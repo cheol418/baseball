@@ -1,0 +1,607 @@
+import { RNG, clamp, n50 } from "./rng";
+import type {
+  Abilities, AbilityKey, ArmSlot, Hand, Kind, LevelTag, Player, Position, TrainingOption,
+} from "./types";
+
+/** 능력치 상한 — 이 값까지 성장할 수 있다 */
+export const ABILITY_MAX = 120;
+
+export const HITTER_KEYS: AbilityKey[] = ["contact", "power", "eye", "speed", "defense", "arm"];
+export const PITCHER_KEYS: AbilityKey[] = ["velocity", "control", "movement", "breaking", "stamina", "fielding"];
+export const COMMON_KEYS: AbilityKey[] = ["durability", "mental"];
+
+export const ABILITY_LABEL: Record<string, string> = {
+  contact: "컨택", power: "파워", eye: "선구", speed: "주력", defense: "수비", arm: "송구",
+  velocity: "구속", control: "제구", movement: "무브먼트", breaking: "변화구", stamina: "스태미나", fielding: "투수수비",
+  durability: "내구성", mental: "멘탈",
+};
+
+export const abilityKeys = (kind: Kind): AbilityKey[] =>
+  [...(kind === "HITTER" ? HITTER_KEYS : PITCHER_KEYS), ...COMMON_KEYS];
+
+export const HITTER_POSITIONS: { id: Position; label: string }[] = [
+  { id: "C", label: "포수" }, { id: "1B", label: "1루수" }, { id: "2B", label: "2루수" },
+  { id: "3B", label: "3루수" }, { id: "SS", label: "유격수" }, { id: "LF", label: "좌익수" },
+  { id: "CF", label: "중견수" }, { id: "RF", label: "우익수" }, { id: "DH", label: "지명타자" },
+];
+export const PITCHER_POSITIONS: { id: Position; label: string }[] = [
+  { id: "SP", label: "선발투수" }, { id: "RP", label: "중간계투" }, { id: "CP", label: "마무리" },
+];
+
+export const POSITION_LABEL: Record<string, string> = Object.fromEntries(
+  [...HITTER_POSITIONS, ...PITCHER_POSITIONS].map((p) => [p.id, p.label]),
+);
+
+export const HAND_LABEL: Record<Hand, string> = { R: "우", L: "좌", S: "양" };
+
+/**
+ * 투구폼 — 팔 각도에 따라 구위와 공의 성질이 달라진다.
+ *
+ * 위에서 내리꽂을수록 구속과 탈삼진이 늘고, 옆·아래로 갈수록
+ * 구속은 줄지만 공이 지저분해져 땅볼을 유도하고 피홈런이 줄어든다.
+ */
+export interface ArmSlotDef {
+  id: ArmSlot;
+  name: string;
+  desc: string;
+  weights: Partial<Record<AbilityKey, number>>;
+  /** 시뮬레이션 보정 배수 */
+  k9: number;
+  hr9: number;
+  bb9: number;
+}
+
+export const ARM_SLOTS: ArmSlotDef[] = [
+  {
+    id: "OVER", name: "오버핸드",
+    desc: "정통파. 가장 빠른 공과 낙차 큰 변화구로 삼진을 잡는다.",
+    weights: { velocity: 6, breaking: 5, stamina: 2, control: -6, movement: -7 },
+    k9: 1.07, hr9: 1.06, bb9: 1.04,
+  },
+  {
+    id: "THREE_QUARTER", name: "스리쿼터",
+    desc: "가장 무난한 각도. 구속과 제구의 균형이 좋다.",
+    weights: { velocity: 2, control: 3, movement: 2, breaking: -4, stamina: -3 },
+    k9: 1.0, hr9: 1.0, bb9: 1.0,
+  },
+  {
+    id: "SIDE", name: "사이드암",
+    desc: "옆구리에서 나오는 공. 구속은 낮아도 타자가 공을 보기 어렵다.",
+    weights: { velocity: -8, movement: 9, control: 4, breaking: -3, stamina: -2 },
+    k9: 0.9, hr9: 0.84, bb9: 0.95,
+  },
+  {
+    id: "UNDER", name: "언더핸드",
+    desc: "아래에서 솟아오르는 공. 삼진은 적지만 땅볼로 이닝을 지운다.",
+    weights: { velocity: -12, movement: 13, control: 6, breaking: -5, stamina: -2 },
+    k9: 0.8, hr9: 0.7, bb9: 0.9,
+  },
+];
+
+export const armSlotById = (id?: ArmSlot): ArmSlotDef =>
+  ARM_SLOTS.find((a) => a.id === id) ?? ARM_SLOTS[1];
+
+export const ARM_SLOT_LABEL: Record<ArmSlot, string> =
+  Object.fromEntries(ARM_SLOTS.map((a) => [a.id, a.name])) as Record<ArmSlot, string>;
+
+/**
+ * 투구폼별 좌우 편차(플래툰 스플릿).
+ * 팔이 옆·아래로 내려갈수록 같은 손 타자는 공을 보기 어렵고,
+ * 반대 손 타자는 공이 몸쪽에서 열려 들어와 훨씬 잘 친다.
+ */
+export const SLOT_PLATOON: Record<ArmSlot, number> = {
+  OVER: 0.07,
+  THREE_QUARTER: 0.12,
+  SIDE: 0.26,
+  UNDER: 0.34,
+};
+
+/** KBO 타석 구성 — 좌타가 많은 편이다 */
+export const LEAGUE_LEFT_BATTER_SHARE = 0.42;
+
+export interface PlatoonProfile {
+  gap: number;
+  /** 우타 상대 우위 (양수면 강함) */
+  vsRight: number;
+  /** 좌타 상대 우위 */
+  vsLeft: number;
+  strongSide: "우타" | "좌타";
+  weakSide: "우타" | "좌타";
+  /** 0(차이 없음) ~ 1(극단적) */
+  severity: number;
+}
+
+/** 투수의 좌우 상대 편차 */
+export function platoonProfile(p: Player): PlatoonProfile {
+  const gap = SLOT_PLATOON[p.armSlot ?? "THREE_QUARTER"];
+  const throwsR = p.throws !== "L";
+  const half = gap / 2;
+  return {
+    gap,
+    vsRight: throwsR ? half : -half,
+    vsLeft: throwsR ? -half : half,
+    strongSide: throwsR ? "우타" : "좌타",
+    weakSide: throwsR ? "좌타" : "우타",
+    severity: clamp((gap - 0.07) / 0.27, 0, 1),
+  };
+}
+
+/**
+ * 실제로 마주하는 타석 구성까지 반영한 순이익.
+ *
+ * 선발은 좌우를 가리지 않고 다 상대해야 하지만, 불펜은 감독이
+ * 유리한 매치업에 끼워 넣어 주기 때문에 편차가 오히려 무기가 된다.
+ */
+export function platoonEdge(p: Player, role: string): number {
+  const { gap } = platoonProfile(p);
+  const throwsR = p.throws !== "L";
+  const sameHandShare = throwsR ? 1 - LEAGUE_LEFT_BATTER_SHARE : LEAGUE_LEFT_BATTER_SHARE;
+  const shelter = role.includes("선발") ? 0 : 0.18; // 불펜·마무리는 상대를 고를 수 있다
+  const share = clamp(sameHandShare + shelter, 0, 0.85);
+  return (share - 0.5) * gap * 2;
+}
+
+/** 타자의 좌우 이점 — 투수 대부분이 우완이라 좌타·스위치가 유리하다 */
+export function batterPlatoonBonus(p: Player): number {
+  return p.bats === "S" ? 2.4 : p.bats === "L" ? 1.8 : 0;
+}
+
+/** 선수 유형 — 생성 시 능력치 가중치를 결정 */
+export interface StyleDef {
+  id: string;
+  name: string;
+  desc: string;
+  kind: Kind;
+  weights: Partial<Record<AbilityKey, number>>;
+}
+
+export const STYLES: StyleDef[] = [
+  { id: "contact", name: "교타자", desc: "정확한 컨택과 선구안으로 출루한다", kind: "HITTER", weights: { contact: 12, eye: 8, speed: 3, power: -6 } },
+  { id: "slugger", name: "거포", desc: "한 방을 노리는 장거리 타자", kind: "HITTER", weights: { power: 16, contact: -2, eye: 4, speed: -5, defense: -2 } },
+  { id: "toolsy", name: "호타준족", desc: "치고 달리는 만능형", kind: "HITTER", weights: { speed: 11, contact: 4, power: 3, defense: 4 } },
+  { id: "defense", name: "수비형", desc: "글러브로 먹고사는 안방·내야의 핵", kind: "HITTER", weights: { defense: 13, arm: 9, contact: -3, power: -6 } },
+  { id: "power_p", name: "파워피처", desc: "빠른 공으로 윽박지른다", kind: "PITCHER", weights: { velocity: 13, breaking: 4, control: -6, stamina: -2 } },
+  { id: "control_p", name: "제구형", desc: "코너워크로 승부하는 투수", kind: "PITCHER", weights: { control: 13, movement: 5, velocity: -6 } },
+  { id: "finesse_p", name: "기교파", desc: "다양한 변화구로 타자를 속인다", kind: "PITCHER", weights: { breaking: 12, movement: 8, velocity: -5 } },
+  { id: "horse_p", name: "이닝이터", desc: "많은 이닝을 소화하는 내구형", kind: "PITCHER", weights: { stamina: 13, durability: 8, velocity: -3, breaking: -3 } },
+];
+
+export interface TraitDef { id: string; name: string; desc: string; rarity: number }
+
+export const TRAITS: TraitDef[] = [
+  { id: "genius", name: "천재", desc: "어린 나이에 빠르게 성장한다", rarity: 6 },
+  { id: "latebloom", name: "대기만성", desc: "30대에도 성장이 멈추지 않는다", rarity: 8 },
+  { id: "clutch", name: "승부사", desc: "중요한 순간에 강하다 (타점·승리 보정)", rarity: 10 },
+  { id: "ironman", name: "철강왕", desc: "좀처럼 다치지 않는다", rarity: 10 },
+  { id: "glass", name: "유리몸", desc: "재능은 높지만 부상이 잦다", rarity: 10 },
+  { id: "hardworker", name: "노력형", desc: "훈련 효율이 20% 높다", rarity: 12 },
+  { id: "star", name: "스타성", desc: "인기가 빠르게 오르고 연봉 협상에 유리하다", rarity: 10 },
+  { id: "coldblood", name: "강심장", desc: "멘탈이 흔들리지 않는다", rarity: 10 },
+  { id: "normal", name: "평범", desc: "특별할 것 없는 평범한 선수", rarity: 24 },
+];
+
+/**
+ * 지금 능력치 분포에서 가장 두드러진 유형을 뽑아낸다.
+ *
+ * 유형은 생성 시 고정되는 값이 아니라 **현재 능력치의 결과**다.
+ * 파워피처로 시작해도 제구만 파고들면 제구형으로 바뀐다.
+ */
+export function deriveStyle(p: Player): StyleDef {
+  const pool = STYLES.filter((st) => st.kind === p.kind);
+  const keys = abilityKeys(p.kind);
+  const vals = keys.map((k) => getAb(p.abilities, k));
+  const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+  const sd = Math.sqrt(vals.reduce((a, b) => a + (b - mean) ** 2, 0) / vals.length) || 1;
+
+  let best = pool[0];
+  let bestScore = -Infinity;
+  for (const st of pool) {
+    let score = 0;
+    for (const k of keys) {
+      score += (st.weights[k] ?? 0) * ((getAb(p.abilities, k) - mean) / sd);
+    }
+    if (score > bestScore) { bestScore = score; best = st; }
+  }
+  return best;
+}
+
+/** 유형별 어울리는 포지션 — 생성 화면에서 "추천"으로 안내한다 */
+export const RECOMMENDED_POSITIONS: Record<string, Position[]> = {
+  contact: ["2B", "CF", "LF", "3B"],
+  slugger: ["1B", "DH", "RF", "LF"],
+  toolsy: ["CF", "RF", "SS"],
+  defense: ["C", "SS", "2B", "CF"],
+  power_p: ["SP", "CP"],
+  control_p: ["SP"],
+  finesse_p: ["SP", "RP"],
+  horse_p: ["SP"],
+};
+
+/* ------------------------------------------------------------------ */
+/* 스카우팅 — 잠재력은 정확히 알 수 없다                                 */
+/* ------------------------------------------------------------------ */
+
+/** (시드, 능력)으로 고정된 편향값 -1 ~ 1 */
+function bias(seed: number, key: string): number {
+  let h = 2166136261 ^ seed;
+  for (const ch of key) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return (((h >>> 0) % 2000) / 1000) - 1;
+}
+
+export interface ScoutedPotential {
+  lo: number;
+  hi: number;
+  /** 프로에서 충분히 뛰어 확정된 값인가 */
+  known: boolean;
+}
+
+/**
+ * 스카우트가 보는 잠재력.
+ * 프로에서 시즌을 보낼수록 평가가 좁혀지고, 결국 실제 값이 드러난다.
+ */
+export function scoutedPotential(
+  p: Player, k: AbilityKey, proYears: number, seed: number,
+): ScoutedPotential {
+  const real = getAb(p.potential, k);
+  const cur = getAb(p.abilities, k);
+  const width = clamp(17 - proYears * 2.6, 0, 17);
+  if (width <= 0.5) return { lo: real, hi: real, known: true };
+  const center = real + bias(seed, k) * width * 0.45;
+  return {
+    // 이미 도달한 수치보다 낮게 보일 수는 없다
+    lo: Math.max(cur, Math.round(center - width)),
+    hi: Math.min(ABILITY_MAX, Math.round(center + width)),
+    known: false,
+  };
+}
+
+/** 잠재 OVR을 범위로 */
+export function scoutedOverall(p: Player, proYears: number, seed: number) {
+  const keys = abilityKeys(p.kind);
+  const lo = { ...p.potential } as Abilities;
+  const hi = { ...p.potential } as Abilities;
+  let known = true;
+  for (const k of keys) {
+    const sc = scoutedPotential(p, k, proYears, seed);
+    setAb(lo, k, sc.lo);
+    setAb(hi, k, sc.hi);
+    if (!sc.known) known = false;
+  }
+  return {
+    lo: overall({ ...p, abilities: lo }),
+    hi: overall({ ...p, abilities: hi }),
+    known,
+  };
+}
+
+export const traitById = (id: string) => TRAITS.find((t) => t.id === id) ?? TRAITS[TRAITS.length - 1];
+
+const ZERO: Abilities = {
+  contact: 0, power: 0, eye: 0, speed: 0, defense: 0, arm: 0,
+  velocity: 0, control: 0, movement: 0, breaking: 0, stamina: 0, fielding: 0,
+  durability: 0, mental: 0,
+} as unknown as Abilities;
+
+export const getAb = (a: Abilities, k: AbilityKey): number =>
+  (a as unknown as Record<string, number>)[k] ?? 0;
+export const setAb = (a: Abilities, k: AbilityKey, v: number) => {
+  (a as unknown as Record<string, number>)[k] = v;
+};
+
+export interface CreateOptions {
+  name: string;
+  number: number;
+  kind: Kind;
+  position: Position;
+  bats: Hand;
+  throws: Hand;
+  styleId: string;
+  /** 투수만 사용 */
+  armSlot?: ArmSlot;
+}
+
+/** 고교 3학년 선수 후보 1명 생성 */
+export function rollCandidate(opts: CreateOptions, rng: RNG): Player {
+  const style = STYLES.find((s) => s.id === opts.styleId) ?? STYLES[0];
+  const keys = abilityKeys(opts.kind);
+  const talent = clamp(0.75 + rng.normal() * 0.13, 0.6, 1.45);
+  // 투수는 투구폼이 능력치 배분에 함께 반영된다
+  const slot = opts.kind === "PITCHER" ? armSlotById(opts.armSlot) : null;
+
+  const abilities = { ...ZERO } as Abilities;
+  const potential = { ...ZERO } as Abilities;
+
+  for (const k of keys) {
+    const w = (style.weights[k] ?? 0) + (slot?.weights[k] ?? 0);
+    const base = 44 + w * 0.9 + rng.normal() * 7 + (talent - 1) * 14;
+    const cur = clamp(Math.round(base), 22, 80);
+    // 포텐셜은 현재치 + 재능/랜덤
+    const room = 10 + talent * 26 + rng.float(0, 18) + (w > 0 ? 8 : 0);
+    setAb(abilities, k, cur);
+    setAb(potential, k, clamp(Math.round(cur + room), cur + 5, ABILITY_MAX));
+  }
+  // 내구성/멘탈 보정
+  setAb(abilities, "durability", clamp(getAb(abilities, "durability") + rng.int(0, 8), 20, 85));
+
+  const trait = rng.weighted(TRAITS, TRAITS.map((t) => t.rarity));
+  if (trait.id === "glass") {
+    for (const k of keys) setAb(potential, k, clamp(getAb(potential, k) + 9, 0, ABILITY_MAX));
+    setAb(abilities, "durability", clamp(getAb(abilities, "durability") - 18, 12, ABILITY_MAX));
+    setAb(potential, "durability", clamp(getAb(potential, "durability") - 20, 12, ABILITY_MAX));
+  }
+  if (trait.id === "ironman") {
+    setAb(abilities, "durability", clamp(getAb(abilities, "durability") + 14, 0, ABILITY_MAX));
+    setAb(potential, "durability", clamp(getAb(potential, "durability") + 14, 0, ABILITY_MAX));
+  }
+  if (trait.id === "coldblood") setAb(abilities, "mental", clamp(getAb(abilities, "mental") + 15, 0, ABILITY_MAX));
+
+  return {
+    name: opts.name,
+    number: opts.number,
+    kind: opts.kind,
+    position: opts.position,
+    bats: opts.bats,
+    throws: opts.throws,
+    armSlot: opts.kind === "PITCHER" ? (opts.armSlot ?? "THREE_QUARTER") : undefined,
+    age: 18,
+    abilities,
+    potential,
+    talent,
+    fame: trait.id === "star" ? 18 : 8,
+    condition: 80,
+    injury: 0,
+    trait: trait.id,
+    traitDesc: trait.desc,
+  };
+}
+
+/** 능력치 총합 기반 종합 등급 (OVR) */
+/**
+ * 투구폼별 능력치 가중치.
+ * 오버핸드는 구속으로 먹고살지만 언더핸드는 무브먼트와 제구가 본체다.
+ * 같은 잣대로 재면 옆구리·언더 투수가 부당하게 저평가된다.
+ */
+const PITCH_WEIGHTS: Record<ArmSlot, Record<string, number>> = {
+  OVER: { velocity: 1.35, control: 1.0, movement: 0.9, breaking: 1.15 },
+  THREE_QUARTER: { velocity: 1.2, control: 1.2, movement: 1.0, breaking: 1.05 },
+  SIDE: { velocity: 0.95, control: 1.25, movement: 1.35, breaking: 0.95 },
+  UNDER: { velocity: 0.8, control: 1.3, movement: 1.55, breaking: 0.85 },
+};
+
+export function overall(p: Player): number {
+  const keys = abilityKeys(p.kind);
+  const w: Record<string, number> = p.kind === "HITTER"
+    ? { contact: 1.25, power: 1.15, eye: 0.85, speed: 0.75, defense: 0.85, arm: 0.5, durability: 0.7, mental: 0.55 }
+    : {
+        ...PITCH_WEIGHTS[p.armSlot ?? "THREE_QUARTER"],
+        stamina: 0.85, fielding: 0.35, durability: 0.75, mental: 0.6,
+      };
+  let sum = 0, tw = 0;
+  for (const k of keys) { sum += getAb(p.abilities, k) * (w[k] ?? 1); tw += w[k] ?? 1; }
+  return Math.round(sum / tw);
+}
+
+export function potentialOverall(p: Player): number {
+  return overall({ ...p, abilities: p.potential });
+}
+
+/**
+ * 등급 — 1군에서의 위치에 맞춘다.
+ * S 리그 최정상 / A 올스타급 / B 주전 / C 준주전 / D 백업 / E 2군
+ */
+export const gradeOf = (ovr: number) =>
+  ovr >= 95 ? "S" : ovr >= 87 ? "A" : ovr >= 79 ? "B" : ovr >= 69 ? "C" : ovr >= 55 ? "D" : "E";
+
+/**
+ * 능력치별 에이징 프로파일.
+ *
+ * 실제 야구 연구를 반영한다 — 능력마다 꺾이는 시점이 완전히 다르다.
+ *  · 주력·수비는 20대 중반에 이미 하락 시작 (가장 빠르고 가파름)
+ *  · 컨택은 27~28세, 파워(타구 속도)는 30세 전후까지 유지
+ *  · 선구안·제구·변화구 같은 "기술"은 30대까지도 계속 좋아진다
+ *
+ * peak       : 그 능력이 정점을 찍는 나이
+ * declineMul : 하락기 하락 폭 배수 (1보다 크면 더 빨리 무너진다)
+ */
+export const AGE_PROFILE: Record<string, { peak: number; declineMul: number }> = {
+  // 타자
+  speed: { peak: 25, declineMul: 1.5 },
+  defense: { peak: 26, declineMul: 1.2 },
+  arm: { peak: 27, declineMul: 1.05 },
+  contact: { peak: 29, declineMul: 0.9 },
+  power: { peak: 30, declineMul: 0.8 },
+  eye: { peak: 33, declineMul: 0.5 },
+  // 투수
+  velocity: { peak: 26, declineMul: 1.4 },
+  stamina: { peak: 28, declineMul: 1.1 },
+  fielding: { peak: 29, declineMul: 0.9 },
+  movement: { peak: 30, declineMul: 0.8 },
+  breaking: { peak: 32, declineMul: 0.6 },
+  control: { peak: 33, declineMul: 0.5 },
+  // 공통
+  durability: { peak: 26, declineMul: 1.3 },
+  mental: { peak: 35, declineMul: 0.3 },
+};
+
+/** 프로파일이 기준으로 삼는 나이 — 이 나이에 고원의 한가운데에 있다 */
+const REFERENCE_PEAK = 30;
+
+/**
+ * 나이에 따른 성장 계수.
+ *
+ * 곡선 모양: 10대 후반~20대 초반 급성장 → 25~31세 고원 → 32세부터 하락.
+ * 최근 연구가 말하는 "성장 구간은 짧고, 정점에 도달한 뒤 한동안 유지되다
+ * 30대 초반에 꺾인다"는 형태를 따른다.
+ *
+ * @param key 능력치 이름. 주면 해당 능력의 피크 나이만큼 곡선을 평행 이동한다.
+ */
+export function ageFactor(age: number, trait: string, key?: AbilityKey): number {
+  const profile = key ? AGE_PROFILE[key] : undefined;
+  // 피크가 이른 능력(주력)은 나이를 더 먹은 것처럼, 늦은 능력(선구안)은 덜 먹은 것처럼 취급
+  let refAge = age + (REFERENCE_PEAK - (profile?.peak ?? REFERENCE_PEAK));
+  if (trait === "latebloom") refAge -= 2.5; // 대기만성: 전 능력의 피크가 늦다
+
+  let f: number;
+  if (refAge <= 20) f = 2.1;
+  else if (refAge <= 22) f = 1.7;
+  else if (refAge <= 24) f = 1.15;
+  else if (refAge <= 26) f = 0.62;
+  else if (refAge <= 28) f = 0.38;
+  else if (refAge <= 31) f = 0.22; // 고원 — 늦게 피크를 맞는 기술 능력이 계속 오른다
+  else if (refAge <= 33) f = -0.7;
+  else if (refAge <= 35) f = -1.5;
+  else if (refAge <= 37) f = -2.4;
+  else f = -3.4;
+
+  if (trait === "genius" && age <= 22) f += 0.55;
+  if (f < 0) f *= profile?.declineMul ?? 1;
+  return f;
+}
+
+/**
+ * 한 시즌을 어디서 어떻게 보냈는지에 따른 성장 배수.
+ *
+ * 원칙 두 가지:
+ *  1. 1군은 어느 보직이든 2군보다 불리하지 않다. 콜업이 손해가 되면 안 된다.
+ *  2. 대신 **어린 유망주**는 2군에서 매일 뛰며 가장 빨리 큰다 — 빨리 자라 1군에 올라오라는 구조.
+ *     나이를 먹고도 2군에 머물면 그 이점은 사라지고 오히려 정체된다.
+ */
+export function developmentRate(
+  level: LevelTag | null, role: string | null, age = 24,
+): number {
+  if (!level) return 1;
+  switch (level) {
+    case "HS": return 1.15;
+    case "COLLEGE": return 1.25;
+    case "MINOR":
+      // 유망주 구간에서만 퓨처스 풀타임의 이점이 크다
+      if (age <= 21) return 1.4;
+      if (age <= 24) return 1.0;
+      return 0.82;
+    case "ARMY": return role === "복무" ? 0.6 : 1.02; // 상무는 퓨처스에서 계속 뛴다
+    case "KBO":
+      if (["주전", "1선발", "선발", "마무리"].includes(role ?? "")) return 1.1;
+      if (["준주전", "5선발", "불펜"].includes(role ?? "")) return 1.05;
+      return 1.02; // 백업·추격조라도 1군 환경은 2군에 뒤지지 않는다
+    default: return 1;
+  }
+}
+
+export const DEV_RATE_LABEL = (rate: number) =>
+  rate >= 1.25 ? "매우 빠름" : rate >= 1.08 ? "빠름" : rate >= 0.95 ? "보통" : "더딤";
+
+/** 오프시즌 성장 처리 */
+export function grow(
+  p: Player, rng: RNG, focus: TrainingOption | null, devRate = 1,
+): { deltas: Partial<Record<string, number>> } {
+  const keys = abilityKeys(p.kind);
+  const effBonus = p.trait === "hardworker" ? 1.2 : 1;
+  const deltas: Record<string, number> = {};
+
+  for (const k of keys) {
+    const af = ageFactor(p.age, p.trait, k);
+    const cur = getAb(p.abilities, k);
+    const pot = getAb(p.potential, k);
+    const headroom = clamp(Math.max(0, pot - cur) / 55, 0, 1.2); // 포텐셜에 가까울수록 둔화
+    const focused = focus?.targets.includes(k) ? focus.gain : 0;
+    let d: number;
+    if (af > 0) {
+      // 성장기: 포텐셜에 가까울수록 둔화
+      // 어릴수록·전성기일수록 훈련 효과가 크다 (30세를 넘기면 효율이 떨어진다)
+      const trainBoost = p.age <= 23 ? 1.45 : p.age <= 27 ? 1.3 : p.age <= 29 ? 1.12 : 0.9;
+      d = (af * (1.0 + headroom * 1.8) * (0.72 + p.talent * 0.42)
+        + focused * effBonus * trainBoost * (0.45 + headroom * 0.7)) * devRate;
+      d += rng.normal() * 1.3;
+    } else {
+      // 노쇠기: 하락 폭은 "가진 만큼" 비례한다.
+      // 원래 빠른 선수가 잃을 주력도 많고, 이미 느린 선수는 더 느려질 여지가 적다.
+      const floorScale = clamp((cur - 30) / 50, 0.25, 1.2);
+      // 훈련으로 하락 폭을 일부만 방어할 수 있다
+      d = af * rng.float(0.7, 1.5) * floorScale + focused * effBonus * 0.32;
+      d += rng.normal() * 0.7;
+    }
+    const next = clamp(Math.round(cur + d), 15, af > 0 ? pot : ABILITY_MAX);
+    if (next !== cur) deltas[k] = next - cur;
+    setAb(p.abilities, k, next);
+  }
+  return { deltas };
+}
+
+/**
+ * 오프시즌 훈련 후보 생성.
+ *
+ * 잠재력에 이미 도달한 능력은 아무리 훈련해도 오르지 않으므로,
+ * 성장 여지가 남은 능력을 우선해서 후보로 올린다.
+ */
+/**
+ * 훈련 중 부상 위험 배수.
+ * 나이가 들수록, 내구성이 낮을수록 몸을 갈아 넣는 대가가 커진다.
+ */
+export function injuryRiskMultiplier(p: Player): number {
+  const age = 1 + Math.max(0, p.age - 27) * 0.07;
+  const dur = clamp(1.12 - n50(getAb(p.abilities, "durability" as AbilityKey)) * 0.35, 0.72, 1.5);
+  const trait = p.trait === "glass" ? 1.5 : p.trait === "ironman" ? 0.7 : 1;
+  return age * dur * trait;
+}
+
+export function makeTrainingOptions(p: Player, rng: RNG): TrainingOption[] {
+  const keys = abilityKeys(p.kind).filter((k) => k !== "mental");
+  const room = (k: AbilityKey) => Math.max(0, getAb(p.potential, k) - getAb(p.abilities, k));
+
+  // 성장 여지가 큰 순서 — 거의 다 찬 능력은 후보로 올리지 않는다
+  const byRoom = [...keys].sort((a, b) => room(b) - room(a));
+  const worth = byRoom.filter((k) => room(k) >= 6);
+  const pickFrom = worth.length >= 3 ? worth : byRoom;
+  const pool: TrainingOption[] = [];
+
+  // 집중 훈련 — 여지가 큰 쪽에서 세 개를 제시한다
+  for (const k of rng.shuffle(pickFrom.slice(0, 5)).slice(0, 3)) {
+    pool.push({
+      id: `focus_${k}`,
+      name: `${ABILITY_LABEL[k]} 집중 훈련`,
+      desc: `${ABILITY_LABEL[k]} 하나에 모든 시간을 쏟는다.`,
+      targets: [k],
+      gain: 6.0,
+      risk: 0.05,
+      conditionCost: 8,
+      room: room(k),
+    });
+  }
+
+  // 지옥 훈련 — 언제나 성장 여지가 가장 큰 세 능력을 노린다.
+  // 어떤 상황에서도 상승폭이 가장 커야 하므로 대상을 무작위로 고르지 않는다.
+  const picked = pickFrom.slice(0, 3);
+  pool.push({
+    id: "hell",
+    name: "지옥 훈련",
+    desc: `몸을 갈아 넣는다. ${picked.map((k) => ABILITY_LABEL[k]).join(" · ")}을(를) 한 번에 끌어올린다.`,
+    targets: picked,
+    gain: 12,
+    risk: 0.28,
+    conditionCost: 28,
+    room: Math.max(...picked.map(room)),
+  });
+
+  pool.push({
+    id: "balance",
+    name: "밸런스 트레이닝",
+    desc: "전 능력을 고르게 다듬는다. 총합은 무난하지만 한 방은 없다.",
+    targets: keys,
+    gain: 1.2,
+    risk: 0.02,
+    conditionCost: 4,
+  });
+
+  pool.push({
+    id: "rest",
+    name: "재활 & 휴식",
+    desc: "몸 상태를 회복한다. 성장은 거의 없지만 부상 위험이 줄어든다.",
+    targets: ["durability"],
+    gain: 3.2,
+    risk: 0,
+    conditionCost: -30,
+    room: room("durability" as AbilityKey),
+  });
+
+  return pool;
+}

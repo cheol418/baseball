@@ -1,26 +1,103 @@
 @import "tailwindcss";
 
+/*
+ * KBO 중계·기록 사이트 톤 — 딥 네이비 헤더에 레드 포인트, 본문은 흰 카드.
+ * 기록지를 보는 느낌이 나도록 채도를 낮추고 여백을 넓게 잡는다.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #eef1f6;
+  --surface: #ffffff;
+  --surface-2: #f4f6fa;
+  --ink: #0f172a;
+  --ink-2: #4a5568;
+  --ink-3: #94a1b2;
+  --line: #dde3ec;
+  --brand: #0e2a4d;
+  --brand-2: #1b4b8f;
+  --brand-ink: #ffffff;
+  --gold: #b0821c;
+  --danger: #c8102e;
+  --radius: 12px;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink2: var(--ink-2);
+  --color-ink3: var(--ink-3);
+  --color-line: var(--line);
+  --color-brand: var(--brand);
+  --color-brand2: var(--brand-2);
+  --color-gold: var(--gold);
+  --color-danger: var(--danger);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* { -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    "Segoe UI", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+body { margin: 0; }
+
+.tabular { font-variant-numeric: tabular-nums; }
+
+.eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  font-weight: 700;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.card-hover:hover { border-color: var(--brand-2); box-shadow: 0 1px 0 var(--brand-2); }
+
+/* 기록지 느낌의 표 */
+.sheet th, .sheet td { border-color: var(--line); }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border-radius: 12px; font-weight: 700; transition: all .15s ease;
+  border: 1px solid transparent; cursor: pointer;
+}
+.btn:active { transform: scale(0.985); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-primary { background: var(--brand); color: var(--brand-ink); }
+.btn-primary:hover:not(:disabled) { background: var(--brand-2); }
+.btn-accent { background: var(--danger); color: #fff; }
+.btn-ghost { background: var(--surface); color: var(--ink); border-color: var(--line); }
+.btn-ghost:hover:not(:disabled) { background: var(--surface-2); }
+
+.scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.scroll-x::-webkit-scrollbar { height: 6px; }
+.scroll-x::-webkit-scrollbar-thumb { background: var(--line); border-radius: 999px; }
+
+@keyframes riseIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.rise { animation: riseIn .32s ease both; }
+
+@keyframes pop { 0% { transform: scale(.92); opacity: 0 } 60% { transform: scale(1.02) } 100% { transform: scale(1); opacity: 1 } }
+.pop { animation: pop .3s ease both; }
+
+@keyframes fillBar { from { width: 0 } to { width: 100% } }
+
+/* 단계가 바뀔 때의 화면 전환 */
+@keyframes stageIn {
+  from { opacity: 0; transform: translateY(14px) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+.stage { animation: stageIn .34s cubic-bezier(.22,.68,.36,1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .stage, .pop, .rise { animation: none !important; }
 }
