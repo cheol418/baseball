@@ -5,10 +5,16 @@ import {
   grow, injuryRiskMultiplier, makeTrainingOptions, overall, potentialOverall, setAb,
 } from "./player";
 import {
-  isHitterLine, judgeAllStar, judgeAwards, MAJOR_TITLES, mergeLines,
+  HALF_SHARE, isHitterLine, judgeAllStar, judgeAwards, MAJOR_TITLES, mergeLines,
   simAllStarGame, simHitter, simPitcher,
 } from "./sim";
+import {
+  HOF_CUT, advanceHofVote, legacyContext, newHofVote, resolveSecondLife,
+} from "./legacy";
 import { PS_CUT, simPostseason } from "./postseason";
+import {
+  defaultRoleOf, isEverydayRole, isFranchiseRole, isRotationRole, minorRoleOf, roleTier,
+} from "./roles";
 import { placementScore, simAmateurSeason } from "./amateur";
 import { chainByKey, pickChain } from "./events";
 import { judgeSeasonGoal, makeSeasonGoal, newMilestones, rollFeats } from "./records";
@@ -19,13 +25,13 @@ import {
 import type {
   AmateurTournament, GameState, HitterLine, LevelTag, LogEntry, MonthLine, Negotiation,
   NegotiationOption, Offer, PitcherLine, Player, SeasonRecord, StatLine, Team,
-  TransferTarget, TrainingOption,
+  SecondLifeId, TournamentSlot, TransferTarget, TrainingOption,
 } from "./types";
 
 export const START_YEAR = 2026;
 export const MIN_SALARY = 3000; // 만원
 export const MAX_SALARY = 300000; // 30억 (리그 상한)
-export const PRE_FA_CAP = 150000; // FA 이전 연봉 상한 15억
+export const PRE_FA_CAP = 100000; // FA 이전 연봉 상한 10억
 export const FA_SERVICE = 8;
 
 export const formatMoney = (man: number) => {
@@ -146,21 +152,26 @@ export function assignRole(
   if (p.kind === "PITCHER") {
     if (p.position === "CP") {
       if (v >= bar + 2.5) return { level: "KBO", role: "마무리" };
-      if (v >= bar - 6) return { level: "KBO", role: "불펜" };
+      if (v >= bar - 3) return { level: "KBO", role: "필승조" };
+      if (v >= bar - 8) return { level: "KBO", role: "불펜" };
       if (v >= bar - 12.5) return { level: "KBO", role: "추격조" };
       return { level: "MINOR", role: "불펜" };
     }
     if (p.position === "SP") {
+      if (v >= bar + 16) return { level: "KBO", role: "에이스" };
       if (v >= bar + 9) return { level: "KBO", role: "1선발" };
       if (v >= bar) return { level: "KBO", role: "선발" };
       if (v >= bar - 6) return { level: "KBO", role: "5선발" };
       if (v >= bar - 14) return { level: "KBO", role: "불펜" };
       return { level: "MINOR", role: "선발" };
     }
+    if (v >= bar + 8) return { level: "KBO", role: "필승조" };
     if (v >= bar + 2.5) return { level: "KBO", role: "불펜" };
     if (v >= bar - 10) return { level: "KBO", role: "추격조" };
     return { level: "MINOR", role: "불펜" };
   }
+  if (v >= bar + 17) return { level: "KBO", role: "간판타자" };
+  if (v >= bar + 11) return { level: "KBO", role: "핵심타자" };
   if (v >= bar + 5) return { level: "KBO", role: "주전" };
   if (v >= bar - 2.5) return { level: "KBO", role: "준주전" };
   if (v >= bar - 11) return { level: "KBO", role: "백업" };
@@ -193,7 +204,7 @@ function amateurDevBonus(s: GameState): number {
 }
 
 const defaultRole = (p: Player) =>
-  p.kind === "HITTER" ? "주전" : p.position === "SP" ? "선발" : p.position === "CP" ? "마무리" : "불펜";
+  defaultRoleOf(p);
 
 /* ------------------------------------------------------------------ */
 /* 커리어 이벤트 (자동 트레이드 제거 — 이적은 유저가 신청한다)            */
@@ -299,7 +310,13 @@ export function draftScore(s: GameState): number {
     ? lastTourney.tournaments.reduce((a, t) => a + placementScore(t.placement), 0) * 0.9
       + lastTourney.awards.length * 3
     : 0;
-  return ovr * 0.62 + pot * 0.2 + perf + s.player.fame * 0.12 + tourneyBonus;
+  // 스카우트는 지금의 기량만이 아니라 나이 대비 성장 여지를 본다.
+  // 같은 능력치라면 고졸이 대졸보다 훨씬 높게 평가받는다 — 실제 드래프트와 같은 이유.
+  const upside = s.player.age <= 18 ? 5.5 : s.player.age <= 19 ? 4.5 : s.player.age <= 20 ? 2.5 : s.player.age <= 21 ? 1 : 0;
+  // 어릴수록 잠재력의 비중이 커진다
+  const potWeight = s.player.age <= 19 ? 0.28 : s.player.age <= 21 ? 0.24 : 0.2;
+
+  return ovr * 0.62 + pot * potWeight + perf + s.player.fame * 0.12 + tourneyBonus + upside;
 }
 
 /** UI에 보여줄 지명 확률과 예상 라운드 */
@@ -313,7 +330,9 @@ export function draftForecast(s: GameState) {
 }
 
 function runDraft(s: GameState, rng: RNG) {
-  const score = draftScore(s) + rng.normal() * 3;
+  // 어린 선수일수록 스카우트 평가가 크게 갈린다 — 대박도 쪽박도 고졸에서 나온다
+  const spread = s.player.age <= 19 ? 5.5 : s.player.age <= 21 ? 4 : 3;
+  const score = draftScore(s) + rng.normal() * spread;
   let overallPick: number;
   if (score >= 78) overallPick = rng.int(1, 3);
   else if (score >= 72) overallPick = rng.int(1, 10);
@@ -377,22 +396,32 @@ function buildNegotiation(s: GameState, rec: SeasonRecord): Negotiation {
 
   // 타이틀은 크게, 올스타는 가볍게 쳐준다
   const awardWeight = rec.awards.reduce((a, x) =>
-    a + (x.includes("MVP") ? 0.35 : MAJOR_TITLES.includes(x) ? 0.2
-      : x === "신인왕" || x === "골든글러브" ? 0.15 : 0.05), 0);
+    a + (x.includes("MVP") ? 0.26 : MAJOR_TITLES.includes(x) ? 0.14
+      : x === "신인왕" || x === "골든글러브" ? 0.10 : 0.035), 0);
 
   // 태극마크와 올스타전 활약도 몸값이다
   const intlWeight = s.intlResults
     .filter((r) => r.year === rec.year)
-    .reduce((a, r) => a + (r.medal === "금" ? 0.2 : r.medal ? 0.13 : 0.05), 0);
-  const asWeight = rec.allStarGame?.mvp ? 0.12 : 0;
+    .reduce((a, r) => a + (r.medal === "금" ? 0.14 : r.medal ? 0.09 : 0.035), 0);
+  const asWeight = rec.allStarGame?.mvp ? 0.08 : 0;
   // 병역을 해결한 선수는 공백 위험이 없어 그만큼 값이 붙는다
   const milWeight = s.military === "EXEMPT" ? 0.07 : s.military === "DONE" ? 0.04 : 0;
+  // 팀 내 입지 — 간판으로 대우받는 선수는 성적이 같아도 대접이 다르다
+  const roleWeight = isFranchiseRole(rec.role) ? 0.16
+    : roleTier(rec.role) >= 5 ? 0.09
+      : roleTier(rec.role) >= 4 ? 0.04 : 0;
 
-  let mult = 0.86 + clamp(war * 0.30, -0.3, 2.4)
-    + awardWeight + intlWeight + asWeight + milWeight;
+  let mult = 0.95 + clamp(war * 0.12, -0.28, 1.0)
+    + awardWeight + intlWeight + asWeight + milWeight + roleWeight;
   if (rec.level !== "KBO") mult = Math.min(mult, 1.05);
   if (s.serviceYears <= 2) mult = Math.min(mult, 2.4);
-  if (prev >= 50000) mult = 1 + (mult - 1) * 0.7;
+  // 실제 KBO 연봉 구조 — 최저연봉 근처는 조금만 잘해도 크게 오르고,
+  // 고액이 될수록 같은 성적으로 올릴 수 있는 폭이 급격히 줄어든다
+  if (prev < 10000) mult = 1 + (mult - 1) * 2.4;
+  else if (prev < 20000) mult = 1 + (mult - 1) * 1.7;
+  else if (prev < 50000) mult = 1 + (mult - 1) * 1.1;
+  else if (prev < 100000) mult = 1 + (mult - 1) * 0.72;
+  else mult = 1 + (mult - 1) * 0.45;
   if (s.player.age >= 34) mult = Math.min(mult, 1.15);
   mult *= 0.94 + (s.trust / 100) * 0.12;
   // 이미 고액이면 한 해 인상 폭에 제동이 걸린다
@@ -401,7 +430,19 @@ function buildNegotiation(s: GameState, rec: SeasonRecord): Negotiation {
 
   // FA 이전에는 구단이 값을 크게 부르지 않는다
   const preFaCap = s.faUsed === 0 ? PRE_FA_CAP : MAX_SALARY;
-  const offer = clamp(Math.round((prev * mult * star) / 100) * 100, MIN_SALARY, Math.min(preFaCap, MAX_SALARY));
+  const cap = Math.min(preFaCap, MAX_SALARY);
+
+  // 인상률만으로는 연봉이 복리로 불어나 결국 상한에 붙는다.
+  // 실제 구단은 "지금 이 선수의 값어치"를 기준으로 다시 계산하므로,
+  // 직전 연봉에서 출발한 금액을 적정 몸값 쪽으로 끌어당긴다.
+  const fair = clamp(marketValue(s) * 0.5, MIN_SALARY, cap);
+  const raised = prev * mult * star;
+  // 연차가 쌓일수록 시장가에 가깝게 평가받는다
+  const pull = clamp(0.22 + s.serviceYears * 0.035, 0.22, 0.55);
+  const offer = clamp(
+    Math.round((raised * (1 - pull) + fair * pull) / 100) * 100,
+    MIN_SALARY, cap,
+  );
 
   // 성적이 좋을수록 재협상 성공 확률이 높다
   const leverage = clamp(
@@ -494,39 +535,90 @@ function makeFaOffers(s: GameState, rng: RNG): Offer[] {
 }
 
 /** 이적 신청 대상 구단 목록 — 유저가 직접 골라 신청한다 */
+/**
+ * 국제대회 진행 — 대회마다 실제 개최 월이 다르다.
+ * WBC 3월(PRE) · 올림픽 7월(MID) · 아시안게임 9월(LATE) · 프리미어12 11월(POST).
+ * 지정한 시점에 열리는 대회가 아니면 아무 일도 하지 않는다.
+ */
+function runTournament(s: GameState, rng: RNG, slot: TournamentSlot) {
+  if (!s.intlJoined || !s.pendingTournament) return;
+  const t = TOURNAMENTS[s.pendingTournament];
+  if (t.slot !== slot) return;
+
+  const res = simTournament(s, t, rng);
+  s.intlResults.push(res);
+  s.player.fame = clamp(s.player.fame + (res.medal ? 12 : 5), 0, 100);
+  if (res.exempted && s.military === "PENDING") {
+    s.military = "EXEMPT";
+    log(s, {
+      icon: "🎖️", title: "병역 면제", tone: "epic",
+      body: `${t.name} ${res.medal}메달로 병역 특례 대상이 되었습니다. 야구에만 집중할 수 있습니다.`,
+    });
+  }
+  log(s, {
+    icon: t.icon, title: `${t.name} ${res.medal ? `${res.medal}메달` : `${res.rank}위`}`,
+    tone: res.medal ? "epic" : "neutral", body: `${t.month} 개최 · ${res.note}`,
+  });
+  s.intlJoined = false;
+  s.pendingTournament = null;
+}
+
+/**
+ * 포지션별 시장 가치 — 같은 성적이라도 수비 부담이 큰 자리일수록 대체가 어렵다.
+ * 지명타자·1루수는 방망이만 보고 데려오므로 기준이 훨씬 높다.
+ */
+const POS_MARKET: Record<string, number> = {
+  C: 8, SS: 6, "2B": 3, CF: 3, "3B": 2, LF: -3, RF: -3, "1B": -6, DH: -9,
+  SP: 4, CP: 1, RP: -2,
+};
+
 export function makeTransferTargets(s: GameState, rng: RNG): TransferTarget[] {
   if (!s.contract) return [];
   const value = marketValue(s);
   const ovr = overall(s.player);
+  const age = s.player.age;
   const recent = s.seasons.filter((x) => x.level === "KBO").slice(-2);
   const recentWar = recent.reduce((a, b) => a + b.line.war, 0) / Math.max(1, recent.length);
 
   return TEAMS.filter((t) => t.id !== s.contract!.teamId).map((t) => {
-    // 팀 성향: 육성 지향 구단은 누구에게나 기회를 주고, 자금력 있는 구단은 지갑을 연다
-    const need = (t.youth - 55) * 0.5 + (t.money - 65) * 0.45;
+    // 기준선은 1군 주전(OVR 76) — 그 아래로는 시장이 빠르게 식는다
+    const merit = (ovr - 76) * 3.4 + recentWar * 7.5;
+    // 팀 성향: 육성 지향 구단은 기회를 주고, 자금력 있는 구단은 지갑을 연다
+    const need = (t.youth - 55) * 0.28 + (t.money - 65) * 0.18;
     // 강팀은 확실한 전력감만 원한다 — 기량이 낮으면 오히려 관심이 식는다
-    const contendFit = (ovr - 78) * (t.power - 68) * 0.05;
+    const contendFit = (ovr - 78) * (t.power - 68) * 0.045;
+    // 서른을 넘기면 남은 전성기가 짧다 — 시장은 그 값을 깎는다
+    const ageAdj = age <= 25 ? 5 : age <= 28 ? 1 : age === 29 ? -3 : -(age - 28) * 6;
+    // 수비 가치가 없는 자리일수록 방망이 하나로만 평가받는다
+    const posAdj = POS_MARKET[s.player.position] ?? 0;
+    // 지금 연봉이 그 구단 지갑에 얼마나 부담인가
+    const payload = -clamp((s.contract!.salary / 10000 - t.money * 0.12) * 1.6, 0, 30);
     const interest = clamp(
       Math.round(
-        40 + (ovr - 58) * 2.6 + recentWar * 6 + need + contendFit
-        + s.player.fame * 0.22 + rng.float(-7, 7),
+        38 + merit + need + contendFit + ageAdj + posAdj + payload
+        + s.player.fame * 0.08 + rng.float(-6, 6),
       ),
       3, 99,
     );
-    // 성사 확률: 관심도 + 원소속팀이 놓아주는가(신뢰가 낮을수록 잘 보내준다)
-    const release = clamp(0.45 + (55 - s.trust) * 0.006, 0.2, 0.85);
-    // 관심도가 높을수록 가파르게 성사된다
-    const odds = clamp(
-      Math.pow(interest / 100, 1.5) * 1.6 * release * (value > t.money * 2200 ? 0.6 : 1),
-      0.02, 0.88,
+    // 원소속팀이 놓아주는가 — 신뢰가 낮을수록, 대체 가능한 선수일수록 쉽게 보낸다
+    const release = clamp(
+      0.55 + (55 - s.trust) * 0.005 - Math.max(0, ovr - 80) * 0.022
+      - (isFranchiseRole(s.contract!.role) ? 0.18 : roleTier(s.contract!.role) >= 5 ? 0.08 : 0),
+      0.12, 0.9,
     );
+    // 몸값을 감당할 수 있는 구단인가
+    const afford = value > t.money * 2200 ? 0.55 : value > t.money * 1400 ? 0.82 : 1;
+    // 관심이 확실할 때만 실제로 성사된다
+    const odds = clamp(Math.pow(interest / 100, 2.1) * 1.35 * release * afford, 0.01, 0.85);
     const proYears = s.seasons.filter((r) => r.level === "KBO" || r.level === "MINOR").length;
     const { role } = assignRole(s.player, t, s.serviceYears, 55, new RNG(s.seed + t.id.charCodeAt(0)), proYears);
 
     return {
       teamId: t.id, interest, odds, role,
-      note: interest >= 70 ? "적극적으로 관심을 보인다"
-        : interest >= 45 ? "영입을 검토할 만하다"
+      note: interest >= 85 ? "최우선 영입 대상으로 꼽고 있다"
+        : interest >= 68 ? "적극적으로 관심을 보인다"
+        : interest >= 48 ? "영입을 검토할 만하다"
+        : interest >= 30 ? "지켜보는 정도다"
         : "당장은 자리가 없다",
     };
   }).sort((a, b) => b.interest - a.interest);
@@ -551,8 +643,32 @@ function shouldForceRetire(s: GameState): string | null {
   }
 
   const lastTwo = s.seasons.slice(-2).filter((r) => r.level === "KBO");
-  const benched = lastTwo.length === 2 && lastTwo.every((r) => ["백업", "추격조", "육성선수"].includes(r.role));
+  const benched = lastTwo.length === 2 && lastTwo.every((r) => roleTier(r.role) <= 2);
   if (p.age >= 35 && benched) return "주전 경쟁에서 밀려나며 은퇴를 권유받았습니다.";
+  return null;
+}
+
+/**
+ * 은퇴 권고 — 방출까지는 아니지만 구단이 물러날 때를 권한다.
+ * 거부하고 더 뛸 수 있지만, 자리는 이미 좁아져 있다.
+ */
+function retirementAdvice(s: GameState): string | null {
+  const p = s.player;
+  if (p.age < 34) return null;
+  const ovr = overall(p);
+  const kbo = s.seasons.filter((r) => r.level === "KBO");
+  const last = kbo[kbo.length - 1];
+  if (!last) return null;
+
+  // 전성기 대비 얼마나 내려왔는가
+  const peak = Math.max(...kbo.map((r) => r.line.war), 1);
+  const fallen = last.line.war < peak * 0.4;
+  const bench = roleTier(last.role) <= 3;
+
+  if (p.age >= 39) return `${p.age}세. 구단이 조심스럽게 은퇴 시기를 묻습니다.`;
+  if (p.age >= 37 && (bench || fallen)) return "출장 기회가 눈에 띄게 줄었습니다. 구단이 은퇴를 권합니다.";
+  if (p.age >= 35 && bench && fallen) return "성적과 입지가 함께 내려앉았습니다. 구단이 물러날 때를 이야기합니다.";
+  if (p.age >= 36 && ovr < 72) return "기량 저하가 뚜렷합니다. 구단이 은퇴를 권유합니다.";
   return null;
 }
 
@@ -605,7 +721,8 @@ export function computeHof(s: GameState) {
 /* 시즌 진행 보조                                                       */
 /* ------------------------------------------------------------------ */
 
-function simPart(s: GameState, rng: RNG, share: number): StatLine {
+/** 시즌의 [from, to] 구간을 치른다 — 누적 비율로 넘겨 총 경기 수가 정확히 맞는다 */
+function simPart(s: GameState, rng: RNG, from: number, to: number): StatLine {
   const p = s.player;
   const team = s.contract ? teamById(s.contract.teamId) : null;
   const level = s.seasonLevel ?? "MINOR";
@@ -614,7 +731,9 @@ function simPart(s: GameState, rng: RNG, share: number): StatLine {
     player: p, level, role,
     teamPower: team?.power ?? 62,
     park: team?.park,
-    availability: s.seasonAvailability, rng, share,
+    availability: s.seasonAvailability, rng,
+    share: to - from,
+    cume: [from, to] as const,
   };
   return p.kind === "HITTER" ? simHitter(inp) : simPitcher(inp);
 }
@@ -652,7 +771,7 @@ function reviewRoster(s: GameState, rng: RNG, form: number): { type: "UP" | "DOW
     };
   }
   const chance = clamp(0.03 - form * 0.34 + (proper.level === "MINOR" ? 0.3 : 0), 0, 0.55);
-  return rng.chance(chance) ? { type: "DOWN", role: defaultRole(s.player) } : null;
+  return rng.chance(chance) ? { type: "DOWN", role: minorRoleOf(s.player) } : null;
 }
 
 /** 한 반기를 월 단위로 치른다 — 매달 끝에 엔트리가 바뀔 수 있다 */
@@ -663,12 +782,19 @@ function playHalf(
   isFinalHalf = false,
 ): MonthLine[] {
   const out: MonthLine[] = [];
+  // 시즌 시작부터의 누적 비율 — 후반기는 전반기(0.6)에서 이어진다
+  let cume = isFinalHalf ? HALF_SHARE.H1 : 0;
   for (let mi = 0; mi < months.length; mi++) {
     const m = months[mi];
     const lastMonth = isFinalHalf && mi === months.length - 1;
     const level = s.seasonLevel ?? "MINOR";
     const role = s.seasonRole ?? defaultRole(s.player);
-    const line = simPart(s, rng, m.share);
+    const from = cume;
+    // 마지막 달은 반올림 오차 없이 정확히 1.0(또는 0.6)으로 닫는다
+    cume = lastMonth || mi === months.length - 1
+      ? (isFinalHalf ? 1 : HALF_SHARE.H1)
+      : cume + m.share;
+    const line = simPart(s, rng, from, cume);
     if (level === "KBO") s.kboShare += m.share;
 
     const entry: MonthLine = { key: m.key, label: m.label, line, level, role };
@@ -773,8 +899,8 @@ function closeSeason(s: GameState, rng: RNG) {
   rec.feats = rollFeats(regular, level, rng);
   // 구단 목표
   if (s.seasonGoal) {
-    const met = judgeSeasonGoal(s.seasonGoal, regular, s.kboShare);
-    rec.goal = { label: s.seasonGoal.label, met };
+    const { met, reason } = judgeSeasonGoal(s.seasonGoal, regular, s.kboShare);
+    rec.goal = { label: s.seasonGoal.label, met, reason };
     s.trust = clamp(s.trust + (met ? s.seasonGoal.reward : s.seasonGoal.penalty), 0, 100);
     log(s, {
       icon: met ? "🎯" : "🚧",
@@ -782,7 +908,7 @@ function closeSeason(s: GameState, rng: RNG) {
       tone: met ? "good" : "bad",
       body: met
         ? `${s.seasonGoal.label}을(를) 채웠습니다. 구단의 신뢰가 올랐습니다.`
-        : `${s.seasonGoal.label}에 미치지 못했습니다.`,
+        : reason,
     });
     s.seasonGoal = null;
   }
@@ -849,8 +975,19 @@ function routeAfterSeason(s: GameState, rng: RNG) {
   const forced = shouldForceRetire(s);
   if (forced) {
     s.retireReason = forced;
+    s.retireForced = true;
     s.phase = "RETIRE_CHOICE";
     log(s, { icon: "🚪", title: "커리어의 끝", tone: "bad", body: forced });
+    return;
+  }
+
+  // 강제는 아니지만 구단이 은퇴를 권하는 시점 — 거부하고 더 뛸 수 있다
+  const advised = retirementAdvice(s);
+  if (advised) {
+    s.retireReason = advised;
+    s.retireForced = false;
+    s.phase = "RETIRE_CHOICE";
+    log(s, { icon: "🕯️", title: "은퇴 권고", tone: "bad", body: advised });
     return;
   }
 
@@ -941,7 +1078,10 @@ export type Action =
   | { type: "DEFER_FA" }
   | { type: "CHOOSE_EVENT"; optionId: string }
   | { type: "TRADE_DECIDE"; accept: boolean }
-  | { type: "RETIRE" };
+  | { type: "KEEP_PLAYING" }
+  | { type: "RETIRE" }
+  | { type: "CHOOSE_SECOND_LIFE"; pathId: SecondLifeId }
+  | { type: "HOF_BALLOT" };
 
 export function advance(prev: GameState, action: Action): GameState {
   const s = clone(prev);
@@ -1099,29 +1239,11 @@ export function advance(prev: GameState, action: Action): GameState {
 
     /* ---- 전반기 ---- */
     case "PLAY_FIRST_HALF": {
+      runTournament(s, rng, "PRE");
       s.monthLines = playHalf(s, rng, H1_MONTHS);
       s.halfLine = mergeLines(s.monthLines.map((m) => m.line));
 
-      // 시즌 중 국제대회 — 전반기를 마친 시점에 치른다
-      if (s.intlJoined && s.pendingTournament) {
-        const t = TOURNAMENTS[s.pendingTournament];
-        const res = simTournament(s, t, rng);
-        s.intlResults.push(res);
-        s.player.fame = clamp(s.player.fame + (res.medal ? 12 : 5), 0, 100);
-        if (res.exempted && s.military === "PENDING") {
-          s.military = "EXEMPT";
-          log(s, {
-            icon: "🎖️", title: "병역 면제", tone: "epic",
-            body: `${t.name} ${res.medal}메달로 병역 특례 대상이 되었습니다. 야구에만 집중할 수 있습니다.`,
-          });
-        }
-        log(s, {
-          icon: t.icon, title: `${t.name} ${res.medal ? `${res.medal}메달` : `${res.rank}위`}`,
-          tone: res.medal ? "epic" : "neutral", body: res.note,
-        });
-        s.intlJoined = false;
-        s.pendingTournament = null;
-      }
+      runTournament(s, rng, "MID");
 
       // 트레이드 데드라인 — 하위권 팀의 좋은 선수에게 우승 도전팀이 손을 내민다
       s.pendingTrade = null;
@@ -1175,6 +1297,7 @@ export function advance(prev: GameState, action: Action): GameState {
     case "PLAY_SECOND_HALF": {
       s.monthLines = playHalf(s, rng, H2_MONTHS, true);
       s.seasonLine = mergeLines([s.halfLine, ...s.monthLines.map((m) => m.line)]);
+      runTournament(s, rng, "LATE");
 
       const team = s.contract ? teamById(s.contract.teamId) : null;
       if (s.seasonLevel === "KBO" && team) {
@@ -1186,6 +1309,7 @@ export function advance(prev: GameState, action: Action): GameState {
       if (s.teamRank && s.teamRank <= PS_CUT && team) {
         s.phase = "POSTSEASON";
       } else {
+        runTournament(s, rng, "POST");
         closeSeason(s, rng);
         s.phase = "SEASON_END";
       }
@@ -1206,6 +1330,7 @@ export function advance(prev: GameState, action: Action): GameState {
           body: s.postseason.rounds.map((r) => `${r.name} ${r.win ? "승" : "패"}(${r.score})`).join(" · "),
         });
       }
+      runTournament(s, rng, "POST");
       closeSeason(s, rng);
       s.phase = "SEASON_END";
       bump();
@@ -1226,7 +1351,11 @@ export function advance(prev: GameState, action: Action): GameState {
         s.intlJoined = true;
         log(s, {
           icon: t.icon, title: `${t.name} 대표팀 승선`, tone: "good",
-          body: `${s.year}년 ${t.month}에 열리는 ${t.name}에 출전합니다. 시즌 중 대회가 진행됩니다.`,
+          body: `${s.year}년 ${t.month}에 열리는 ${t.name}에 출전합니다. ${
+            t.slot === "PRE" ? "개막 전에 대회가 열립니다."
+              : t.slot === "MID" ? "올스타 브레이크 무렵에 대회가 열립니다."
+                : t.slot === "LATE" ? "후반기 중에 대회가 열립니다."
+                  : "시즌을 모두 마친 뒤 대회가 열립니다."}`,
         });
       } else if (t) {
         s.intlJoined = false;
@@ -1268,42 +1397,57 @@ export function advance(prev: GameState, action: Action): GameState {
     case "SERVE": {
       const p = s.player;
       const keys = abilityKeys(p.kind);
+      // 병역은 18개월 — 첫 해는 통째로, 둘째 해는 반 시즌만 복무하고 후반기에 복귀한다
+      const half = s.militaryLeft <= 1;
+      const serveShare = half ? 0.5 : 1;
       let line: StatLine;
       if (s.military === "SANGMU") {
         const inp = {
           player: p, level: "ARMY" as LevelTag, role: defaultRole(p),
-          teamPower: 60, availability: 1, rng,
+          teamPower: 60, availability: 1, rng, share: serveShare,
         };
         line = p.kind === "HITTER" ? simHitter(inp) : simPitcher(inp);
-        grow(p, rng, null, developmentRate("ARMY", "주전", p.age));
+        grow(p, rng, null, developmentRate("ARMY", "주전", p.age) * serveShare);
       } else {
         line = p.kind === "HITTER"
           ? simHitter({ player: p, level: "ARMY", role: defaultRole(p), teamPower: 60, availability: 0, rng })
           : simPitcher({ player: p, level: "ARMY", role: defaultRole(p), teamPower: 60, availability: 0, rng });
         for (const k of keys) {
-          const loss = k === "mental" ? rng.float(0, 1) : rng.float(1.5, 4.5);
+          const loss = (k === "mental" ? rng.float(0, 1) : rng.float(1.5, 4.5)) * serveShare;
           setAb(p.abilities, k, clamp(Math.round(getAb(p.abilities, k) - loss), 15, ABILITY_MAX));
         }
       }
+
+      s.militaryLeft = Math.round((s.militaryLeft - serveShare) * 10) / 10;
+      const discharged = s.militaryLeft <= 0;
+
       s.seasons.push({
         year: s.year, age: p.age, level: "ARMY", teamId: "-",
         teamName: s.military === "SANGMU" ? "상무 야구단" : "현역 복무",
         position: p.position, role: s.military === "SANGMU" ? "주전" : "복무",
         salary: 0, line, awards: [],
-        note: s.military === "SANGMU" ? undefined : "야구를 떠나 있는 동안 기량이 떨어졌습니다.",
+        note: half
+          ? "전반기까지 복무를 마치고 후반기에 팀으로 돌아왔습니다."
+          : s.military === "SANGMU" ? undefined : "야구를 떠나 있는 동안 기량이 떨어졌습니다.",
       });
       s.lastSeasonIndex = s.seasons.length - 1;
 
-      s.militaryLeft -= 1;
-      s.player.age += 1;
-      s.year += 1;
-      if (s.militaryLeft <= 0) {
+      if (discharged) {
         s.military = "DONE";
-        log(s, { icon: "🎽", title: "전역", tone: "good", body: "병역을 마치고 팀에 복귀했습니다." });
+        log(s, {
+          icon: "🎽", title: "전역", tone: "good",
+          body: "18개월 복무를 마치고 팀에 복귀했습니다.",
+        });
         s.pendingTraining = makeTrainingOptions(s.player, rng);
         s.monthLines = null; s.halfLine = null; s.seasonLine = null;
         s.postseason = null; s.teamRank = null; s.allStar = false; s.allStarGame = null; s.seasonNote = null;
         s.phase = "SPRING_CAMP";
+        // 반 시즌만 복무한 해는 그 자리에서 시즌이 끝난다 — 해를 넘겨 스프링캠프로 간다
+        s.player.age += 1;
+        s.year += 1;
+      } else {
+        s.player.age += 1;
+        s.year += 1;
       }
       bump();
       return s;
@@ -1465,8 +1609,24 @@ export function advance(prev: GameState, action: Action): GameState {
       return s;
     }
 
+    /* ---- 은퇴 권고를 뿌리치고 한 시즌 더 ---- */
+    case "KEEP_PLAYING": {
+      s.retireReason = undefined;
+      s.retireForced = false;
+      // 구단은 달가워하지 않는다 — 신뢰가 깎이고 입지가 좁아진다
+      s.trust = clamp(s.trust - rng.int(8, 16), 0, 100);
+      s.player.fame = clamp(s.player.fame - rng.int(2, 5), 0, 100);
+      log(s, {
+        icon: "🔥", title: "현역 연장", tone: "neutral",
+        body: "은퇴 권고를 뿌리치고 한 시즌을 더 뛰기로 했습니다. 구단은 달가워하지 않습니다.",
+      });
+      routeToOffseason(s, rng);
+      bump();
+      return s;
+    }
+
     case "RETIRE": {
-      s.phase = "RETIRED";
+      s.phase = "SECOND_LIFE";
       const hof = computeHof(s);
       s.hofScore = hof.score;
       const honor = retirementHonors(s);
@@ -1486,6 +1646,49 @@ export function advance(prev: GameState, action: Action): GameState {
         icon: "🎖️", title: "은퇴", tone: "epic",
         body: `${s.player.name} 선수가 ${s.player.age}세의 나이로 은퇴했습니다. 통산 평가: ${hof.tier}`,
       });
+      // 은퇴 5년 뒤부터 명예의 전당 투표가 열린다
+      s.hofVote = newHofVote(s, hof.score);
+      s.secondLife = null;
+      bump();
+      return s;
+    }
+
+    /* ---- 은퇴 후 진로 ---- */
+    case "CHOOSE_SECOND_LIFE": {
+      const ctx = legacyContext(s, s.hofScore ?? computeHof(s).score);
+      const life = resolveSecondLife(ctx, action.pathId, rng);
+      s.secondLife = life;
+      s.phase = "RETIRED";
+      log(s, {
+        icon: life.icon, title: `은퇴 후 — ${life.name}`,
+        tone: life.success ? "epic" : "neutral", body: life.story,
+      });
+      bump();
+      return s;
+    }
+
+    /* ---- 명예의 전당 투표 한 해 진행 ---- */
+    case "HOF_BALLOT": {
+      if (s.hofVote) {
+        const next = advanceHofVote(s.hofVote, rng);
+        if (next) {
+          s.hofVote = next;
+          const last = next.ballots[next.ballots.length - 1];
+          log(s, {
+            icon: next.inducted ? "🏛️" : next.closed ? "📪" : "🗳️",
+            title: next.inducted
+              ? "명예의 전당 헌액"
+              : next.closed ? "명예의 전당 후보 자격 상실" : `명예의 전당 ${last.ballot}차 투표`,
+            tone: next.inducted ? "epic" : next.closed ? "bad" : "neutral",
+            body: next.inducted
+              ? `${last.year}년 ${last.ballot}차 투표에서 득표율 ${last.share}%로 명예의 전당에 헌액되었습니다.`
+              : next.closed
+                ? `득표율 ${last.share}%. 더 이상 후보로 오르지 못합니다.`
+                : `${last.year}년 ${last.ballot}차 투표 득표율 ${last.share}% (헌액 기준 ${HOF_CUT}%).`,
+          });
+        }
+      }
+      bump();
       return s;
     }
   }
@@ -1493,6 +1696,7 @@ export function advance(prev: GameState, action: Action): GameState {
 }
 
 export { canVolunteer, isServing, MILITARY_OPTIONS, MILITARY_DEADLINE, tournamentOf };
+export { legacyContext, secondLifeOptions, HOF_CUT, HOF_WAIT } from "./legacy";
 
 /* ------------------------------------------------------------------ */
 /* 통산 기록                                                            */

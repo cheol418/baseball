@@ -1,7 +1,10 @@
 /** 전체 경로 스트레스 테스트 — 예외·정지·이상값 탐지 */
 import { RNG } from "../src/lib/rng";
 import { rollCandidate, overall, STYLES, HITTER_POSITIONS, PITCHER_POSITIONS, ARM_SLOTS } from "../src/lib/player";
-import { newGame, advance, computeHof, careerTotals, formatMoney, type Action } from "../src/lib/career";
+import {
+  newGame, advance, computeHof, careerTotals, formatMoney,
+  legacyContext, secondLifeOptions, type Action,
+} from "../src/lib/career";
 import { isHitterLine } from "../src/lib/sim";
 import type { GameState, Hand, Kind } from "../src/lib/types";
 
@@ -31,6 +34,7 @@ function play(seed: number, opt: { college: boolean; military: "SANGMU" | "ACTIV
   let guard = 0;
   const act = (a: Action) => { actionSeen.add(a.type); g = advance(g, a); };
   let deferred = false;
+  let refused = false;
 
   while (g.phase !== "RETIRED" && guard++ < 800) {
     phaseSeen.add(g.phase);
@@ -74,7 +78,16 @@ function play(seed: number, opt: { college: boolean; military: "SANGMU" | "ACTIV
           if (opt.deferFa && !deferred) { deferred = true; act({ type: "DEFER_FA" }); }
           else act({ type: "ACCEPT_OFFER", teamId: g.pendingOffers![rng.int(0, g.pendingOffers!.length - 1)].teamId });
           break;
-        case "RETIRE_CHOICE": act({ type: "RETIRE" }); break;
+        case "RETIRE_CHOICE":
+          // 권고는 한 번 뿌리쳐 보고, 그 다음엔 받아들인다
+          if (g.retireForced === false && !refused) { refused = true; act({ type: "KEEP_PLAYING" }); }
+          else act({ type: "RETIRE" });
+          break;
+        case "SECOND_LIFE": {
+          const opts = secondLifeOptions(legacyContext(g, g.hofScore ?? 0));
+          act({ type: "CHOOSE_SECOND_LIFE", pathId: opts[rng.int(0, opts.length - 1)].id });
+          break;
+        }
         default: add("알 수 없는 단계", g.phase); act({ type: "RETIRE" });
       }
     } catch (e) { crashes++; add("예외", `${before} → ${(e as Error).message}`); return g; }
@@ -84,6 +97,12 @@ function play(seed: number, opt: { college: boolean; military: "SANGMU" | "ACTIV
     }
   }
   if (guard >= 800) { stuck++; add("가드 초과", `${g.year} ${g.phase}`); }
+  // 명예의 전당 투표를 결론까지 진행한다
+  let ballots = 0;
+  while (g.hofVote && !g.hofVote.closed && ballots++ < 12) {
+    try { g = advance(g, { type: "HOF_BALLOT" }); actionSeen.add("HOF_BALLOT"); }
+    catch (e) { crashes++; add("예외", `HOF_BALLOT → ${(e as Error).message}`); break; }
+  }
 
   return g;
 }
@@ -109,7 +128,8 @@ for (const g of finals) {
   for (const s of g.seasons) {
     const l = s.line;
     if (isHitterLine(l)) {
-      if (l.avg > 0.45) add("타율 이상", `${s.year} ${l.avg}`);
+      if (l.pa >= 100 && l.avg > 0.45) add("타율 이상", `${s.year} ${l.avg} (${l.pa}타석)`);
+      if (l.pa >= 20 && l.avg > 0.55) add("타율 이상(소표본)", `${s.year} ${l.avg} (${l.pa}타석)`);
       if (l.pa > 720) add("타석 과다", `${s.year} ${l.pa}`);
       if (l.h > l.ab) add("안타>타수", `${s.year}`);
     } else {
@@ -128,8 +148,8 @@ for (const g of finals) {
   void t;
 }
 
-const allPhases = ["EVENT","HS_SEASON","PATH_CHOICE","COLLEGE_SEASON","DRAFT","SPRING_CAMP","FIRST_HALF","ALL_STAR","POSTSEASON","SEASON_END","INTERNATIONAL","MILITARY_CHOICE","MILITARY_SEASON","NEGOTIATION","STOVE","FA","RETIRE_CHOICE","RETIRED"];
-const allActions = ["TRADE_DECIDE","CHOOSE_EVENT","SIM_AMATEUR","CHOOSE_PATH","DO_DRAFT","TRAIN","PLAY_FIRST_HALF","PLAY_SECOND_HALF","PLAY_POSTSEASON","FINISH_SEASON","JOIN_NATIONAL","ENLIST","SERVE","NEGOTIATE","REQUEST_TRANSFER","VOLUNTEER_ARMY","SKIP_STOVE","ACCEPT_OFFER","DEFER_FA","RETIRE"];
+const allPhases = ["EVENT","HS_SEASON","PATH_CHOICE","COLLEGE_SEASON","DRAFT","SPRING_CAMP","FIRST_HALF","ALL_STAR","POSTSEASON","SEASON_END","INTERNATIONAL","MILITARY_CHOICE","MILITARY_SEASON","NEGOTIATION","STOVE","FA","RETIRE_CHOICE","SECOND_LIFE","RETIRED"];
+const allActions = ["TRADE_DECIDE","CHOOSE_EVENT","SIM_AMATEUR","CHOOSE_PATH","DO_DRAFT","TRAIN","PLAY_FIRST_HALF","PLAY_SECOND_HALF","PLAY_POSTSEASON","FINISH_SEASON","JOIN_NATIONAL","ENLIST","SERVE","NEGOTIATE","REQUEST_TRANSFER","VOLUNTEER_ARMY","SKIP_STOVE","ACCEPT_OFFER","DEFER_FA","RETIRE","KEEP_PLAYING","CHOOSE_SECOND_LIFE","HOF_BALLOT"];
 
 console.log(`■ 스트레스 테스트 — 커리어 ${finals.length}개, 예외 ${crashes}, 정지 ${stuck}\n`);
 console.log(`  거치지 않은 단계: ${allPhases.filter((p) => !phaseSeen.has(p) && p !== "RETIRED").join(", ") || "없음"}`);

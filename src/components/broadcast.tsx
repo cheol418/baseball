@@ -6,7 +6,7 @@ import { isHitterLine, mergeLines } from "@/lib/sim";
 import { TOURNAMENTS } from "@/lib/national";
 import { teamById } from "@/lib/teams";
 import type {
-  AmateurTournament, GameState, HitterLine, PitcherLine, StatLine,
+  AmateurTournament, GameState, HitterLine, PitcherLine, StatLine, TournamentSlot,
 } from "@/lib/types";
 
 export type BroadcastKind = "H1" | "H2" | "PS" | "HS";
@@ -26,21 +26,30 @@ const CARD_MS = 2000;
 
 /* ------------------------------------------------------------------ */
 
+/**
+ * 한 달(약 24경기) 성적의 체감.
+ * 리그 평균 OPS는 .730 안팎 — 타율만 보면 거포의 한 달을 과소평가하게 된다.
+ * 그래서 장타(홈런·타점)와 투수의 탈삼진도 함께 본다.
+ */
 function moodOf(line: StatLine): Mood {
   if (isHitterLine(line)) {
-    if (line.pa < 8) return "out";
-    if (line.ops >= 0.900) return "hot";
-    if (line.ops <= 0.650) return "cold";
+    const h = line;
+    if (h.pa < 8) return "out";
+    // 월 6홈런이면 30홈런 페이스 — 타율이 낮아도 상승세다
+    if (h.ops >= 0.850 || h.hr >= 6 || (h.hr >= 4 && h.slg >= 0.520) || h.rbi >= 24) return "hot";
+    if (h.ops <= 0.660 && h.hr <= 2) return "cold";
     return "normal";
   }
   const p = line as PitcherLine;
   if (p.ip < 3) return "out";
-  if (p.era <= 2.7) return "hot";
-  if (p.era >= 5.5) return "cold";
+  if (p.era <= 2.90 || (p.era <= 3.60 && p.k9 >= 10)) return "hot";
+  if (p.era >= 5.50) return "cold";
   return "normal";
 }
 
 const HOT_H = ["미친 타격감", "이 달의 선수급", "손대는 족족 안타", "타선을 이끌었다"];
+/** 타율은 평범해도 담장을 넘긴 달 */
+const HOT_POWER = ["담장을 계속 넘겼다", "한 방이 터진 달", "중심타선의 위력", "아치를 그려냈다"];
 const COLD_H = ["방망이가 식었다", "타격 슬럼프", "잔루만 쌓였다", "배트에 공이 안 맞는다"];
 const NORM_H = ["제 몫은 했다", "꾸준했던 한 달", "기복 속에 버텼다"];
 const HOT_P = ["압도적인 구위", "무실점 행진", "마운드를 지배했다", "이 달의 투수급"];
@@ -50,7 +59,8 @@ const NORM_P = ["제 몫은 했다", "꾸준히 로테이션을 지켰다", "기
 function noteOf(line: StatLine, mood: Mood, seed: number): string {
   if (mood === "out") return "부상·2군 — 출장 없음";
   const hitter = isHitterLine(line);
-  const pool = mood === "hot" ? (hitter ? HOT_H : HOT_P)
+  const power = hitter && (line as HitterLine).hr >= 4 && (line as HitterLine).avg < 0.285;
+  const pool = mood === "hot" ? (hitter ? (power ? HOT_POWER : HOT_H) : HOT_P)
     : mood === "cold" ? (hitter ? COLD_H : COLD_P)
     : (hitter ? NORM_H : NORM_P);
   return pool[seed % pool.length];
@@ -73,6 +83,28 @@ function cells(line: StatLine): { k: string; v: string }[] {
     { k: p.sv > p.hld ? "SV" : p.hld > 0 ? "HLD" : "W-L", v: p.sv > p.hld ? String(p.sv) : p.hld > 0 ? String(p.hld) : `${p.w}-${p.l}` },
     { k: "SO", v: String(p.so) },
   ];
+}
+
+/** 그해 국제대회를 경기 단위로 펼친다 — 해당 시점에 열리는 대회만 */
+function intlSteps(g: GameState, slot: TournamentSlot): Step[] {
+  const intl = g.intlResults.find((r) => r.year === g.year);
+  if (!intl) return [];
+  const t = TOURNAMENTS[intl.tournamentId];
+  if (t.slot !== slot) return [];
+
+  const steps: Step[] = intl.games.map((gm) => ({
+    kind: "game" as const, tag: `${t.icon} ${t.name}`, round: gm.round,
+    opponent: gm.opponent, won: gm.won, score: gm.score, line: gm.line,
+    appeared: gm.appeared,
+  }));
+  steps.push({
+    kind: "card",
+    icon: intl.medal === "금" ? "🥇" : intl.medal === "은" ? "🥈" : intl.medal === "동" ? "🥉" : t.icon,
+    title: `${t.name} ${intl.medal ? `${intl.medal}메달` : `${intl.rank}위`}`,
+    body: intl.exempted ? `${intl.note} — 병역 면제 대상이 되었습니다!` : intl.note,
+    tone: intl.exempted ? "epic" : intl.medal ? "good" : "neutral",
+  });
+  return steps;
 }
 
 function buildSteps(g: GameState, kind: BroadcastKind): Step[] {
@@ -104,12 +136,16 @@ function buildSteps(g: GameState, kind: BroadcastKind): Step[] {
     steps.push(ps.champion
       ? { kind: "card", icon: "🏆", title: "한국시리즈 우승", body: `${teamById(g.contract?.teamId ?? "").name}가 정상에 올랐습니다!`, tone: "epic" }
       : { kind: "card", icon: "🍁", title: "가을야구 종료", body: "다음을 기약합니다.", tone: "neutral" });
+    // 11월에 열리는 대회(프리미어12)는 시즌을 모두 마친 뒤다
+    steps.push(...intlSteps(g, "POST"));
     return steps;
   }
 
   const months = g.monthLines ?? [];
   const base: StatLine[] = kind === "H2" && g.halfLine ? [g.halfLine] : [];
-  const steps: Step[] = months.map((m, i) => {
+  // 3월에 열리는 대회(WBC)는 개막 전이므로 월별 기록보다 앞에 온다
+  const steps: Step[] = kind === "H1" ? intlSteps(g, "PRE") : [];
+  steps.push(...months.map((m, i) => {
     const mood = moodOf(m.line);
     return {
       kind: "month" as const,
@@ -119,10 +155,13 @@ function buildSteps(g: GameState, kind: BroadcastKind): Step[] {
       mood,
       note: noteOf(m.line, mood, g.seed + i),
     };
-  });
+  }));
 
   if (kind === "H1") {
-    // 올스타전 — 선정됐다면 경기를 보여준다
+    // 올스타 브레이크 — 선정 발표가 먼저, 경기는 그 다음이다
+    steps.push(g.allStar
+      ? { kind: "card", icon: "⭐", title: "올스타 선정", body: "전반기 활약을 인정받아 올스타전에 출전합니다.", tone: "epic" }
+      : { kind: "card", icon: "🛋️", title: "올스타 브레이크", body: "올스타 선정은 불발. 짧은 휴식 뒤 후반기를 준비합니다.", tone: "neutral" });
     if (g.allStarGame) {
       const ag = g.allStarGame;
       steps.push({
@@ -130,29 +169,11 @@ function buildSteps(g: GameState, kind: BroadcastKind): Step[] {
         won: ag.won, score: ag.score, line: ag.line, mvp: ag.mvp,
       });
     }
-    // 시즌 중 국제대회 — 전반기 직후에 치른다
-    const intl = g.intlResults.find((r) => r.year === g.year);
-    if (intl) {
-      const t = TOURNAMENTS[intl.tournamentId];
-      for (const gm of intl.games) {
-        steps.push({
-          kind: "game", tag: `${t.icon} ${t.name}`, round: gm.round,
-          opponent: gm.opponent, won: gm.won, score: gm.score, line: gm.line,
-          appeared: gm.appeared,
-        });
-      }
-      steps.push({
-        kind: "card",
-        icon: intl.medal === "금" ? "🥇" : intl.medal === "은" ? "🥈" : intl.medal === "동" ? "🥉" : t.icon,
-        title: `${t.name} ${intl.medal ? `${intl.medal}메달` : `${intl.rank}위`}`,
-        body: intl.exempted ? `${intl.note} — 병역 면제 대상이 되었습니다!` : intl.note,
-        tone: intl.exempted ? "epic" : intl.medal ? "good" : "neutral",
-      });
-    }
-    steps.push(g.allStar
-      ? { kind: "card", icon: "⭐", title: "올스타 선정", body: "전반기 활약을 인정받아 올스타전에 출전합니다.", tone: "epic" }
-      : { kind: "card", icon: "🛋️", title: "올스타 브레이크", body: "올스타 선정은 불발. 짧은 휴식 뒤 후반기를 준비합니다.", tone: "neutral" });
+    // 7월에 열리는 대회(올림픽)만 이 시점에 치러진다
+    steps.push(...intlSteps(g, "MID"));
   } else {
+    // 9월에 열리는 대회(아시안게임)는 후반기 안에 치러진다
+    steps.push(...intlSteps(g, "LATE"));
     const rank = g.teamRank;
     steps.push(rank
       ? {

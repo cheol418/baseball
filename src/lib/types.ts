@@ -161,7 +161,7 @@ export interface SeasonRecord {
   /** 통산 기록 이정표 */
   milestones?: string[];
   /** 구단 목표 달성 여부 */
-  goal?: { label: string; met: boolean };
+  goal?: { label: string; met: boolean; reason?: string };
   allStar?: boolean;
   allStarGame?: AllStarGame;
 }
@@ -221,6 +221,8 @@ export type Phase =
   | "STOVE"
   | "FA"
   | "RETIRE_CHOICE"
+  /** 은퇴 후 진로 선택 */
+  | "SECOND_LIFE"
   | "RETIRED";
 
 export interface Player {
@@ -265,6 +267,43 @@ export interface LogEntry {
   tone: "good" | "bad" | "neutral" | "epic";
 }
 
+/* ------------------------------------------------------------------ */
+/* 은퇴 이후                                                            */
+/* ------------------------------------------------------------------ */
+
+/** 명예의 전당 헌액 투표 한 해분 */
+export interface HofBallot {
+  year: number;
+  /** 몇 번째 투표인가 */
+  ballot: number;
+  /** 득표율 (%) */
+  share: number;
+}
+
+export interface HofVote {
+  /** 첫 투표가 열리는 해 (은퇴 5년 뒤) */
+  firstYear: number;
+  ballots: HofBallot[];
+  inducted: boolean;
+  /** 헌액되었거나 후보 자격을 잃어 더 볼 것이 없는가 */
+  closed: boolean;
+  /** 투표의 근거가 되는 통산 점수 */
+  score: number;
+}
+
+export type SecondLifeId =
+  | "COACH" | "MANAGER" | "COMMENTATOR" | "SCOUT" | "FRONT" | "ACADEMY" | "AWAY";
+
+/** 은퇴 후 걸어간 길 */
+export interface SecondLife {
+  id: SecondLifeId;
+  name: string;
+  icon: string;
+  /** 그 길에서 성공했는가 */
+  success: boolean;
+  story: string;
+}
+
 export interface GameState {
   id: string;
   seed: number;
@@ -286,6 +325,12 @@ export interface GameState {
   pendingOffers: Offer[] | null;
   lastSeasonIndex: number | null;
   retireReason?: string;
+  /** 은퇴가 강제인가(방출) 권고인가 — 권고면 거부하고 더 뛸 수 있다 */
+  retireForced?: boolean;
+  /** 은퇴 후 명예의 전당 헌액 투표 */
+  hofVote?: HofVote | null;
+  /** 은퇴 후 걸어간 길 */
+  secondLife?: SecondLife | null;
   hofScore?: number;
 
   /* --- 시즌 진행 --- */
@@ -423,7 +468,12 @@ export interface Tournament {
   /** 대표팀 선발 기준 OVR */
   bar: number;
   icon: string;
+  /** 시즌 어느 시점에 열리는가 — 실제 개최 월과 맞춘다 */
+  slot: TournamentSlot;
 }
+
+/** PRE 개막 전(3월) · MID 올스타 브레이크(7월) · LATE 후반기 중(9월) · POST 시즌 종료 후(11월) */
+export type TournamentSlot = "PRE" | "MID" | "LATE" | "POST";
 
 /** 국제대회 한 경기 */
 export interface IntlGame {
@@ -509,6 +559,8 @@ export interface PostseasonRound {
   opponent: string;
   win: boolean;
   score: string;
+  /** 해당 시리즈에서의 개인 기록 */
+  line: StatLine;
 }
 
 export interface PostseasonResult {

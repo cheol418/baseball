@@ -1,8 +1,9 @@
+import { isEverydayRole } from "./roles";
 import { RNG } from "./rng";
 import { isHitterLine } from "./sim";
 import type { SeasonRecord, StatLine } from "./types";
 
-const STARTER_ROLES = ["주전", "1선발", "선발", "마무리"];
+
 
 /** 그 시즌이 어느 정도였는지 — 보직까지 감안해서 판정한다 */
 type Tier = "star" | "good" | "solid" | "fringe" | "bad";
@@ -10,7 +11,7 @@ type Tier = "star" | "good" | "solid" | "fringe" | "bad";
 function tierOf(rec: SeasonRecord): Tier {
   const l = rec.line;
   const war = l.war;
-  const starter = STARTER_ROLES.includes(rec.role);
+  const starter = isEverydayRole(rec.role);
   if (rec.level !== "KBO") return "fringe";
   if (rec.champion || rec.awards.some((a) => a.includes("MVP")) || war >= 4.5) return "star";
   if (war >= 2.2) return "good";

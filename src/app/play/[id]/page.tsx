@@ -12,6 +12,7 @@ import {
   retirementHonors, type Action,
 } from "@/lib/career";
 import { fanFeed, seasonHeadline } from "@/lib/flavor";
+import { HOF_CUT, HOF_WAIT, legacyContext, secondLifeOptions } from "@/lib/legacy";
 import { allTimeRanks, nickname } from "@/lib/records";
 import { TOURNAMENTS } from "@/lib/national";
 import {
@@ -21,9 +22,10 @@ import {
 } from "@/lib/player";
 import { isHitterLine, subtractLine } from "@/lib/sim";
 import { saveGame, useGame } from "@/lib/storage";
+import { isFranchiseRole } from "@/lib/roles";
 import { teamById } from "@/lib/teams";
 import {
-  MILITARY_LABEL, type GameState, type PitcherLine,
+  MILITARY_LABEL, type GameState, type HitterLine, type HofVote, type PitcherLine,
   type SeasonRecord, type StatLine,
 } from "@/lib/types";
 
@@ -80,6 +82,9 @@ export default function PlayPage() {
   const nick = nickname(g);
   const levelNow = g.seasonLevel ?? last?.level ?? null;
   const roleNow = g.seasonRole ?? last?.role ?? g.contract?.role ?? null;
+  // 프로 연차 — 1군·2군을 가리지 않고 프로에서 보낸 시즌 수 (진행 중인 시즌 포함)
+  const proSeasons = g.seasons.filter((r) => r.level === "KBO" || r.level === "MINOR" || r.level === "ARMY").length;
+  const proYears = g.contract ? proSeasons + (g.seasonLevel ? 1 : 0) : 0;
 
   return (
     <main className="pb-10">
@@ -111,6 +116,7 @@ export default function PlayPage() {
             <div className="mt-0.5 text-[11.5px] opacity-85">
               {team ? team.name : g.phase === "COLLEGE_SEASON" ? "대학 야구부" : g.military === "SANGMU" || g.military === "ACTIVE" ? "군 복무" : "고교 야구부"} ·{" "}
               {POSITION_LABEL[p.position]} · {p.age}세 · {HAND_LABEL[p.throws]}투{HAND_LABEL[p.bats]}타
+              {proYears > 0 && <> · 프로 {proYears}년차</>}
             </div>
           </div>
         </div>
@@ -178,15 +184,17 @@ export const LEVEL_SHORT: Record<string, string> = {
 function LevelBadge({ level, role }: { level: string; role: string | null }) {
   const short = LEVEL_SHORT[level] ?? level;
   const first = level === "KBO";
+  // 팀의 간판은 금색으로 따로 보인다
+  const franchise = first && isFranchiseRole(role);
   return (
     <span
       className="shrink-0 rounded px-1.5 py-[2px] text-[9.5px] font-black"
       style={{
-        background: first ? "rgba(255,255,255,0.92)" : "rgba(0,0,0,0.28)",
+        background: franchise ? "var(--gold)" : first ? "rgba(255,255,255,0.92)" : "rgba(0,0,0,0.28)",
         color: first ? "#0e2a4d" : "rgba(255,255,255,0.92)",
       }}
     >
-      {short}{role && level !== "ARMY" ? ` ${role}` : ""}
+      {franchise ? "★ " : ""}{short}{role && level !== "ARMY" ? ` ${role}` : ""}
     </span>
   );
 }
@@ -236,6 +244,9 @@ function SeasonReview({ g }: { g: GameState }) {
             last.goal.met ? "bg-[var(--brand)]/8 text-[var(--brand)]" : "bg-[var(--danger)]/8 text-[var(--danger)]"
           }`}>
             🎯 구단 목표 «{last.goal.label}» {last.goal.met ? "달성" : "미달"}
+            {!last.goal.met && last.goal.reason && (
+              <span className="ml-1 font-semibold opacity-75">— {last.goal.reason}</span>
+            )}
           </div>
         )}
         {((last.feats?.length ?? 0) + (last.milestones?.length ?? 0)) > 0 && (
@@ -381,21 +392,46 @@ function SplitBox({ rec }: { rec: SeasonRecord }) {
 
 function PostseasonBox({ rec }: { rec: SeasonRecord }) {
   const ps = rec.ps!;
+  const hitter = isHitterLine(ps.line);
+  const head = hitter ? ["G", "AVG", "HR", "RBI", "OPS"] : ["G", "IP", "ERA", "SO", "WHIP"];
+  const row = (l: StatLine) => hitter
+    ? [String(l.g), fmt3((l as HitterLine).avg), String((l as HitterLine).hr),
+       String((l as HitterLine).rbi), fmt3((l as HitterLine).ops)]
+    : [String(l.g), (l as PitcherLine).ip.toFixed(1), fmt2((l as PitcherLine).era),
+       String((l as PitcherLine).so), fmt2((l as PitcherLine).whip)];
+
   return (
-    <div className="mt-3 rounded-xl bg-[var(--surface-2)] px-3 py-2.5">
-      <div className="eyebrow mb-1.5">가을야구 · {ps.seed}위 진출</div>
-      <ul className="flex flex-col gap-1">
-        {ps.rounds.map((r, i) => (
-          <li key={i} className="flex items-center gap-2 text-[11.5px]">
-            <span className={`w-[70px] font-bold ${r.win ? "text-[var(--brand)]" : "text-[var(--ink-3)]"}`}>{r.name}</span>
-            <span className="flex-1 truncate text-[var(--ink-2)]">vs {r.opponent}</span>
-            <span className={`tabular font-extrabold ${r.win ? "text-[var(--brand)]" : "text-[var(--danger)]"}`}>
-              {r.win ? "승" : "패"} {r.score}
-            </span>
-          </li>
-        ))}
-      </ul>
-      {ps.champion && <div className="mt-2 text-center text-[12px] font-black text-[var(--gold)]">🏆 한국시리즈 우승</div>}
+    <div className="mt-3 overflow-hidden rounded-xl border border-[var(--line)]">
+      <div className="flex items-center justify-between bg-[var(--surface-2)] px-3 py-2">
+        <span className="eyebrow">가을야구 · {ps.seed}위 진출</span>
+        {ps.champion && <span className="text-[11.5px] font-black text-[var(--gold)]">🏆 한국시리즈 우승</span>}
+      </div>
+      <table className="tabular w-full text-[11.5px]">
+        <thead>
+          <tr className="border-y border-[var(--line)] text-[9.5px] text-[var(--ink-3)]">
+            <th className="px-2.5 py-1.5 text-left font-bold">시리즈</th>
+            <th className="px-2 py-1.5 text-left font-bold">상대</th>
+            <th className="px-2 py-1.5 text-right font-bold">결과</th>
+            {head.map((h) => <th key={h} className="px-2 py-1.5 text-right font-bold">{h}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {ps.rounds.map((r, i) => (
+            <tr key={i} className="border-b border-[var(--line)] last:border-0">
+              <td className={`px-2.5 py-1.5 font-bold ${r.win ? "text-[var(--brand)]" : "text-[var(--ink-3)]"}`}>{r.name}</td>
+              <td className="px-2 py-1.5 text-[var(--ink-2)]">{r.opponent}</td>
+              <td className={`px-2 py-1.5 text-right font-extrabold ${r.win ? "text-[var(--brand)]" : "text-[var(--danger)]"}`}>
+                {r.win ? "승" : "패"} {r.score}
+              </td>
+              {row(r.line ?? ps.line).map((v, j) => <td key={j} className="px-2 py-1.5 text-right text-[var(--ink-2)]">{v}</td>)}
+            </tr>
+          ))}
+          <tr className="bg-[var(--surface-2)] font-extrabold">
+            <td className="px-2.5 py-1.5" colSpan={3}>가을야구 통산</td>
+            {row(ps.line).map((v, j) => <td key={j} className="px-2 py-1.5 text-right">{v}</td>)}
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -855,15 +891,70 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
         </Wrap>
       );
 
-    case "RETIRE_CHOICE":
+    case "RETIRE_CHOICE": {
+      // 방출은 되돌릴 수 없지만, 권고는 뿌리칠 수 있다
+      const forced = g.retireForced !== false;
       return (
-        <Wrap eyebrow="The End" title="커리어의 기로" desc={g.retireReason}>
-          <Primary onClick={() => run({ type: "RETIRE" })} busy={busy}>유니폼을 벗는다 🎖️</Primary>
+        <Wrap
+          eyebrow="The End"
+          title={forced ? "커리어의 끝" : "은퇴 권고"}
+          desc={g.retireReason}>
+          {forced ? (
+            <Primary onClick={() => run({ type: "RETIRE" })} busy={busy}>유니폼을 벗는다 🎖️</Primary>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <button
+                className="card px-4 py-3 text-left transition hover:border-[var(--brand)]"
+                disabled={busy}
+                onClick={() => run({ type: "KEEP_PLAYING" })}>
+                <div className="text-[14px] font-extrabold">🔥 한 시즌 더 뛴다</div>
+                <div className="mt-0.5 text-[11.5px] text-[var(--ink-3)]">
+                  구단 신뢰와 인지도가 떨어지고, 자리를 지키기 어려워집니다.
+                </div>
+              </button>
+              <button
+                className="card px-4 py-3 text-left transition hover:border-[var(--brand)]"
+                disabled={busy}
+                onClick={() => run({ type: "RETIRE" })}>
+                <div className="text-[14px] font-extrabold">🎖️ 유니폼을 벗는다</div>
+                <div className="mt-0.5 text-[11.5px] text-[var(--ink-3)]">
+                  박수받을 때 떠납니다. 통산 기록이 그대로 남습니다.
+                </div>
+              </button>
+            </div>
+          )}
         </Wrap>
       );
+    }
+
+    case "SECOND_LIFE": {
+      const ctx = legacyContext(g, g.hofScore ?? 0);
+      const opts = secondLifeOptions(ctx);
+      return (
+        <Wrap
+          eyebrow="Second Life"
+          title="유니폼을 벗고"
+          desc={`${p.name} 선수의 현역 생활이 끝났습니다. 이제 무엇을 하며 살아갈지 고릅니다.`}>
+          <div className="flex flex-col gap-2">
+            {opts.map((o) => (
+              <button
+                key={o.id}
+                className="card px-4 py-3 text-left transition hover:border-[var(--brand)]"
+                disabled={busy}
+                onClick={() => run({ type: "CHOOSE_SECOND_LIFE", pathId: o.id })}>
+                <div className="text-[14px] font-extrabold">{o.icon} {o.name}</div>
+                <div className="mt-0.5 text-[11.5px] text-[var(--ink-3)]">{o.desc}</div>
+              </button>
+            ))}
+          </div>
+        </Wrap>
+      );
+    }
 
     default: {
       const hof = computeHof(g);
+      const vote = g.hofVote;
+      const life = g.secondLife;
       return (
         <Section eyebrow="Career Summary" title="은퇴">
           <div className="card px-4 py-5 text-center">
@@ -905,12 +996,88 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
               <span className="eyebrow">명예의 전당 점수</span>
               <div className="tabular text-[24px] font-black text-[var(--brand)]">{hof.score}</div>
             </div>
+
+            {life && (
+              <div className="mt-3 rounded-xl border border-[var(--line)] px-3.5 py-3 text-left">
+                <div className="eyebrow mb-1">은퇴 후</div>
+                <div className="text-[13.5px] font-extrabold">
+                  {life.icon} {life.name}
+                  {life.success && <span className="ml-1.5 text-[11px] text-[var(--gold)]">성공</span>}
+                </div>
+                <p className="mt-1 text-[12px] leading-relaxed text-[var(--ink-2)]">{life.story}</p>
+              </div>
+            )}
+
+            {vote && <HofVoteBox g={g} vote={vote} busy={busy} run={run} />}
+
             <Link href="/create" className="btn btn-primary mt-4 w-full py-3 text-[14px]">새로운 인생 시작하기</Link>
           </div>
         </Section>
       );
     }
   }
+}
+
+/** 은퇴 5년 뒤부터 열리는 명예의 전당 헌액 투표 */
+function HofVoteBox({ g, vote, busy, run }: {
+  g: GameState; vote: HofVote; busy: boolean; run: (a: Action) => void;
+}) {
+  const next = vote.firstYear + vote.ballots.length;
+  return (
+    <div className="mt-3 rounded-xl border border-[var(--line)] px-3.5 py-3 text-left">
+      <div className="eyebrow mb-1.5">명예의 전당 헌액 투표</div>
+
+      {vote.ballots.length === 0 && !vote.closed && (
+        <p className="text-[12px] leading-relaxed text-[var(--ink-2)]">
+          은퇴 {HOF_WAIT}년 뒤인 <b>{vote.firstYear}년</b>부터 후보에 오릅니다.
+          기자단 투표에서 {HOF_CUT}% 이상을 얻어야 헌액됩니다.
+        </p>
+      )}
+
+      {vote.ballots.length > 0 && (
+        <ul className="flex flex-col gap-1.5">
+          {vote.ballots.map((b) => (
+            <li key={b.ballot} className="flex items-center gap-2">
+              <span className="w-[62px] shrink-0 text-[11px] font-bold text-[var(--ink-3)]">
+                {b.year} {b.ballot}차
+              </span>
+              <span className="h-[7px] flex-1 overflow-hidden rounded-full bg-[var(--surface-2)]">
+                <span
+                  className="block h-full rounded-full"
+                  style={{
+                    width: `${b.share}%`,
+                    background: b.share >= HOF_CUT ? "var(--gold)" : "var(--brand)",
+                  }}
+                />
+              </span>
+              <span className="tabular w-[42px] shrink-0 text-right text-[11.5px] font-extrabold">
+                {b.share}%
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {vote.inducted && (
+        <div className="mt-2.5 rounded-lg bg-[var(--gold)]/15 px-3 py-2 text-center text-[12.5px] font-black text-[var(--gold)]">
+          🏛️ 명예의 전당 헌액 · {g.player.name}
+        </div>
+      )}
+      {vote.closed && !vote.inducted && (
+        <p className="mt-2.5 text-[11.5px] text-[var(--ink-3)]">
+          후보 자격을 잃었습니다. 기록은 남지만 전당에는 오르지 못했습니다.
+        </p>
+      )}
+      {!vote.closed && (
+        <button
+          className="btn btn-ghost mt-2.5 w-full py-2 text-[12.5px]"
+          disabled={busy}
+          onClick={() => run({ type: "HOF_BALLOT" })}>
+          {next}년 투표 결과 확인 🗳️
+        </button>
+      )}
+    </div>
+  );
 }
 
 /** 접힌 형태의 성적 요약 한 줄 */

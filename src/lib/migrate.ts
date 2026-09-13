@@ -1,5 +1,6 @@
 import { makeTrainingOptions, overall } from "./player";
 import { RNG } from "./rng";
+import { emptyLine } from "./sim";
 import type { GameState, Phase } from "./types";
 
 /**
@@ -69,6 +70,8 @@ export function migrateSave(raw: unknown): GameState | null {
   if (!Array.isArray(g.seenEvents)) g.seenEvents = [];
   if (typeof g.nextSeasonAvailability !== "number") g.nextSeasonAvailability = 1;
   if (typeof g.transferRequested !== "boolean") g.transferRequested = false;
+  // 예전 세이브의 은퇴 안내는 모두 강제 은퇴였다
+  if (typeof g.retireForced !== "boolean") g.retireForced = true;
   def("pendingTraining", null);
   def("pendingOffers", null);
   if (g.lastSeasonIndex === undefined) {
@@ -78,6 +81,19 @@ export function migrateSave(raw: unknown): GameState | null {
   // 아마추어 대회 필드명 변경 흡수
   for (const rec of g.seasons as unknown as Record<string, unknown>[]) {
     if (rec.hsTournaments && !rec.tournaments) rec.tournaments = rec.hsTournaments;
+
+    // 예전 세이브의 가을야구에는 시리즈별 개인 기록이 없다
+    const ps = rec.ps as Record<string, unknown> | undefined;
+    if (isObject(ps) && Array.isArray(ps.rounds)) {
+      for (const r of ps.rounds as Record<string, unknown>[]) {
+        if (!isObject(r.line)) r.line = emptyLine(g.player.kind);
+      }
+    }
+  }
+  if (isObject(g.postseason) && Array.isArray(g.postseason.rounds)) {
+    for (const r of g.postseason.rounds as unknown as Record<string, unknown>[]) {
+      if (!isObject(r.line)) r.line = emptyLine(g.player.kind);
+    }
   }
 
   // 단계 이름 변경 반영

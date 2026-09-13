@@ -13,19 +13,19 @@ import type {
 export const TOURNAMENTS: Record<TournamentId, Tournament> = {
   ASIAN_GAMES: {
     id: "ASIAN_GAMES", name: "아시안게임", short: "AG", month: "9월", icon: "🥇",
-    exemption: "금메달 시 병역 면제", bar: 76,
+    exemption: "금메달 시 병역 면제", bar: 76, slot: "LATE",
   },
   PREMIER12: {
     id: "PREMIER12", name: "프리미어12", short: "P12", month: "11월", icon: "🏅",
-    exemption: null, bar: 80,
+    exemption: null, bar: 80, slot: "POST",
   },
   OLYMPIC: {
     id: "OLYMPIC", name: "올림픽", short: "OLY", month: "7월", icon: "🔥",
-    exemption: "동메달 이상 시 병역 면제", bar: 81,
+    exemption: "동메달 이상 시 병역 면제", bar: 81, slot: "MID",
   },
   WBC: {
     id: "WBC", name: "월드베이스볼클래식", short: "WBC", month: "3월", icon: "🌏",
-    exemption: null, bar: 84,
+    exemption: null, bar: 84, slot: "PRE",
   },
 };
 
@@ -141,7 +141,7 @@ export function simTournament(
 
     const base = {
       player: p, level: "KBO" as const, teamPower: 80,
-      availability: 1, rng, share: oneGameShare(p), extraAdj,
+      availability: 1, rng, share: oneGameShare(p), extraAdj, minGames: 1,
     };
     const line: StatLine = !appeared
       ? emptyLine(p.kind)
@@ -201,15 +201,15 @@ export const MILITARY_OPTIONS: MilitaryOption[] = [
     id: "SANGMU",
     name: "상무 야구단 입대",
     desc: "국군체육부대에서 퓨처스리그 경기를 계속 뛴다. 실전 감각을 유지할 수 있다.",
-    seasons: 2,
-    effect: "2시즌 퓨처스 · 능력치 소폭 성장",
+    seasons: 1.5,
+    effect: "18개월(1.5시즌) 퓨처스 · 능력치 소폭 성장",
   },
   {
     id: "ACTIVE",
     name: "현역 입대",
     desc: "야구를 완전히 떠나 1년 6개월을 복무한다. 돌아왔을 때 몸이 예전 같지 않다.",
-    seasons: 2,
-    effect: "2시즌 결장 · 능력치 하락",
+    seasons: 1.5,
+    effect: "18개월(1.5시즌) 결장 · 능력치 하락 · 이듬해 후반기 복귀",
   },
 ];
 

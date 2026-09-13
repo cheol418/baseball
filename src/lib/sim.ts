@@ -1,5 +1,6 @@
 import { RNG, clamp, n50 } from "./rng";
 import { armSlotById, batterPlatoonBonus, getAb, platoonEdge } from "./player";
+import { isRotationRole } from "./roles";
 import type { AllStarGame, HitterLine, LevelTag, PitcherLine, Player, Position, StatLine } from "./types";
 
 export const LEVEL_GAMES: Record<LevelTag, number> = {
@@ -14,8 +15,9 @@ export const LEVEL_ADJ: Record<LevelTag, number> = {
 export const HALF_SHARE = { H1: 0.6, H2: 0.4 } as const;
 
 export const ROLE_PT: Record<string, number> = {
-  주전: 1.0, 준주전: 0.66, 백업: 0.34, 육성선수: 0.18,
-  "1선발": 1.0, 선발: 0.95, "5선발": 0.8, 불펜: 1.0, 마무리: 1.0, 추격조: 0.6,
+  간판타자: 1.0, 핵심타자: 1.0, 주전: 1.0, 준주전: 0.66, 백업: 0.34, 육성선수: 0.18,
+  에이스: 1.0, "1선발": 1.0, 선발: 0.95, "5선발": 0.8,
+  마무리: 1.0, 필승조: 1.0, 불펜: 1.0, 추격조: 0.6,
 };
 
 const POS_ADJ: Record<string, number> = {
@@ -35,6 +37,37 @@ export interface SimInput {
   share?: number;
   /** 난이도 추가 보정 — 포스트시즌·국제대회처럼 상대가 강할 때 음수 */
   extraAdj?: number;
+  /** 최소 출장 경기 수 — 단일 경기(올스타전·국제대회)를 돌릴 때 1 */
+  minGames?: number;
+  /**
+   * 시즌 안에서 이 구간이 차지하는 [시작, 끝] 누적 비율.
+   * 월별로 따로 반올림하면 합이 144경기와 어긋나므로,
+   * 누적값의 차이로 배분해 시즌 총합을 정확히 맞춘다.
+   */
+  cume?: readonly [number, number];
+}
+
+/** 구간 경기 수 — cume가 있으면 누적 차분, 없으면 단순 비율 */
+function allocate(inp: SimInput, total: number): number {
+  if (inp.cume) {
+    const [from, to] = inp.cume;
+    return Math.max(0, Math.round(total * to) - Math.round(total * from));
+  }
+  return Math.max(inp.minGames ?? 0, Math.round(total * (inp.share ?? 1)));
+}
+
+/**
+ * 한 경기·한 시리즈처럼 표본이 작을 때는 기댓값을 반올림하면
+ * 매번 똑같은 결과가 나온다 (4타석이면 언제나 1안타 = .250).
+ * 작은 표본에서만 실제로 추첨해 경기마다 다른 기록이 나오게 한다.
+ */
+function rbinom(rng: RNG, n: number, prob: number): number {
+  const k = Math.max(0, Math.round(n));
+  if (k === 0) return 0;
+  const q = clamp(prob, 0, 1);
+  let hit = 0;
+  for (let i = 0; i < k; i++) if (rng.next() < q) hit++;
+  return hit;
 }
 
 export function simHitter(inp: SimInput): HitterLine {
@@ -60,24 +93,30 @@ export function simHitter(inp: SimInput): HitterLine {
     0.001, 0.17,
   );
 
-  const games = Math.max(0, Math.round(LEVEL_GAMES[level] * (ROLE_PT[role] ?? 0.6) * availability * share));
+  // 올스타전·국제대회처럼 한두 경기만 떼어 돌릴 때도 타석은 나와야 한다
+  const games = allocate(inp, LEVEL_GAMES[level] * (ROLE_PT[role] ?? 0.6) * availability);
   const pa = Math.max(0, Math.round(games * 4.2));
-  if (pa < 5) return emptyHitter(games);
+  if (pa < 1) return emptyHitter(games);
 
-  const bb = Math.round(pa * bbRate);
-  const hbp = Math.round(pa * 0.0095);
-  const sf = Math.round(pa * 0.009);
+  // 짧은 구간(국제대회·올스타전·단기 시리즈)만 추첨하고, 정규시즌은 기댓값 그대로 둔다
+  const cnt = pa < 60
+    ? (n: number, prob: number) => rbinom(rng, n, prob)
+    : (n: number, prob: number) => Math.round(n * prob);
+
+  const bb = cnt(pa, bbRate);
+  const hbp = cnt(pa, 0.0095);
+  const sf = cnt(pa, 0.009);
   const ab = Math.max(1, pa - bb - hbp - sf);
-  const so = clamp(Math.round(pa * kRate), 0, ab);
+  const so = clamp(cnt(pa, kRate), 0, ab);
   const contacted = Math.max(0, ab - so);
-  const hr = Math.round(contacted * hrPerBall);
+  const hr = cnt(contacted, hrPerBall);
   const inPlay = Math.max(0, contacted - hr);
-  const hIn = Math.round(inPlay * babip);
-  const b2 = Math.round(hIn * clamp(0.19 + 0.055 * n50(a("power")) + 0.03 * n50(a("speed")), 0.10, 0.34));
-  const b3 = Math.round(hIn * clamp(0.015 + 0.035 * Math.max(0, n50(a("speed"))), 0, 0.07));
+  const hIn = cnt(inPlay, babip);
+  const b2 = cnt(hIn, clamp(0.19 + 0.055 * n50(a("power")) + 0.03 * n50(a("speed")), 0.10, 0.34));
+  const b3 = cnt(hIn, clamp(0.015 + 0.035 * Math.max(0, n50(a("speed"))), 0, 0.07));
   const h = hIn + hr;
 
-  const sbAttempt = Math.round(games * clamp(0.02 + 0.16 * Math.max(0, n50(a("speed"))), 0, 0.5));
+  const sbAttempt = cnt(games, clamp(0.02 + 0.45 * Math.max(0, n50(a("speed"))), 0, 0.6));
   const sbSucc = clamp(0.62 + 0.18 * n50(a("speed")), 0.45, 0.92);
   const sb = Math.round(sbAttempt * sbSucc);
   const cs = Math.max(0, sbAttempt - sb);
@@ -142,30 +181,35 @@ export function simPitcher(inp: SimInput): PitcherLine {
     0.24, 0.36,
   );
 
-  const isSP = role.includes("선발");
+  const isSP = isRotationRole(role);
   const isCP = role === "마무리";
-  const durF = availability * share;
 
   let g: number, gs: number, ip: number;
   if (isSP) {
-    gs = Math.max(0, Math.round(29 * durF));
+    gs = allocate(inp, 29 * availability);
     g = gs;
     const ipPerStart = clamp(5.6 + 1.8 * n50(a("stamina")), 3.6, 7.4);
     ip = Math.round(gs * ipPerStart * 10) / 10;
   } else if (isCP) {
-    g = Math.max(0, Math.round(58 * durF));
+    g = allocate(inp, 58 * availability);
     gs = 0;
     ip = Math.round(g * 0.98 * 10) / 10;
   } else {
-    g = Math.max(0, Math.round(64 * durF * (ROLE_PT[role] ?? 1)));
+    g = allocate(inp, 64 * availability * (ROLE_PT[role] ?? 1));
     gs = 0;
     ip = Math.round(g * 1.08 * 10) / 10;
   }
   if (ip < 1) return emptyPitcher();
 
-  const so = Math.round((ip / 9) * k9);
-  const bb = Math.round((ip / 9) * bb9);
-  const hrA = Math.round((ip / 9) * hr9);
+  // 타자와 같은 이유 — 한두 경기 등판은 추첨한다
+  const bf = Math.max(1, Math.round(ip * 4.3));
+  const pcnt = ip < 25
+    ? (n: number, prob: number) => rbinom(rng, n, prob)
+    : (n: number, prob: number) => Math.round(n * prob);
+
+  const so = Math.min(Math.round(ip * 3), pcnt(bf, clamp((ip / 9) * k9 / bf, 0, 1)));
+  const bb = pcnt(bf, clamp((ip / 9) * bb9 / bf, 0, 1));
+  const hrA = pcnt(bf, clamp((ip / 9) * hr9 / bf, 0, 1));
   const outs = ip * 3;
   const bipOuts = Math.max(0, outs - so);
   const hIn = Math.round((bipOuts * babip) / (1 - babip));
@@ -411,7 +455,7 @@ export function simAllStarGame(p: Player, teamId: string, rng: RNG): AllStarGame
   // 한 경기 — 타자는 3~4타석, 투수는 1~2이닝
   const share = p.kind === "HITTER" ? 1 / 144 : 1 / 60;
   const base = {
-    player: p, level: "KBO" as const, teamPower: 80, availability: 1, rng, share,
+    player: p, level: "KBO" as const, teamPower: 80, availability: 1, rng, share, minGames: 1,
     // 올스타전은 잔치다 — 타자에게 유리하게 흘러간다
     extraAdj: p.kind === "HITTER" ? 6 : -4,
   };

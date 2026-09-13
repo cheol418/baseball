@@ -48,8 +48,6 @@ export function simPostseason(
       else oppWins++;
     }
     const win = myWins >= need;
-    rounds.push({ name, opponent: opp.name, win, score: `${myWins}승 ${oppWins}패` });
-
     // 선수 성적 — 시리즈 경기 수만큼만
     const games = myWins + oppWins;
     const share = games / 144;
@@ -58,11 +56,13 @@ export function simPostseason(
       park: myTeam.park,
       availability, rng, share, extraAdj: -5, // 가을에는 상대가 더 강하다
     };
-    lines.push(
-      p.kind === "HITTER"
-        ? simHitter({ ...inp, role: "주전" })
-        : simPitcher({ ...inp, role: p.position === "SP" ? "선발" : p.position === "CP" ? "마무리" : "불펜" }),
-    );
+    // 야수는 시리즈 전 경기에 나서고, 투수는 보직에 맞는 만큼만 등판한다
+    const line = p.kind === "HITTER"
+      ? simHitter({ ...inp, role: "주전", minGames: games })
+      : simPitcher({ ...inp, role: p.position === "SP" ? "선발" : p.position === "CP" ? "마무리" : "불펜", minGames: 1 });
+    lines.push(line);
+
+    rounds.push({ name, opponent: opp.name, win, score: `${myWins}승 ${oppWins}패`, line });
 
     if (!win) alive = false;
     else if (name === "한국시리즈") champion = true;

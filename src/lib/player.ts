@@ -1,4 +1,5 @@
 import { RNG, clamp, n50 } from "./rng";
+import { roleTier } from "./roles";
 import type {
   Abilities, AbilityKey, ArmSlot, Hand, Kind, LevelTag, Player, Position, TrainingOption,
 } from "./types";
@@ -156,14 +157,27 @@ export interface StyleDef {
 }
 
 export const STYLES: StyleDef[] = [
-  { id: "contact", name: "교타자", desc: "정확한 컨택과 선구안으로 출루한다", kind: "HITTER", weights: { contact: 12, eye: 8, speed: 3, power: -6 } },
+  /* ---- 타자 ---- */
+  { id: "contact", name: "교타자", desc: "정확한 컨택으로 안타를 쌓는다", kind: "HITTER", weights: { contact: 14, eye: 5, speed: 3, power: -7 } },
+  { id: "onbase", name: "출루형", desc: "볼을 골라 나가는 리드오프", kind: "HITTER", weights: { eye: 14, contact: 7, speed: 4, power: -8, arm: -3 } },
   { id: "slugger", name: "거포", desc: "한 방을 노리는 장거리 타자", kind: "HITTER", weights: { power: 16, contact: -2, eye: 4, speed: -5, defense: -2 } },
+  { id: "gap", name: "중장거리형", desc: "담장을 맞히는 2루타 생산자", kind: "HITTER", weights: { power: 9, contact: 8, eye: 3, speed: 2, defense: -2 } },
   { id: "toolsy", name: "호타준족", desc: "치고 달리는 만능형", kind: "HITTER", weights: { speed: 11, contact: 4, power: 3, defense: 4 } },
-  { id: "defense", name: "수비형", desc: "글러브로 먹고사는 안방·내야의 핵", kind: "HITTER", weights: { defense: 13, arm: 9, contact: -3, power: -6 } },
-  { id: "power_p", name: "파워피처", desc: "빠른 공으로 윽박지른다", kind: "PITCHER", weights: { velocity: 13, breaking: 4, control: -6, stamina: -2 } },
-  { id: "control_p", name: "제구형", desc: "코너워크로 승부하는 투수", kind: "PITCHER", weights: { control: 13, movement: 5, velocity: -6 } },
-  { id: "finesse_p", name: "기교파", desc: "다양한 변화구로 타자를 속인다", kind: "PITCHER", weights: { breaking: 12, movement: 8, velocity: -5 } },
-  { id: "horse_p", name: "이닝이터", desc: "많은 이닝을 소화하는 내구형", kind: "PITCHER", weights: { stamina: 13, durability: 8, velocity: -3, breaking: -3 } },
+  { id: "speedster", name: "대도", desc: "발 하나로 상대를 흔든다", kind: "HITTER", weights: { speed: 17, contact: 5, defense: 3, power: -10, arm: -2 } },
+  { id: "defense", name: "수비형", desc: "글러브로 먹고사는 내야의 핵", kind: "HITTER", weights: { defense: 15, arm: 6, contact: -3, power: -7 } },
+  { id: "cannon", name: "강견형", desc: "주자를 묶어 세우는 어깨", kind: "HITTER", weights: { arm: 16, defense: 8, power: 2, contact: -5, speed: -4 } },
+  { id: "ironman_h", name: "철인형", desc: "다치지 않고 매 경기 나간다", kind: "HITTER", weights: { durability: 15, mental: 7, contact: 4, speed: -3, power: -3 } },
+  { id: "clutch_h", name: "해결사", desc: "큰 경기, 중요한 타석에서 강하다", kind: "HITTER", weights: { mental: 15, power: 6, contact: 4, eye: 2, speed: -4 } },
+
+  /* ---- 투수 ---- */
+  { id: "power_p", name: "파워피처", desc: "빠른 공으로 윽박지른다", kind: "PITCHER", weights: { velocity: 15, breaking: 3, control: -7, stamina: -3 } },
+  { id: "control_p", name: "제구형", desc: "코너워크로 승부하는 투수", kind: "PITCHER", weights: { control: 14, movement: 5, velocity: -7 } },
+  { id: "finesse_p", name: "기교파", desc: "다양한 변화구로 타자를 속인다", kind: "PITCHER", weights: { breaking: 13, movement: 7, velocity: -6 } },
+  { id: "ground_p", name: "땅볼유도형", desc: "무브먼트로 방망이를 눌러 앉힌다", kind: "PITCHER", weights: { movement: 15, control: 6, fielding: 4, velocity: -5, breaking: -3 } },
+  { id: "horse_p", name: "이닝이터", desc: "많은 이닝을 소화하는 내구형", kind: "PITCHER", weights: { stamina: 15, durability: 8, velocity: -4, breaking: -4 } },
+  { id: "strikeout_p", name: "탈삼진형", desc: "구위와 변화구로 삼진을 잡는다", kind: "PITCHER", weights: { velocity: 9, breaking: 10, control: -4, stamina: -3 } },
+  { id: "crafty_p", name: "노련형", desc: "완급 조절과 배짱으로 버틴다", kind: "PITCHER", weights: { mental: 14, control: 8, movement: 4, velocity: -8 } },
+  { id: "rubber_p", name: "고무팔", desc: "연투에도 구위가 떨어지지 않는다", kind: "PITCHER", weights: { durability: 16, stamina: 7, control: 3, breaking: -4, velocity: -3 } },
 ];
 
 export interface TraitDef { id: string; name: string; desc: string; rarity: number }
@@ -196,9 +210,12 @@ export function deriveStyle(p: Player): StyleDef {
   let best = pool[0];
   let bestScore = -Infinity;
   for (const st of pool) {
+    // 가중치 벡터를 단위 길이로 맞춘다 — 그러지 않으면 가중치를 크게 준 유형이
+    // 실제 선수 성향과 무관하게 항상 이긴다
+    const norm = Math.sqrt(keys.reduce((a, k) => a + (st.weights[k] ?? 0) ** 2, 0)) || 1;
     let score = 0;
     for (const k of keys) {
-      score += (st.weights[k] ?? 0) * ((getAb(p.abilities, k) - mean) / sd);
+      score += ((st.weights[k] ?? 0) / norm) * ((getAb(p.abilities, k) - mean) / sd);
     }
     if (score > bestScore) { bestScore = score; best = st; }
   }
@@ -479,10 +496,15 @@ export function developmentRate(
       if (age <= 24) return 1.0;
       return 0.82;
     case "ARMY": return role === "복무" ? 0.6 : 1.02; // 상무는 퓨처스에서 계속 뛴다
-    case "KBO":
-      if (["주전", "1선발", "선발", "마무리"].includes(role ?? "")) return 1.1;
-      if (["준주전", "5선발", "불펜"].includes(role ?? "")) return 1.05;
-      return 1.02; // 백업·추격조라도 1군 환경은 2군에 뒤지지 않는다
+    case "KBO": {
+      // 입지가 단단할수록 전담 코치가 붙고 실전 기회도 많다
+      const tier = roleTier(role);
+      if (tier >= 6) return 1.24; // 간판·에이스 — 구단이 전력으로 관리한다
+      if (tier >= 5) return 1.16;
+      if (tier >= 4) return 1.08;
+      if (tier >= 3) return 1.02;
+      return 0.94; // 백업·추격조는 출장이 적어 실전 성장이 더디다
+    }
     default: return 1;
   }
 }
