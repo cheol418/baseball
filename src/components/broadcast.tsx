@@ -116,7 +116,16 @@ function buildSteps(g: GameState, kind: BroadcastKind): Step[] {
   // 태극마크는 리그 일정과 분리해 따로 보여준다
   if (kind === "INTL") {
     const intl = g.intlResults.find((r) => r.year === g.year);
-    return intl ? intlSteps(g, TOURNAMENTS[intl.tournamentId].slot) : [];
+    if (!intl) return [];
+    const t = TOURNAMENTS[intl.tournamentId];
+    return [
+      {
+        kind: "card", icon: t.icon, title: `${t.name} 개막`, tone: "epic",
+        body: `${g.year}년 ${t.month}. 태극마크를 달고 ${intl.games.length}개국과 맞섭니다.`
+          + (t.exemption ? ` ${t.exemption}.` : ""),
+      },
+      ...intlSteps(g, t.slot),
+    ];
   }
 
   if (kind === "HS") {
@@ -141,9 +150,13 @@ function buildSteps(g: GameState, kind: BroadcastKind): Step[] {
   if (kind === "PS") {
     const ps = g.postseason;
     if (!ps) return [];
-    const steps: Step[] = ps.rounds.map((r) => ({
+    const steps: Step[] = [{
+      kind: "card", icon: "🍁", title: "가을야구 개막", tone: "epic",
+      body: `정규시즌 ${ps.seed}위. ${teamById(g.contract?.teamId ?? "").name}의 가을이 시작됩니다.`,
+    }];
+    steps.push(...ps.rounds.map((r) => ({
       kind: "round" as const, name: r.name, opponent: r.opponent, win: r.win, score: r.score,
-    }));
+    })));
     steps.push(ps.champion
       ? { kind: "card", icon: "🏆", title: "한국시리즈 우승", body: `${teamById(g.contract?.teamId ?? "").name}가 정상에 올랐습니다!`, tone: "epic" }
       : { kind: "card", icon: "🍁", title: "가을야구 종료", body: "다음을 기약합니다.", tone: "neutral" });
@@ -155,6 +168,15 @@ function buildSteps(g: GameState, kind: BroadcastKind): Step[] {
   // 3월에 열리는 대회(WBC)는 개막 전이므로 월별 기록보다 앞에 온다
   const steps: Step[] = [];
   const teamName = g.contract ? teamById(g.contract.teamId).name : "";
+  steps.push({
+    kind: "card",
+    icon: kind === "H1" ? "⚾" : "🔥",
+    title: kind === "H1" ? `${g.year} 시즌 개막` : "후반기 시작",
+    tone: "good",
+    body: kind === "H1"
+      ? `${teamName} · ${g.seasonLevel === "KBO" ? "1군" : "2군"} ${g.seasonRole}(으)로 한 해를 시작합니다.`
+      : "짧은 휴식을 마치고 순위 싸움에 들어갑니다.",
+  });
   for (let i = 0; i < months.length; i++) {
     const m = months[i];
     const mood = moodOf(m.line);
@@ -177,8 +199,14 @@ function buildSteps(g: GameState, kind: BroadcastKind): Step[] {
       : { kind: "card", icon: "🛋️", title: "올스타 브레이크", body: "올스타 선정은 불발. 짧은 휴식 뒤 후반기를 준비합니다.", tone: "neutral" });
     if (g.allStarGame) {
       const ag = g.allStarGame;
+      const futures = g.seasonLevel === "MINOR";
       steps.push({
-        kind: "game", tag: "올스타전", round: ag.side, opponent: ag.opponent,
+        kind: "card", icon: "🎪",
+        title: `${futures ? "퓨처스 올스타전" : "올스타전"} 개막`, tone: "good",
+        body: `${ag.side} 소속으로 ${ag.opponent}와 맞붙습니다.`,
+      });
+      steps.push({
+        kind: "game", tag: futures ? "퓨처스 올스타전" : "올스타전", round: ag.side, opponent: ag.opponent,
         won: ag.won, score: ag.score, line: ag.line, mvp: ag.mvp,
       });
     }

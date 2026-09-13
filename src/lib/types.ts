@@ -356,6 +356,8 @@ export interface GameState {
   sangmuApplied?: boolean;
   /** 커리어 통산 상무 지원 횟수 */
   sangmuTries?: number;
+  /** 커리어에서 지옥 훈련을 쓴 횟수 */
+  hellUsed?: number;
   hofScore?: number;
 
   /* --- 시즌 진행 --- */
@@ -425,7 +427,11 @@ export interface TrainingOption {
   id: string;
   name: string;
   desc: string;
+  icon?: string;
+  /** 오르는 능력 전체 (주력 + 곁가지) */
   targets: AbilityKey[];
+  /** 주력으로 오르는 능력 — 곁가지보다 크게 오른다 */
+  main?: AbilityKey[];
   gain: number;
   risk: number; // 부상 위험 0~1
   conditionCost: number;
@@ -573,6 +579,12 @@ export interface TransferTarget {
   /** 예상 보직 */
   role: string;
   note: string;
+  /** 구단 전력 (0~100) */
+  power: number;
+  /** 전력 기준 예상 순위 1~10 */
+  projRank: number;
+  /** 우승 도전권 / 중위권 / 리빌딩 */
+  outlook: string;
 }
 
 /* ------------------------------------------------------------------ */

@@ -1,57 +1,50 @@
-/** 어떤 상황에서도 지옥 훈련이 가장 크게 성장하는가 */
+/** 지옥 훈련 — 도박으로서 균형이 맞는지 (성공/실패 기대값, 일반 훈련과의 차이) */
 import { RNG } from "../src/lib/rng";
-import { rollCandidate, overall, grow, makeTrainingOptions, abilityKeys, getAb } from "../src/lib/player";
-import type { Player, TrainingOption } from "../src/lib/types";
+import { rollCandidate, overall, makeTrainingOptions, grow, hellOdds, HELL_LIMIT } from "../src/lib/player";
+import type { Player } from "../src/lib/types";
 
-function clone(p: Player): Player { return JSON.parse(JSON.stringify(p)); }
+const clone = (p: Player): Player => JSON.parse(JSON.stringify(p)) as Player;
 
-let lossTotal = 0, lossOvr = 0, n = 0;
-const worst: string[] = [];
-const byAge: Record<number, { hell: number; best: number; n: number }> = {};
-
-for (const age of [19, 22, 25, 28, 31, 34]) {
-  for (let i = 0; i < 250; i++) {
-    const rng = new RNG(4000 + i * 97 + age * 13);
-    const base = rollCandidate(
-      { name: "x", number: 1, kind: i % 2 ? "HITTER" : "PITCHER",
-        position: (i % 2 ? "CF" : "SP") as never, bats: "R", throws: "R",
-        styleId: i % 2 ? "toolsy" : "power_p",
-        armSlot: i % 2 ? undefined : "THREE_QUARTER" }, rng,
-    );
+for (const age of [21, 24, 27, 30]) {
+  const normal: number[] = [], win: number[] = [], lose: number[] = [], odds: number[] = [];
+  for (let i = 0; i < 500; i++) {
+    const rng = new RNG(51000 + i * 11);
+    const base = rollCandidate({ name: "s", number: 1, kind: "HITTER", position: "CF", bats: "R", throws: "R", styleId: "toolsy" }, rng);
     base.age = age;
-    // 커리어 중반 상태를 흉내내기 위해 몇 해 성장시킨다
-    for (let a = 19; a < age; a++) { base.age = a; grow(base, rng, null, 1.05); }
-    base.age = age;
+    // 갓 생성한 신인이 아니라 그 나이대의 실제 프로 선수 수준으로 맞춘다
+    const ab = base.abilities as unknown as Record<string, number>;
+    const pot = base.potential as unknown as Record<string, number>;
+    const bump = age <= 21 ? 10 : age <= 24 ? 20 : age <= 27 ? 28 : 30;
+    for (const k of Object.keys(ab)) {
+      ab[k] = Math.min(pot[k], ab[k] + bump);
+      pot[k] = Math.min(120, pot[k] + 10);
+    }
+    const opts = makeTrainingOptions(base, rng);
+    const opt = opts[i % opts.length];
+    odds.push(hellOdds(base));
 
-    const opts = makeTrainingOptions(base, new RNG(rng.int(1, 1e9)));
-    const results = opts.map((o: TrainingOption) => {
-      const p2 = clone(base);
-      const r2 = new RNG(777);
-      const before = abilityKeys(p2.kind).map((k) => getAb(p2.abilities, k));
-      const ovrB = overall(p2);
-      grow(p2, r2, o, 1.05);
-      const after = abilityKeys(p2.kind).map((k) => getAb(p2.abilities, k));
-      return {
-        id: o.id,
-        total: after.reduce((s, v, j) => s + (v - before[j]), 0),
-        ovr: overall(p2) - ovrB,
+    const sum = (p: Player) => {
+      const before = { ...(p.abilities as unknown as Record<string, number>) };
+      return () => {
+        const after = p.abilities as unknown as Record<string, number>;
+        return Object.keys(before).reduce((a, k) => a + (after[k] - before[k]), 0);
       };
-    });
-    const hell = results.find((r) => r.id === "hell")!;
-    const bestTotal = Math.max(...results.map((r) => r.total));
-    const bestOvr = Math.max(...results.map((r) => r.ovr));
-    if (hell.total < bestTotal) { lossTotal++; if (worst.length < 4) worst.push(`${age}세 총합 ${hell.total} < ${bestTotal} (${results.find(r=>r.total===bestTotal)!.id})`); }
-    if (hell.ovr < bestOvr) lossOvr++;
-    const b = byAge[age] ??= { hell: 0, best: 0, n: 0 };
-    b.hell += hell.total; b.best += bestTotal; b.n++;
-    n++;
+    };
+    const a = clone(base); const ga = sum(a); grow(a, new RNG(i * 3 + 1), opt, 1.0, 1); normal.push(ga());
+    const b = clone(base); const gb = sum(b); grow(b, new RNG(i * 3 + 1), opt, 1.0, 2.3); win.push(gb());
+    const c = clone(base); const gc = sum(c); grow(c, new RNG(i * 3 + 1), opt, 1.0, 0.42); lose.push(gc());
   }
+  const avg = (x: number[]) => x.reduce((a, b) => a + b, 0) / x.length;
+  const o = avg(odds);
+  const ev = o * avg(win) + (1 - o) * avg(lose);
+  console.log(
+    `  ${age}세  성공률 ${(o * 100).toFixed(0)}%`
+    + `  |  일반 +${avg(normal).toFixed(1)}`
+    + `  지옥성공 +${avg(win).toFixed(1)}`
+    + `  지옥실패 +${avg(lose).toFixed(1)}`
+    + `  → 기대값 +${ev.toFixed(1)}  (${ev > avg(normal) ? "도박이 유리" : "안전이 유리"})`,
+  );
 }
-console.log(`■ 지옥 훈련이 최고가 아닌 경우 (n=${n})\n`);
-console.log(`  총 상승 기준  ${lossTotal}건 (${((lossTotal / n) * 100).toFixed(1)}%)`);
-console.log(`  OVR 기준      ${lossOvr}건 (${((lossOvr / n) * 100).toFixed(1)}%)`);
-if (worst.length) console.log("  예시: " + worst.join(" / "));
-console.log("\n  나이별 평균 총 상승 (지옥 / 최고)");
-for (const [age, b] of Object.entries(byAge)) {
-  console.log(`   ${age}세  ${(b.hell / b.n).toFixed(1).padStart(6)} / ${(b.best / b.n).toFixed(1).padStart(6)}`);
-}
+console.log(`\n  지옥 훈련은 커리어 ${HELL_LIMIT}회 제한.`);
+console.log("  기대값이 일반보다 조금 높아야 '쓸 만한 도박'이 된다 — 크게 높으면 무조건 쓰게 되고,");
+console.log("  낮으면 아무도 안 쓴다.");

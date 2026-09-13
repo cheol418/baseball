@@ -76,6 +76,7 @@ export function migrateSave(raw: unknown): GameState | null {
   if (!Array.isArray(g.notices)) g.notices = [];
   if (typeof g.sangmuApplied !== "boolean") g.sangmuApplied = false;
   if (typeof g.sangmuTries !== "number") g.sangmuTries = 0;
+  if (typeof g.hellUsed !== "number") g.hellUsed = 0;
   def("pendingTraining", null);
   def("pendingOffers", null);
   if (g.lastSeasonIndex === undefined) {

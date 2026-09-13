@@ -49,7 +49,7 @@ function play(seed: number, opt: { college: boolean; military: "SANGMU" | "ACTIV
         case "SPRING_CAMP": {
           const o = g.pendingTraining;
           if (!o?.length) { add("훈련 후보 없음", before); act({ type: "RETIRE" }); break; }
-          act({ type: "TRAIN", optionId: o[rng.int(0, o.length - 1)].id });
+          act({ type: "TRAIN", optionId: o[rng.int(0, o.length - 1)].id, hell: rng.chance(0.4) });
           break;
         }
         case "FIRST_HALF": act({ type: "PLAY_FIRST_HALF" }); break;

@@ -532,6 +532,8 @@ export const DEV_RATE_LABEL = (rate: number) =>
 /** 오프시즌 성장 처리 */
 export function grow(
   p: Player, rng: RNG, focus: TrainingOption | null, devRate = 1,
+  /** 지옥 훈련 배수 — 성공 2.3배 · 실패 0.3배 · 평시 1배 */
+  hellMul = 1,
 ): { deltas: Partial<Record<string, number>> } {
   const keys = abilityKeys(p.kind);
   const effBonus = p.trait === "hardworker" ? 1.2 : 1;
@@ -565,7 +567,11 @@ export function grow(
       }
     }
     const headroom = clamp(Math.max(0, pot - cur) / 55, 0, 1.2); // 포텐셜에 가까울수록 둔화
-    const focused = focus?.targets.includes(k) ? focus.gain : 0;
+    // 주력 능력은 그대로, 곁가지는 절반만 오른다
+    const share = !focus ? 0
+      : (focus.main ?? focus.targets).includes(k) ? 1
+        : focus.targets.includes(k) ? 0.5 : 0;
+    const focused = (focus?.gain ?? 0) * share * hellMul;
     let d: number;
     if (af > 0) {
       // 성장기: 포텐셜에 가까울수록 둔화
@@ -587,7 +593,8 @@ export function grow(
     }
     // 한 오프시즌에 능력치가 +20씩 뛰면 성장이 아니라 순간이동이다.
     // 실제로는 한 해에 한 항목이 크게 좋아져도 그 폭이 제한적이다.
-    const capUp = focus?.targets.includes(k) ? 8 : 5;
+    // 지옥 훈련이 성공하면 평소 상한을 넘어설 수 있다
+    const capUp = share === 0 ? 5 : Math.round((share === 1 ? 8 : 6) * clamp(hellMul, 1, 1.7));
     const capped = clamp(d, -12, capUp);
     const next = clamp(Math.round(cur + capped), 15, af > 0 ? pot : ABILITY_MAX);
     if (next !== cur) deltas[k] = next - cur;
@@ -613,64 +620,115 @@ export function injuryRiskMultiplier(p: Player): number {
   return age * dur * trait;
 }
 
-export function makeTrainingOptions(p: Player, rng: RNG): TrainingOption[] {
-  const keys = abilityKeys(p.kind).filter((k) => k !== "mental");
-  const room = (k: AbilityKey) => Math.max(0, getAb(p.potential, k) - getAb(p.abilities, k));
+/**
+ * 훈련 방향.
+ *
+ * 능력치를 하나씩 고르게 하면 선수를 키우는 게 아니라 스탯 창을 만지는 느낌이 된다.
+ * 대신 **어떤 선수가 되고 싶은가**를 고르게 하고, 어떤 능력이 오를지는 시스템이 정한다.
+ * 같은 방향을 거듭 고르면 능력치가 그쪽으로 쏠려 결국 선수 유형 자체가 바뀐다.
+ */
+export interface TrainingPath {
+  id: string;
+  name: string;
+  icon: string;
+  desc: string;
+  kind: Kind;
+  /** 주력으로 오르는 능력 */
+  main: AbilityKey[];
+  /** 곁가지로 조금 오르는 능력 */
+  sub: AbilityKey[];
+  /** 이 방향을 밀면 다다르는 유형 */
+  leadsTo: string;
+}
 
-  // 성장 여지가 큰 순서 — 거의 다 찬 능력은 후보로 올리지 않는다
-  const byRoom = [...keys].sort((a, b) => room(b) - room(a));
-  const worth = byRoom.filter((k) => room(k) >= 6);
-  const pickFrom = worth.length >= 3 ? worth : byRoom;
-  const pool: TrainingOption[] = [];
+export const TRAINING_PATHS: TrainingPath[] = [
+  {
+    id: "power", name: "장타를 키운다", icon: "💪", kind: "HITTER",
+    desc: "담장을 넘기는 힘에 집중한다.",
+    main: ["power"], sub: ["contact", "durability"], leadsTo: "거포 · 중장거리형",
+  },
+  {
+    id: "contact", name: "정확도를 키운다", icon: "🎯", kind: "HITTER",
+    desc: "맞히는 기술과 공을 보는 눈을 다듬는다.",
+    main: ["contact"], sub: ["eye", "power"], leadsTo: "교타자 · 출루형",
+  },
+  {
+    id: "speed", name: "발을 키운다", icon: "⚡", kind: "HITTER",
+    desc: "주루와 수비 범위를 넓힌다.",
+    main: ["speed"], sub: ["defense", "contact"], leadsTo: "대도 · 호타준족",
+  },
+  {
+    id: "defense", name: "수비를 다진다", icon: "🧤", kind: "HITTER",
+    desc: "글러브와 어깨로 먹고사는 선수가 된다.",
+    main: ["defense"], sub: ["arm", "speed"], leadsTo: "수비형 · 강견형",
+  },
+  {
+    id: "body_h", name: "몸을 만든다", icon: "🏋️", kind: "HITTER",
+    desc: "한 시즌을 온전히 버틸 몸과 멘탈을 만든다.",
+    main: ["durability"], sub: ["mental", "power"], leadsTo: "철인형 · 해결사",
+  },
 
-  // 집중 훈련 — 여지가 큰 쪽에서 세 개를 제시한다
-  for (const k of rng.shuffle(pickFrom.slice(0, 5)).slice(0, 3)) {
-    pool.push({
-      id: `focus_${k}`,
-      name: `${ABILITY_LABEL[k]} 집중 훈련`,
-      desc: `${ABILITY_LABEL[k]} 하나에 모든 시간을 쏟는다.`,
-      targets: [k],
-      gain: 6.0,
-      risk: 0.05,
-      conditionCost: 8,
-      room: room(k),
-    });
-  }
+  {
+    id: "stuff", name: "구위를 끌어올린다", icon: "🔥", kind: "PITCHER",
+    desc: "빠른 공과 결정구로 윽박지른다.",
+    main: ["velocity"], sub: ["breaking", "durability"], leadsTo: "파워피처 · 탈삼진형",
+  },
+  {
+    id: "command", name: "제구를 다듬는다", icon: "🎯", kind: "PITCHER",
+    desc: "원하는 곳에 던지는 기술을 기른다.",
+    main: ["control"], sub: ["movement", "mental"], leadsTo: "제구형 · 노련형",
+  },
+  {
+    id: "breaking", name: "변화구를 늘린다", icon: "🌀", kind: "PITCHER",
+    desc: "구종을 늘리고 공의 움직임을 키운다.",
+    main: ["breaking"], sub: ["movement", "control"], leadsTo: "기교파 · 땅볼유도형",
+  },
+  {
+    id: "body_p", name: "몸을 만든다", icon: "🏋️", kind: "PITCHER",
+    desc: "많은 이닝과 연투를 견딜 몸을 만든다.",
+    main: ["stamina"], sub: ["durability", "velocity"], leadsTo: "이닝이터 · 고무팔",
+  },
+];
 
-  // 지옥 훈련 — 언제나 성장 여지가 가장 큰 세 능력을 노린다.
-  // 어떤 상황에서도 상승폭이 가장 커야 하므로 대상을 무작위로 고르지 않는다.
-  const picked = pickFrom.slice(0, 3);
-  pool.push({
-    id: "hell",
-    name: "지옥 훈련",
-    desc: `몸을 갈아 넣는다. ${picked.map((k) => ABILITY_LABEL[k]).join(" · ")}을(를) 한 번에 끌어올린다.`,
-    targets: picked,
-    gain: 12,
-    risk: 0.28,
-    conditionCost: 28,
-    room: Math.max(...picked.map(room)),
-  });
+/** 커리어에서 지옥 훈련을 쓸 수 있는 횟수 */
+export const HELL_LIMIT = 2;
 
-  pool.push({
-    id: "balance",
-    name: "밸런스 트레이닝",
-    desc: "전 능력을 고르게 다듬는다. 총합은 무난하지만 한 방은 없다.",
-    targets: keys,
-    gain: 1.2,
-    risk: 0.02,
-    conditionCost: 4,
-  });
+/**
+ * 지옥 훈련 성공 확률.
+ *
+ * 몸을 갈아 넣는다고 늘 되는 게 아니다 — 되면 크게 늘고, 안 되면 한 해를 버린다.
+ * 멘탈이 단단하고 재능이 있을수록, 어릴수록 버텨낸다.
+ */
+export function hellOdds(p: Player): number {
+  const mental = getAb(p.abilities, "mental" as never);
+  const dur = getAb(p.abilities, "durability" as never);
+  const age = p.age <= 24 ? 0.08 : p.age <= 28 ? 0.02 : -0.1;
+  return clamp(
+    0.46 + (mental - 70) * 0.004 + (dur - 70) * 0.003 + (p.talent - 0.8) * 0.22 + age,
+    0.2, 0.8,
+  );
+}
 
-  pool.push({
-    id: "rest",
-    name: "재활 & 휴식",
-    desc: "몸 상태를 회복한다. 성장은 거의 없지만 부상 위험이 줄어든다.",
-    targets: ["durability"],
-    gain: 3.2,
-    risk: 0,
-    conditionCost: -30,
-    room: room("durability" as AbilityKey),
-  });
+/**
+ * 오프시즌 훈련 방향 후보.
+ *
+ * 능력치별 후보를 뽑던 예전 방식과 달리 방향은 늘 같은 목록이다.
+ * 성장 여지는 참고용으로만 보여준다 — 여지가 없어도 한계 돌파가 일어날 수 있다.
+ */
+export function makeTrainingOptions(p: Player, _rng: RNG): TrainingOption[] {
+  const roomOf = (ks: AbilityKey[]) =>
+    Math.max(0, ...ks.map((k) => getAb(p.potential, k) - getAb(p.abilities, k)));
 
-  return pool;
+  return TRAINING_PATHS.filter((t) => t.kind === p.kind).map((t) => ({
+    id: t.id,
+    name: t.name,
+    icon: t.icon,
+    desc: `${t.desc} 계속하면 ${t.leadsTo} 쪽으로 자랍니다.`,
+    targets: [...t.main, ...t.sub],
+    main: [...t.main],
+    gain: 6.0,
+    risk: 0.05,
+    conditionCost: 9,
+    room: roomOf([...t.main, ...t.sub]),
+  }));
 }

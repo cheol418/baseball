@@ -2,7 +2,8 @@ import { RNG, clamp, n50 } from "./rng";
 import { TEAMS, teamById } from "./teams";
 import {
   ABILITY_LABEL, ABILITY_MAX, abilityKeys, deriveStyle, developmentRate, getAb,
-  grow, injuryRiskMultiplier, makeTrainingOptions, overall, potentialOverall, setAb,
+  grow, HELL_LIMIT, hellOdds, injuryRiskMultiplier, makeTrainingOptions, overall,
+  potentialOverall, setAb,
 } from "./player";
 import {
   HALF_SHARE, isHitterLine, judgeAllStar, judgeAwards, MAJOR_TITLES, mergeLines,
@@ -603,6 +604,9 @@ export function makeTransferTargets(s: GameState, rng: RNG): TransferTarget[] {
   const value = marketValue(s);
   const ovr = overall(s.player);
   const age = s.player.age;
+  // 전력 순으로 매긴 예상 순위 — 어느 팀에 가야 가을야구를 하는지 보여준다
+  const ranked = [...TEAMS].sort((a, b) => b.power - a.power);
+  const rankOf = (id: string) => ranked.findIndex((t) => t.id === id) + 1;
   const recent = s.seasons.filter((x) => x.level === "KBO").slice(-2);
   const recentWar = recent.reduce((a, b) => a + b.line.war, 0) / Math.max(1, recent.length);
 
@@ -627,20 +631,27 @@ export function makeTransferTargets(s: GameState, rng: RNG): TransferTarget[] {
       3, 99,
     );
     // 원소속팀이 놓아주는가 — 신뢰가 낮을수록, 대체 가능한 선수일수록 쉽게 보낸다
+    // 선수가 직접 이적을 요구한 상황이라 구단도 마냥 붙잡지는 못한다.
+    // 다만 신뢰가 두텁고 간판으로 대우받는 선수일수록 놓아주기 싫어한다.
     const release = clamp(
-      0.55 + (55 - s.trust) * 0.005 - Math.max(0, ovr - 80) * 0.022
-      - (isFranchiseRole(s.contract!.role) ? 0.18 : roleTier(s.contract!.role) >= 5 ? 0.08 : 0),
-      0.12, 0.9,
+      0.62 + (55 - s.trust) * 0.005 - Math.max(0, ovr - 80) * 0.013
+      - (isFranchiseRole(s.contract!.role) ? 0.12 : roleTier(s.contract!.role) >= 5 ? 0.06 : 0),
+      0.22, 0.9,
     );
     // 몸값을 감당할 수 있는 구단인가
-    const afford = value > t.money * 2200 ? 0.55 : value > t.money * 1400 ? 0.82 : 1;
+    const afford = value > t.money * 2200 ? 0.68 : value > t.money * 1400 ? 0.86 : 1;
     // 관심이 확실할 때만 실제로 성사된다
     const odds = clamp(Math.pow(interest / 100, 2.1) * 1.35 * release * afford, 0.01, 0.85);
     const proYears = s.seasons.filter((r) => r.level === "KBO" || r.level === "MINOR").length;
     const { role } = assignRole(s.player, t, s.serviceYears, 55, new RNG(s.seed + t.id.charCodeAt(0)), proYears);
 
+    const projRank = rankOf(t.id);
     return {
       teamId: t.id, interest, odds, role,
+      power: t.power, projRank,
+      outlook: projRank <= 3 ? "우승 도전권"
+        : projRank <= 6 ? "가을야구 경쟁"
+          : t.youth >= 70 ? "리빌딩 — 기회는 많다" : "중하위권",
       note: interest >= 85 ? "최우선 영입 대상으로 꼽고 있다"
         : interest >= 68 ? "적극적으로 관심을 보인다"
         : interest >= 48 ? "영입을 검토할 만하다"
@@ -1089,7 +1100,7 @@ export type Action =
   | { type: "SIM_AMATEUR" }
   | { type: "CHOOSE_PATH"; path: "DRAFT" | "COLLEGE" }
   | { type: "DO_DRAFT" }
-  | { type: "TRAIN"; optionId: string }
+  | { type: "TRAIN"; optionId: string; hell?: boolean }
   | { type: "PLAY_FIRST_HALF" }
   | { type: "PLAY_SECOND_HALF" }
   | { type: "PLAY_POSTSEASON" }
@@ -1189,8 +1200,19 @@ export function advance(prev: GameState, action: Action): GameState {
       let campInjury = 0;
       // 캠프 훈련 "전" 값을 기록한다 — 지난 시즌 종료 시점과 같다
       s.ovrAtSeasonStart = overall(s.player);
+      // 지옥 훈련 — 커리어 두 번뿐인 도박. 되면 크게 늘고 안 되면 한 해를 버린다.
+      const hell = !!action.hell && (s.hellUsed ?? 0) < HELL_LIMIT;
+      let hellMul = 1;
+      let hellWon = false;
+      if (hell) {
+        s.hellUsed = (s.hellUsed ?? 0) + 1;
+        hellWon = rng.chance(hellOdds(s.player));
+        hellMul = hellWon ? 2.3 : 0.42;
+      }
       if (opt) {
-        if (rng.chance(clamp(opt.risk * injuryRiskMultiplier(s.player), 0, 0.75))) {
+        // 부상 위험 자체는 낮다 — 지옥의 위험은 부상이 아니라 "헛수고"다
+        const risk = opt.risk * (hell ? 2.2 : 1);
+        if (rng.chance(clamp(risk * injuryRiskMultiplier(s.player), 0, 0.75))) {
           s.player.condition = clamp(s.player.condition - 25, 20, 100);
           setAb(s.player.abilities, "durability" as never, clamp(getAb(s.player.abilities, "durability" as never) - rng.int(2, 5), 10, ABILITY_MAX));
           // 캠프에서 다치면 시즌 출발이 늦어진다
@@ -1203,18 +1225,45 @@ export function advance(prev: GameState, action: Action): GameState {
         // 라커룸 분위기는 몸 상태로 나타난다 — 동료 관계가 좋으면 시즌을 가볍게 시작한다
         const clubhouse = (s.teammate - 55) * 0.16;
         s.player.condition = clamp(
-          s.player.condition * 0.55 + 75 * 0.45 - opt.conditionCost + clubhouse, 25, 100);
+          s.player.condition * 0.55 + 75 * 0.45 - opt.conditionCost * (hell ? 2.4 : 1) + clubhouse,
+          25, 100);
         // 직전 시즌을 어디서 뛰었는지가 성장 폭을 좌우한다
         const prev = s.seasons[s.seasons.length - 1];
         const devRate = developmentRate(prev?.level ?? null, prev?.role ?? null, prev?.age ?? s.player.age);
-        const { deltas } = grow(s.player, rng, opt, devRate);
+        const { deltas } = grow(s.player, rng, opt, devRate, hellMul);
         const ups = (Object.entries(deltas) as [string, number][]).filter(([, v]) => v > 0);
-        log(s, {
-          icon: "🏋️", title: `${opt.name} 완료`, tone: ups.length ? "good" : "neutral",
-          body: ups.length
-            ? `능력치 상승: ${ups.map(([k, v]) => `${ABILITY_LABEL[k] ?? k} +${v}`).join(", ")}`
-            : "눈에 띄는 성장은 없었습니다.",
-        });
+        const gainText = ups.length
+          ? `능력치 상승: ${ups.map(([k, v]) => `${ABILITY_LABEL[k] ?? k} +${v}`).join(", ")}`
+          : "눈에 띄는 성장은 없었습니다.";
+
+        if (hell) {
+          const left = HELL_LIMIT - (s.hellUsed ?? 0);
+          log(s, {
+            icon: hellWon ? "🔥" : "💤",
+            title: hellWon ? "지옥 훈련 성공" : "지옥 훈련 실패",
+            tone: hellWon ? "epic" : "bad",
+            body: hellWon
+              ? `몸이 버텨냈습니다. ${gainText}`
+              : `끝까지 버티지 못하고 한 해를 흘려보냈습니다. ${gainText}`,
+          });
+          notify(s, {
+            icon: hellWon ? "🔥" : "💤", eyebrow: "Hell Training",
+            title: hellWon ? "지옥 훈련 성공" : "지옥 훈련 실패",
+            tone: hellWon ? "epic" : "bad",
+            body: hellWon
+              ? `${opt.name} — 몸을 갈아 넣은 겨울이 결실을 맺었습니다.`
+              : `${opt.name} — 몸이 따라주지 않아 훈련이 어그러졌습니다.`,
+            change: [
+              { label: "훈련 결과", from: "—", to: ups.length ? ups.map(([k, v]) => `${ABILITY_LABEL[k] ?? k} +${v}`).join(" · ") : "성장 없음" },
+              { label: "남은 기회", from: `${left + 1}회`, to: `${left}회` },
+            ],
+          });
+        } else {
+          log(s, {
+            icon: "🏋️", title: `${opt.name} 완료`, tone: ups.length ? "good" : "neutral",
+            body: gainText,
+          });
+        }
       }
       // 훈련을 거듭하면 선수 유형 자체가 바뀐다
       const styleAfter = deriveStyle(s.player);

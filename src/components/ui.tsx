@@ -143,8 +143,8 @@ export function SeasonProgress({ phase, year, extra }: {
   const at = STAGE_OF[phase];
   if (at === undefined) return null;
   return (
-    <div className="border-b border-[var(--line)] bg-[var(--surface)]">
-      <Container className="px-3 py-2 lg:px-6">
+    <div className="mb-3 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
+      <Container className="px-0">
         <div className="flex items-center gap-1.5 overflow-x-auto">
           <span className="shrink-0 pr-1 text-[10px] font-black text-[var(--ink-3)]">{year}</span>
           {SEASON_STAGES.map((st, i) => {

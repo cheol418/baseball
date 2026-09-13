@@ -1,5 +1,6 @@
 /** 테스트용 자동 플레이 — 새 상태 머신 전 구간을 통과시킨다 */
 import { advance, canVolunteer, legacyContext, secondLifeOptions, type Action } from "../src/lib/career";
+import { HELL_LIMIT } from "../src/lib/player";
 import type { GameState } from "../src/lib/types";
 
 export interface AutoOptions {
@@ -43,7 +44,12 @@ export function autoPlay(start: GameState, opt: AutoOptions = {}): GameState {
       case "DRAFT": act({ type: "DO_DRAFT" }); break;
       case "SPRING_CAMP": {
         const opts = g.pendingTraining ?? [];
-        act({ type: "TRAIN", optionId: opts[Math.floor(Math.random() * opts.length)]?.id ?? "balance" });
+        // 지옥 훈련은 커리어 2회 — 쓸 수 있으면 쓴다 (두 경로를 모두 거치게)
+        act({
+          type: "TRAIN",
+          optionId: opts[Math.floor(Math.random() * opts.length)]?.id ?? opts[0].id,
+          hell: (g.hellUsed ?? 0) < HELL_LIMIT,
+        });
         break;
       }
       case "FIRST_HALF": act({ type: "PLAY_FIRST_HALF" }); break;

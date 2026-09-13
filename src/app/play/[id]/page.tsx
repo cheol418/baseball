@@ -17,6 +17,7 @@ import { allTimeRanks, nickname } from "@/lib/records";
 import { TOURNAMENTS } from "@/lib/national";
 import {
   abilityKeys, armSlotById, deriveStyle, DEV_RATE_LABEL, developmentRate, gradeOf,
+  HELL_LIMIT, hellOdds,
   HAND_LABEL, overall, platoonProfile, POSITION_LABEL, scoutedOverall,
   scoutedPotential, traitById,
 } from "@/lib/player";
@@ -165,15 +166,6 @@ export default function PlayPage() {
       </div>
 
       {!anim && (
-        <SeasonProgress
-          phase={g.phase}
-          year={g.year}
-          extra={g.pendingTournament && g.intlJoined
-            ? `${TOURNAMENTS[g.pendingTournament].short} 대표팀`
-            : g.military === "SANGMU" || g.military === "ACTIVE" ? "복무 중" : null}
-        />
-      )}
-      {!anim && (
       <nav className="sticky top-[49px] z-20 border-b border-[var(--line)] bg-[var(--surface)]">
         <Container className="flex px-2 lg:px-6">
           {([["season", "시즌"], ["career", "커리어"], ["player", "선수"], ["log", "기록"]] as [Tab, string][]).map(([k, label]) => (
@@ -187,6 +179,15 @@ export default function PlayPage() {
       )}
 
       <Container className="lg:px-2">
+        {tab === "season" && !anim && (
+          <SeasonProgress
+            phase={g.phase}
+            year={g.year}
+            extra={g.pendingTournament && g.intlJoined
+              ? `${TOURNAMENTS[g.pendingTournament].short} 대표팀`
+              : g.military === "SANGMU" || g.military === "ACTIVE" ? "복무 중" : null}
+          />
+        )}
         {tab === "season" && (
           anim ? (
             <Broadcast key={anim} g={g} kind={anim} onDone={() => setAnimQueue((q) => q.slice(1))} />
@@ -482,6 +483,8 @@ function Primary({ onClick, busy, children, label }: {
 }
 
 function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Action) => void }) {
+  // 지옥 훈련은 방향과 별개로 켜고 끄는 토글이다
+  const [hell, setHell] = useState(false);
   const p = g.player;
   const team = g.contract ? teamById(g.contract.teamId) : null;
 
@@ -595,14 +598,14 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
               </div>
             </div>
           )}
+          <HellToggle g={g} on={hell} onChange={setHell} />
+
           <div className="flex flex-col gap-2">
             {g.pendingTraining?.map((o) => (
-              <button key={o.id} onClick={() => run({ type: "TRAIN", optionId: o.id })} disabled={busy}
+              <button key={o.id} onClick={() => run({ type: "TRAIN", optionId: o.id, hell })} disabled={busy}
                 className="card px-4 py-3 text-left transition hover:!border-[var(--brand)] disabled:opacity-50">
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-[14px] font-extrabold">{o.name}</span>
-                  {o.risk >= 0.2 && <Pill tone="danger">부상 위험 높음</Pill>}
-                  {o.conditionCost < 0 && <Pill tone="brand">컨디션 회복</Pill>}
+                  <span className="text-[14px] font-extrabold">{o.icon} {o.name}</span>
                   {o.room !== undefined && (
                     <Pill tone={o.room >= 8 ? "brand" : o.room >= 3 ? "neutral" : "danger"}>
                       성장 여지 {o.room}
@@ -834,8 +837,16 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
                       className="card flex items-center gap-3 px-3.5 py-2.5 text-left transition hover:!border-[var(--brand)] disabled:opacity-50">
                       <span className="h-8 w-8 shrink-0 rounded-lg" style={{ background: tm.color }} />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[13px] font-extrabold">{tm.name}</span>
-                        <span className="block truncate text-[10.5px] text-[var(--ink-3)]">{t.note} · 예상 보직 {t.role}</span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="truncate text-[13px] font-extrabold">{tm.name}</span>
+                          <Pill tone={t.projRank <= 3 ? "gold" : t.projRank <= 6 ? "brand" : "neutral"}>
+                            예상 {t.projRank}위
+                          </Pill>
+                          <span className="tabular shrink-0 text-[10px] text-[var(--ink-3)]">전력 {t.power}</span>
+                        </span>
+                        <span className="block truncate text-[10.5px] text-[var(--ink-3)]">
+                          {t.outlook} · {t.note} · 예상 보직 {t.role}
+                        </span>
                         <span className="mt-1 block h-[4px] w-full overflow-hidden rounded-full bg-[var(--line)]">
                           <span className="block h-full rounded-full bg-[var(--brand-2)]" style={{ width: `${t.interest}%` }} />
                         </span>
@@ -1057,6 +1068,41 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
  * 통보 오버레이 — 콜업·이적·발탁처럼 커리어가 꺾이는 사건은
  * 로그 한 줄로 흘려보내지 않고 확인을 받고 넘어간다.
  */
+/** 지옥 훈련 — 커리어 두 번뿐인 도박 */
+function HellToggle({ g, on, onChange }: {
+  g: GameState; on: boolean; onChange: (v: boolean) => void;
+}) {
+  const left = HELL_LIMIT - (g.hellUsed ?? 0);
+  const odds = Math.round(hellOdds(g.player) * 100);
+  if (left <= 0) {
+    return (
+      <div className="card mb-3 px-3.5 py-2.5 text-[11.5px] text-[var(--ink-3)]">
+        🔥 지옥 훈련은 커리어에 {HELL_LIMIT}번뿐입니다. 남은 기회가 없습니다.
+      </div>
+    );
+  }
+  return (
+    <button
+      onClick={() => onChange(!on)}
+      className={`mb-3 w-full rounded-xl border px-3.5 py-3 text-left transition ${
+        on ? "border-[var(--danger)] bg-[var(--danger)]/8" : "border-[var(--line)] bg-[var(--surface)]"
+      }`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[14px] font-extrabold">🔥 지옥 훈련</span>
+        <Pill tone={on ? "danger" : "neutral"}>남은 기회 {left}회</Pill>
+        <Pill tone="gold">성공 {odds}%</Pill>
+        <span className={`ml-auto text-[11px] font-black ${on ? "text-[var(--danger)]" : "text-[var(--ink-3)]"}`}>
+          {on ? "켜짐" : "꺼짐"}
+        </span>
+      </div>
+      <p className="mt-1 text-[11.5px] leading-relaxed text-[var(--ink-3)]">
+        고른 방향에 몸을 갈아 넣습니다. <b>성공하면 성장 폭이 크게 뛰고, 실패하면 한 해를 버립니다.</b>
+        {" "}부상 위험도 조금 늘어납니다.
+      </p>
+    </button>
+  );
+}
+
 function NoticeOverlay({ notice, onClose }: { notice: Notice; onClose: () => void }) {
   const accent = notice.accent
     ?? (notice.tone === "bad" ? "var(--danger)" : notice.tone === "epic" ? "var(--gold)" : "var(--brand)");
