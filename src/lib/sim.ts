@@ -217,8 +217,15 @@ export function simPitcher(inp: SimInput): PitcherLine {
 
   const fip = (13 * hrA + 3 * bb - 2 * so) / ip + 3.1 - LEVEL_ADJ[level] * 0.055;
   const mentalNoise = p.trait === "coldblood" ? 0.25 : 0.42;
-  const era = clamp(fip + rng.normal() * mentalNoise - (p.trait === "clutch" ? 0.2 : 0), 0.6, 13);
-  const er = Math.round((era * ip) / 9);
+  const rate = clamp(fip + rng.normal() * mentalNoise - (p.trait === "clutch" ? 0.2 : 0), 0.6, 13);
+  // 자책점은 정수다. 1이닝에 기대 자책 0.4면 반올림으로 항상 0이 되어
+  // 표시된 평균자책과 기록이 어긋난다(합산하면 0.00이 된다) — 짧은 구간은 추첨한다.
+  const erRaw = (rate * ip) / 9;
+  const er = ip < 25
+    ? Math.floor(erRaw) + (rng.next() < erRaw - Math.floor(erRaw) ? 1 : 0)
+    : Math.round(erRaw);
+  // 평균자책은 항상 실제 자책점에서 되계산한다 — 합산해도 맞아떨어지게
+  const era = ip ? Math.round(((er * 9) / ip) * 100) / 100 : 0;
   const whip = Math.round(((h + bb) / ip) * 100) / 100;
 
   const teamF = (teamPower - 65) * 0.004;
@@ -410,22 +417,40 @@ export const emptyLine = (kind: "HITTER" | "PITCHER"): StatLine =>
 /* ------------------------------------------------------------------ */
 
 /** 전반기 성적으로 올스타 선정 판정 */
-export function judgeAllStar(line: StatLine, level: LevelTag, fame: number, rng: RNG): boolean {
+/**
+ * 올스타 선정 — 실제 올스타는 **보직별로** 뽑는다.
+ * 하나의 식으로 판정하면 이닝이 적은 마무리가 구조적으로 불리해진다.
+ * (마무리 ERA 2.89 · 34이닝인데 이닝 기준 −0.6점을 먹던 버그)
+ */
+export function judgeAllStar(
+  line: StatLine, level: LevelTag, fame: number, rng: RNG, role?: string | null,
+): boolean {
   if (level !== "KBO") return false;
-  // 전반기 성적만 본다. 리그 평균(타자 OPS .780 / 투수 ERA 4.30)보다
-  // 얼마나 나은지, 그리고 얼마나 많이 나왔는지로 판단한다.
   let score: number;
+
   if (isHitterLine(line)) {
-    if (line.pa < 200) return false; // 전반기 내내 주전으로 뛰어야 후보가 된다
-    score = (line.ops - 0.8) * 6 + line.hr * 0.05 + line.sb * 0.015 + line.war * 0.45;
+    // 전반기 내내 주전으로 뛰어야 후보가 된다
+    if (line.pa < 200) return false;
+    score = (line.ops - 0.80) * 6 + line.hr * 0.05 + line.sb * 0.015 + line.war * 0.45;
   } else {
     const p = line as PitcherLine;
-    const relief = p.sv + p.hld;
-    if (p.ip < 45 && relief < 10) return false;
-    score = (4.1 - p.era) * 1.1 + (p.ip - 85) * 0.012 + relief * 0.05 + p.war * 0.5;
+    if (role === "마무리") {
+      // 마무리는 세이브로 평가받는다. 전반기 15세이브면 30세이브 페이스
+      if (p.g < 18) return false;
+      score = (3.60 - p.era) * 1.25 + p.sv * 0.10 + p.war * 0.55;
+    } else if (isRotationRole(role)) {
+      // 선발은 이닝과 평균자책
+      if (p.ip < 55) return false;
+      score = (4.10 - p.era) * 1.15 + (p.ip - 85) * 0.014 + p.w * 0.09 + p.war * 0.5;
+    } else {
+      // 불펜은 홀드
+      if (p.g < 20) return false;
+      score = (3.70 - p.era) * 1.2 + (p.hld + p.sv) * 0.07 + p.war * 0.55;
+    }
   }
   score += fame * 0.006;
-  return rng.next() < clamp(score * 0.17, 0, 0.78);
+  // 압도적인 전반기를 보내고도 떨어지는 일은 드물어야 한다
+  return rng.next() < clamp(score * 0.19, 0, 0.92);
 }
 
 

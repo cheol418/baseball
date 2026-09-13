@@ -9,7 +9,7 @@ import type {
   AmateurTournament, GameState, HitterLine, PitcherLine, StatLine, TournamentSlot,
 } from "@/lib/types";
 
-export type BroadcastKind = "H1" | "H2" | "PS" | "HS";
+export type BroadcastKind = "H1" | "H2" | "PS" | "HS" | "INTL";
 
 type Step =
   | { kind: "month"; label: string; line: StatLine; cume: StatLine; mood: Mood; note: string }
@@ -108,6 +108,12 @@ function intlSteps(g: GameState, slot: TournamentSlot): Step[] {
 }
 
 function buildSteps(g: GameState, kind: BroadcastKind): Step[] {
+  // 태극마크는 리그 일정과 분리해 따로 보여준다
+  if (kind === "INTL") {
+    const intl = g.intlResults.find((r) => r.year === g.year);
+    return intl ? intlSteps(g, TOURNAMENTS[intl.tournamentId].slot) : [];
+  }
+
   if (kind === "HS") {
     const rec = g.lastSeasonIndex !== null ? g.seasons[g.lastSeasonIndex] : null;
     const list = rec?.tournaments ?? [];
@@ -136,15 +142,13 @@ function buildSteps(g: GameState, kind: BroadcastKind): Step[] {
     steps.push(ps.champion
       ? { kind: "card", icon: "🏆", title: "한국시리즈 우승", body: `${teamById(g.contract?.teamId ?? "").name}가 정상에 올랐습니다!`, tone: "epic" }
       : { kind: "card", icon: "🍁", title: "가을야구 종료", body: "다음을 기약합니다.", tone: "neutral" });
-    // 11월에 열리는 대회(프리미어12)는 시즌을 모두 마친 뒤다
-    steps.push(...intlSteps(g, "POST"));
     return steps;
   }
 
   const months = g.monthLines ?? [];
   const base: StatLine[] = kind === "H2" && g.halfLine ? [g.halfLine] : [];
   // 3월에 열리는 대회(WBC)는 개막 전이므로 월별 기록보다 앞에 온다
-  const steps: Step[] = kind === "H1" ? intlSteps(g, "PRE") : [];
+  const steps: Step[] = [];
   steps.push(...months.map((m, i) => {
     const mood = moodOf(m.line);
     return {
@@ -169,11 +173,7 @@ function buildSteps(g: GameState, kind: BroadcastKind): Step[] {
         won: ag.won, score: ag.score, line: ag.line, mvp: ag.mvp,
       });
     }
-    // 7월에 열리는 대회(올림픽)만 이 시점에 치러진다
-    steps.push(...intlSteps(g, "MID"));
   } else {
-    // 9월에 열리는 대회(아시안게임)는 후반기 안에 치러진다
-    steps.push(...intlSteps(g, "LATE"));
     const rank = g.teamRank;
     steps.push(rank
       ? {
@@ -208,10 +208,13 @@ export function Broadcast({ g, kind, onDone }: {
   }, [i, steps, onDone]);
 
   const amateurLabel = (g.lastSeasonIndex !== null && g.seasons[g.lastSeasonIndex]?.level === "COLLEGE") ? "대학" : "고교";
+  const intlOfYear = g.intlResults.find((r) => r.year === g.year);
   const title = kind === "HS" ? `${g.year} ${amateurLabel} 전국대회`
     : kind === "PS" ? `${g.year} 가을야구`
+    : kind === "INTL" ? `${g.year} ${intlOfYear ? TOURNAMENTS[intlOfYear.tournamentId].name : "국가대표"}`
     : kind === "H1" ? `${g.year} 전반기` : `${g.year} 후반기`;
-  const levelText = g.seasonLevel === "KBO" ? "1군" : g.seasonLevel === "MINOR" ? "2군" : null;
+  const levelText = kind === "INTL" ? "국가대표"
+    : g.seasonLevel === "KBO" ? "1군" : g.seasonLevel === "MINOR" ? "2군" : null;
   const step = steps[Math.min(i, steps.length - 1)];
   if (!step) return null;
   const stepMs = step.kind === "month" ? MONTH_MS : CARD_MS;
@@ -228,7 +231,7 @@ export function Broadcast({ g, kind, onDone }: {
               <span className="text-[15px] font-black">{title}</span>
               {levelText && (
                 <span className="shrink-0 rounded bg-white/20 px-1.5 py-[1px] text-[9.5px] font-black">
-                  {levelText}{g.seasonRole ? ` ${g.seasonRole}` : ""}
+                  {levelText}{kind !== "INTL" && g.seasonRole ? ` ${g.seasonRole}` : ""}
                 </span>
               )}
             </div>
@@ -238,9 +241,9 @@ export function Broadcast({ g, kind, onDone }: {
           </button>
         </div>
 
-        {/* 진행 표시 */}
+        {/* 진행 표시 — 국제대회는 남은 경기 수가 결과를 알려주므로 칸을 나누지 않는다 */}
         <div className="mt-3 flex gap-1 px-4">
-          {steps.map((_, idx) => (
+          {(kind === "INTL" ? [0] : steps).map((_, idx) => (
             <span key={idx} className="h-[3px] flex-1 overflow-hidden rounded-full bg-white/20">
               <span
                 key={`${idx}-${i}`}

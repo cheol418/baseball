@@ -25,7 +25,7 @@ import { saveGame, useGame } from "@/lib/storage";
 import { isFranchiseRole } from "@/lib/roles";
 import { teamById } from "@/lib/teams";
 import {
-  MILITARY_LABEL, type GameState, type HitterLine, type HofVote, type PitcherLine,
+  MILITARY_LABEL, type GameState, type HitterLine, type HofVote, type IntlResult, type PitcherLine,
   type SeasonRecord, type StatLine,
 } from "@/lib/types";
 
@@ -43,23 +43,40 @@ export default function PlayPage() {
   const { game: g, hydrated } = useGame(id);
   const [tab, setTab] = useState<Tab>("season");
   const [busy, setBusy] = useState(false);
-  /** 시즌 중계 재생 중이면 어떤 구간인지 */
-  const [anim, setAnim] = useState<BroadcastKind | null>(null);
+  /**
+   * 재생할 중계 큐. 국제대회는 리그 일정과 섞지 않고 뒤에 따로 붙인다 —
+   * 같은 진행 바에 넣으면 남은 칸 수가 예선 탈락인지 결승인지를 미리 알려준다.
+   */
+  const [animQueue, setAnimQueue] = useState<BroadcastKind[]>([]);
+  const anim = animQueue[0] ?? null;
 
   const run = (action: Action) => {
     if (busy || !g) return;
     setBusy(true);
     const current = g;
     setTimeout(() => {
-      saveGame(advance(current, action));
+      const next = advance(current, action);
+      saveGame(next);
       setBusy(false);
       const kind: BroadcastKind | null =
         action.type === "PLAY_FIRST_HALF" ? "H1"
         : action.type === "PLAY_SECOND_HALF" ? "H2"
         : action.type === "PLAY_POSTSEASON" ? "PS"
         : action.type === "SIM_AMATEUR" ? "HS" : null;
-      setAnim(kind);
-      window.scrollTo({ top: 0, behavior: kind ? "auto" : "smooth" });
+
+      // 이번 구간에 국제대회가 치러졌다면 리그 중계 뒤에 이어 붙인다
+      const intl = next.intlResults.find((r) => r.year === next.year);
+      const played = intl && !current.intlResults.some(
+        (r) => r.year === intl.year && r.tournamentId === intl.tournamentId);
+      const queue: BroadcastKind[] = [];
+      if (kind) queue.push(kind);
+      if (played) {
+        // 개막 전에 열리는 대회(WBC)는 전반기보다 앞에 온다
+        if (TOURNAMENTS[intl.tournamentId].slot === "PRE") queue.unshift("INTL");
+        else queue.push("INTL");
+      }
+      setAnimQueue(queue);
+      window.scrollTo({ top: 0, behavior: queue.length ? "auto" : "smooth" });
     }, 340);
   };
 
@@ -115,7 +132,8 @@ export default function PlayPage() {
             </div>
             <div className="mt-0.5 text-[11.5px] opacity-85">
               {team ? team.name : g.phase === "COLLEGE_SEASON" ? "대학 야구부" : g.military === "SANGMU" || g.military === "ACTIVE" ? "군 복무" : "고교 야구부"} ·{" "}
-              {POSITION_LABEL[p.position]} · {p.age}세 · {HAND_LABEL[p.throws]}투{HAND_LABEL[p.bats]}타
+              {POSITION_LABEL[p.position]} · {deriveStyle(p).name} · {p.age}세 ·{" "}
+              {HAND_LABEL[p.throws]}투{HAND_LABEL[p.bats]}타
               {proYears > 0 && <> · 프로 {proYears}년차</>}
             </div>
           </div>
@@ -153,7 +171,7 @@ export default function PlayPage() {
       <Container className="lg:px-2">
         {tab === "season" && (
           anim ? (
-            <Broadcast g={g} kind={anim} onDone={() => setAnim(null)} />
+            <Broadcast key={anim} g={g} kind={anim} onDone={() => setAnimQueue((q) => q.slice(1))} />
           ) : (
             <div key={g.phase} className="stage lg:grid lg:grid-cols-[minmax(0,620px)_340px] lg:items-start lg:justify-center lg:gap-4">
               <div className="min-w-0">
@@ -304,23 +322,7 @@ function SeasonReview({ g }: { g: GameState }) {
           </div>
         )}
         {g.intlResults.filter((r) => r.year === last.year).map((r) => (
-          <div key={r.tournamentId} className="mt-3 rounded-xl bg-[var(--surface-2)] px-3 py-2.5">
-            <div className="eyebrow mb-1.5">국가대표 · {r.tournamentName}</div>
-            <div className="flex items-center gap-2">
-              <span className="text-[20px]">
-                {r.medal === "금" ? "🥇" : r.medal === "은" ? "🥈" : r.medal === "동" ? "🥉" : TOURNAMENTS[r.tournamentId].icon}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[13px] font-extrabold">
-                    {r.medal ? `${r.medal}메달` : `${r.rank}위`}
-                  </span>
-                  {r.exempted && <Pill tone="gold">🎖️ 병역 면제</Pill>}
-                </div>
-                <div className="mt-0.5 text-[11.5px] text-[var(--ink-3)]">{r.note}</div>
-              </div>
-            </div>
-          </div>
+          <IntlBox key={r.tournamentId} res={r} />
         ))}
 
         <div className="mt-3 flex items-center justify-between rounded-xl bg-[var(--surface-2)] px-3 py-2.5">
@@ -1016,6 +1018,59 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
       );
     }
   }
+}
+
+/** 그해 국제대회 — 경기별 기록과 대회 통산 */
+function IntlBox({ res }: { res: IntlResult }) {
+  const hitter = isHitterLine(res.line);
+  const head = hitter ? ["G", "AVG", "HR", "RBI", "OPS"] : ["G", "IP", "ERA", "SO", "WHIP"];
+  const row = (l: StatLine) => hitter
+    ? [String(l.g), fmt3((l as HitterLine).avg), String((l as HitterLine).hr),
+       String((l as HitterLine).rbi), fmt3((l as HitterLine).ops)]
+    : [String(l.g), (l as PitcherLine).ip.toFixed(1), fmt2((l as PitcherLine).era),
+       String((l as PitcherLine).so), fmt2((l as PitcherLine).whip)];
+  const icon = res.medal === "금" ? "🥇" : res.medal === "은" ? "🥈" : res.medal === "동" ? "🥉"
+    : TOURNAMENTS[res.tournamentId].icon;
+
+  return (
+    <div className="mt-3 overflow-hidden rounded-xl border border-[var(--line)]">
+      <div className="flex items-center justify-between bg-[var(--surface-2)] px-3 py-2">
+        <span className="eyebrow">국가대표 · {res.tournamentName}</span>
+        <span className="flex items-center gap-1.5 text-[11.5px] font-extrabold">
+          {icon} {res.medal ? `${res.medal}메달` : `${res.rank}위`}
+          {res.exempted && <Pill tone="gold">🎖️ 병역 면제</Pill>}
+        </span>
+      </div>
+      <table className="tabular w-full text-[11.5px]">
+        <thead>
+          <tr className="border-y border-[var(--line)] text-[9.5px] text-[var(--ink-3)]">
+            <th className="px-2.5 py-1.5 text-left font-bold">라운드</th>
+            <th className="px-2 py-1.5 text-left font-bold">상대</th>
+            <th className="px-2 py-1.5 text-right font-bold">결과</th>
+            {head.map((h) => <th key={h} className="px-2 py-1.5 text-right font-bold">{h}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {res.games.map((gm, i) => (
+            <tr key={i} className="border-b border-[var(--line)] last:border-0">
+              <td className={`px-2.5 py-1.5 font-bold ${gm.won ? "text-[var(--brand)]" : "text-[var(--ink-3)]"}`}>{gm.round}</td>
+              <td className="px-2 py-1.5 text-[var(--ink-2)]">{gm.opponent}</td>
+              <td className={`px-2 py-1.5 text-right font-extrabold ${gm.won ? "text-[var(--brand)]" : "text-[var(--danger)]"}`}>
+                {gm.won ? "승" : "패"} {gm.score}
+              </td>
+              {gm.appeared === false
+                ? <td className="px-2 py-1.5 text-right text-[var(--ink-3)]" colSpan={head.length}>결장</td>
+                : row(gm.line).map((v, j) => <td key={j} className="px-2 py-1.5 text-right text-[var(--ink-2)]">{v}</td>)}
+            </tr>
+          ))}
+          <tr className="bg-[var(--surface-2)] font-extrabold">
+            <td className="px-2.5 py-1.5" colSpan={3}>대회 통산</td>
+            {row(res.line).map((v, j) => <td key={j} className="px-2 py-1.5 text-right">{v}</td>)}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 /** 은퇴 5년 뒤부터 열리는 명예의 전당 헌액 투표 */

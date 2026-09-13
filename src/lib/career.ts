@@ -31,7 +31,10 @@ import type {
 export const START_YEAR = 2026;
 export const MIN_SALARY = 3000; // 만원
 export const MAX_SALARY = 300000; // 30억 (리그 상한)
-export const PRE_FA_CAP = 100000; // FA 이전 연봉 상한 10억
+/**
+ * 리그 연봉 상한. FA 이전에 따로 걸던 상한(10억)은 없앴다 —
+ * 벽에 부딪혀 "협상해도 안 오른다"가 되는 대신, 인상 폭 자체를 눌러 억제한다.
+ */
 export const FA_SERVICE = 8;
 
 export const formatMoney = (man: number) => {
@@ -411,7 +414,7 @@ function buildNegotiation(s: GameState, rec: SeasonRecord): Negotiation {
     : roleTier(rec.role) >= 5 ? 0.09
       : roleTier(rec.role) >= 4 ? 0.04 : 0;
 
-  let mult = 0.95 + clamp(war * 0.12, -0.28, 1.0)
+  let mult = 0.95 + clamp(war * 0.10, -0.28, 0.85)
     + awardWeight + intlWeight + asWeight + milWeight + roleWeight;
   if (rec.level !== "KBO") mult = Math.min(mult, 1.05);
   if (s.serviceYears <= 2) mult = Math.min(mult, 2.4);
@@ -419,9 +422,10 @@ function buildNegotiation(s: GameState, rec: SeasonRecord): Negotiation {
   // 고액이 될수록 같은 성적으로 올릴 수 있는 폭이 급격히 줄어든다
   if (prev < 10000) mult = 1 + (mult - 1) * 2.4;
   else if (prev < 20000) mult = 1 + (mult - 1) * 1.7;
-  else if (prev < 50000) mult = 1 + (mult - 1) * 1.1;
-  else if (prev < 100000) mult = 1 + (mult - 1) * 0.72;
-  else mult = 1 + (mult - 1) * 0.45;
+  else if (prev < 50000) mult = 1 + (mult - 1) * 1.0;
+  else if (prev < 100000) mult = 1 + (mult - 1) * 0.6;
+  else if (prev < 200000) mult = 1 + (mult - 1) * 0.35;
+  else mult = 1 + (mult - 1) * 0.2;
   if (s.player.age >= 34) mult = Math.min(mult, 1.15);
   mult *= 0.94 + (s.trust / 100) * 0.12;
   // 이미 고액이면 한 해 인상 폭에 제동이 걸린다
@@ -429,8 +433,7 @@ function buildNegotiation(s: GameState, rec: SeasonRecord): Negotiation {
   else if (prev >= 50000) mult = Math.min(mult, 1.9);
 
   // FA 이전에는 구단이 값을 크게 부르지 않는다
-  const preFaCap = s.faUsed === 0 ? PRE_FA_CAP : MAX_SALARY;
-  const cap = Math.min(preFaCap, MAX_SALARY);
+  const cap = MAX_SALARY;
 
   // 인상률만으로는 연봉이 복리로 불어나 결국 상한에 붙는다.
   // 실제 구단은 "지금 이 선수의 값어치"를 기준으로 다시 계산하므로,
@@ -526,7 +529,19 @@ function buildOffer(s: GameState, t: Team, base: number, ageP: number, rng: RNG,
 }
 
 function makeFaOffers(s: GameState, rng: RNG): Offer[] {
-  const base = marketValue(s);
+  /**
+   * FA 시장은 평시 몸값보다 훨씬 높게 형성된다 — 여러 구단이 동시에 붙기 때문이다.
+   * 실제 2026 KBO FA의 **연평균 ÷ 직전 연봉** 배수:
+   *   강백호 3.6 · 박찬호 4.4 · 이영하 7.2 · 박해민 2.7 · 김현수 3.3
+   *   반면 30대 후반은 최형우 1.3 · 김재환 1.1 · 손아섭 0.2
+   * 그래서 프리미엄을 얹되 나이가 많을수록 깎는다.
+   */
+  const age = s.player.age;
+  const faPremium = age <= 29 ? 2.6 : age <= 32 ? 2.1 : age <= 34 ? 1.6 : age <= 36 ? 1.1 : 0.8;
+  const prevSalary = s.contract?.salary ?? MIN_SALARY;
+  // FA를 얻고도 작년보다 못 받는 제안은 (노장이 아닌 한) 현실적이지 않다
+  const floor = age >= 35 ? prevSalary * 0.85 : prevSalary * 1.15;
+  const base = Math.max(marketValue(s) * faPremium, floor);
   const ageP = clamp(1.25 - (s.player.age - 28) * 0.075, 0.35, 1.3);
   const candidates = rng.shuffle(TEAMS.filter((t) => t.id !== s.contract?.teamId)).slice(0, 4);
   const offers = candidates.map((t) => buildOffer(s, t, base, ageP, rng, false));
@@ -808,7 +823,7 @@ function playHalf(
       let salary: number | undefined;
       if (move.type === "UP" && !s.calledUpThisSeason && s.contract) {
         s.calledUpThisSeason = true;
-        const cap = s.faUsed === 0 ? Math.min(PRE_FA_CAP, MAX_SALARY) : MAX_SALARY;
+        const cap = MAX_SALARY;
         const next = clamp(Math.round((s.contract.salary * 1.3) / 100) * 100, MIN_SALARY, cap);
         if (next > s.contract.salary) { salary = next; s.contract.salary = next; }
       }
@@ -1270,7 +1285,7 @@ export function advance(prev: GameState, action: Action): GameState {
         }
       }
 
-      s.allStar = judgeAllStar(s.halfLine, s.seasonLevel ?? "MINOR", s.player.fame, rng);
+      s.allStar = judgeAllStar(s.halfLine, s.seasonLevel ?? "MINOR", s.player.fame, rng, s.seasonRole);
       s.allStarGame = null;
       if (s.allStar && s.contract) {
         s.player.fame = clamp(s.player.fame + rng.int(3, 7), 0, 100);
@@ -1459,7 +1474,7 @@ export function advance(prev: GameState, action: Action): GameState {
       const opt = nego?.options.find((o) => o.id === action.optionId);
       if (nego && opt && s.contract) {
         const success = opt.id === "accept" || rng.chance(opt.odds);
-        const cap = s.faUsed === 0 ? Math.min(PRE_FA_CAP, MAX_SALARY) : MAX_SALARY;
+        const cap = MAX_SALARY;
         const next = clamp(
           Math.round((nego.offer * (success ? opt.upside : opt.downside)) / 100) * 100,
           MIN_SALARY, cap,
@@ -1468,12 +1483,19 @@ export function advance(prev: GameState, action: Action): GameState {
         s.trust = clamp(s.trust + (success ? opt.trustOnSuccess : opt.trustOnFail), 0, 100);
         const diff = next - nego.previous;
         const change = `${formatMoney(nego.previous)} → ${formatMoney(next)} (${diff >= 0 ? "+" : "−"}${formatMoney(Math.abs(diff))})`;
+        // 구단이 삭감을 제시한 해에는 협상에 성공해도 작년보다 적을 수 있다.
+        // "성공인데 마이너스"로 읽히지 않게 무엇이 달라졌는지 밝힌다.
+        const cut = success && diff < 0;
         log(s, {
-          icon: opt.id === "accept" ? "✍️" : success ? "📈" : "📉",
-          title: opt.id === "accept" ? "연봉 계약 완료" : success ? `${opt.label} 성공` : `${opt.label} 결렬`,
-          tone: success ? (diff >= 0 ? "good" : "neutral") : "bad",
+          icon: opt.id === "accept" ? "✍️" : success ? (cut ? "🩹" : "📈") : "📉",
+          title: opt.id === "accept" ? "연봉 계약 완료"
+            : success ? (cut ? `${opt.label} — 삭감 폭 축소` : `${opt.label} 성공`)
+              : `${opt.label} 결렬`,
+          tone: success ? (cut ? "neutral" : "good") : "bad",
           body: success
-            ? change
+            ? cut
+              ? `구단이 ${formatMoney(nego.offer)}까지 깎으려 했지만 ${formatMoney(next)}으로 막았습니다. ${change}`
+              : change
             : `요구가 받아들여지지 않아 제시액(${formatMoney(nego.offer)})보다 낮은 금액에 사인했습니다. ${change}`,
         });
       }

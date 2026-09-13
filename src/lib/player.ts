@@ -520,10 +520,33 @@ export function grow(
   const effBonus = p.trait === "hardworker" ? 1.2 : 1;
   const deltas: Record<string, number> = {};
 
+  /**
+   * 한계 돌파 — 잠재력은 스카우트의 추정일 뿐 진짜 천장이 아니다.
+   * 벽에 부딪힌 채로 몸을 갈아 넣으면 아주 가끔 한 칸씩 열린다.
+   * 이게 없으면 20대 중반에 모든 능력이 잠재력에 닿아 "성장 여지 0"으로
+   * 커리어의 절반이 정지한다. (실제로 27세에 전 항목 0이 되는 일이 잦았다)
+   */
+  const breakable = p.age <= 31;
+  const breakOdds = clamp(
+    (p.trait === "latebloom" ? 0.34 : p.trait === "genius" ? 0.28 : 0.2)
+    * (0.6 + p.talent * 0.5) * devRate,
+    0.06, 0.8,
+  );
+
   for (const k of keys) {
     const af = ageFactor(p.age, p.trait, k);
     const cur = getAb(p.abilities, k);
-    const pot = getAb(p.potential, k);
+    let pot = getAb(p.potential, k);
+
+    // 잠재력에 닿은 능력을 집중 훈련하면 천장 자체가 조금 밀린다.
+    // 노쇠가 시작된 능력이라도 천장이 열려 있어야 훈련으로 방어가 되므로 af는 따지지 않는다.
+    if (breakable && pot - cur <= 4 && pot < ABILITY_MAX) {
+      const pushing = focus?.targets.includes(k) ?? false;
+      if (rng.chance(breakOdds * (pushing ? 1 : 0.45))) {
+        pot = clamp(pot + rng.int(1, pushing ? 5 : 3), 15, ABILITY_MAX);
+        setAb(p.potential, k, pot);
+      }
+    }
     const headroom = clamp(Math.max(0, pot - cur) / 55, 0, 1.2); // 포텐셜에 가까울수록 둔화
     const focused = focus?.targets.includes(k) ? focus.gain : 0;
     let d: number;
@@ -538,8 +561,11 @@ export function grow(
       // 노쇠기: 하락 폭은 "가진 만큼" 비례한다.
       // 원래 빠른 선수가 잃을 주력도 많고, 이미 느린 선수는 더 느려질 여지가 적다.
       const floorScale = clamp((cur - 30) / 50, 0.25, 1.2);
-      // 훈련으로 하락 폭을 일부만 방어할 수 있다
-      d = af * rng.float(0.7, 1.5) * floorScale + focused * effBonus * 0.32;
+      // 훈련으로 하락을 방어한다. 서른 전에는 방어를 넘어 아직 끌어올릴 수 있다 —
+      // 실제 피크는 26~29세인데, 27세에 성장이 통째로 끊기면 절벽처럼 느껴진다.
+      const guard = p.age <= 28 ? 0.95 : p.age <= 30 ? 0.6 : 0.32;
+      d = af * rng.float(0.7, 1.5) * floorScale
+        + focused * effBonus * guard * (pot > cur ? 1 : 0.45);
       d += rng.normal() * 0.7;
     }
     const next = clamp(Math.round(cur + d), 15, af > 0 ? pot : ABILITY_MAX);
