@@ -125,11 +125,11 @@ export default function Home() {
         <ol className="card flex flex-col gap-2.5 px-4 py-4 text-[12.5px] leading-relaxed text-[var(--ink-2)]">
           <li><b className="text-[var(--ink)]">1. 선수 생성</b> — 이름·등번호·투타·포지션과 유형을 정하고, 세 명의 후보 중 하나를 고릅니다.</li>
           <li><b className="text-[var(--ink)]">2. 고교 시즌</b> — 마지막 고교 시즌 성적이 드래프트 순위를 좌우합니다.</li>
-          <li><b className="text-[var(--ink)]">3. 진로 선택</b> — 바로 드래프트에 도전하거나 대학에서 4년 더 성장합니다.</li>
-          <li><b className="text-[var(--ink)]">4. 시즌</b> — 스프링캠프(훈련) → 전반기 → 올스타 → 후반기 → 가을야구 순으로 한 해를 치릅니다.</li>
+          <li><b className="text-[var(--ink)]">3. 진로 선택</b> — 바로 드래프트에 도전하거나, 대학에서 두 시즌 더 뛰고 재도전합니다.</li>
+          <li><b className="text-[var(--ink)]">4. 시즌</b> — 스프링캠프(훈련) → 전반기 → 올스타 → 후반기 → 가을야구 순으로 한 해를 치릅니다. 월말마다 1군 콜업·2군 말소가 갈립니다.</li>
           <li><b className="text-[var(--ink)]">5. 스토브리그</b> — 연봉 협상을 직접 하고, 원하면 다른 구단에 이적을 신청합니다.</li>
-          <li><b className="text-[var(--ink)]">6. 국가대표와 병역</b> — 아시안게임 금메달·올림픽 메달이면 병역이 면제됩니다. {MILITARY_DEADLINE}세까지 못 풀면 상무나 현역으로 입대합니다.</li>
-          <li><b className="text-[var(--ink)]">7. FA와 은퇴</b> — 1군 8시즌을 채우면 FA 자격을 얻고, 은퇴하면 통산 기록으로 평가받습니다.</li>
+          <li><b className="text-[var(--ink)]">6. 국가대표와 병역</b> — 아시안게임 금메달·올림픽 메달이면 병역이 면제됩니다. 상무는 지원해서 뽑혀야 가고, {MILITARY_DEADLINE}세까지 못 풀면 현역으로 18개월을 복무합니다.</li>
+          <li><b className="text-[var(--ink)]">7. FA와 은퇴</b> — 1군 8시즌을 채우면 FA 자격을 얻습니다. 은퇴 후에는 진로를 고르고, 5년 뒤 명예의 전당 투표를 받습니다.</li>
         </ol>
         <p className="mt-3 text-center text-[11px] text-[var(--ink-3)]">
           모든 기록은 브라우저에만 저장됩니다 (localStorage).
