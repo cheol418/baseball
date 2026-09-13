@@ -932,8 +932,20 @@ function reviewRoster(
     };
   }
 
-  // 2군 강등이 먼저 — 부진이 심하면 자리 조정으로 끝나지 않는다
-  const demote = clamp(0.03 - form * 0.34 + (proper.level === "MINOR" ? 0.3 : 0), 0, 0.55);
+  /**
+   * 2군 강등.
+   *
+   * 기량이 1군 수준이면 한 달 부진으로 내려가지 않는다 —
+   * 에이스가 6월에 얻어맞았다고 2군에 보내지는 않는다. 자리를 옮길 뿐이다.
+   * 강등은 **기량 자체가 1군 기준에 못 미칠 때** 일어나고, 부진은 그걸 앞당긴다.
+   */
+  const tier = roleTier(s.seasonRole ?? defaultRole(s.player));
+  const belowBar = proper.level === "MINOR";
+  const demote = belowBar
+    ? clamp(0.20 - form * 0.26, 0.04, 0.6)
+    // 주전·선발급은 자리 조정으로 끝난다 (아래 ROLE 분기가 받는다)
+    : tier >= 4 ? 0
+      : clamp(0.03 - form * 0.06, 0, 0.08);
   if (rng.chance(demote)) return { type: "DOWN", role: minorRoleOf(s.player) };
 
   // 1군에 남는다면 자리는 그 달 활약에 따라 오르내린다
