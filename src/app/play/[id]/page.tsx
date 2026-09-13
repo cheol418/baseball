@@ -263,7 +263,9 @@ function SeasonReview({ g }: { g: GameState }) {
         <div className="mt-2 mb-3 flex flex-wrap items-center gap-1.5">
           <Pill tone="brand">{last.teamName}</Pill>
           <Pill>{last.role}</Pill>
-          {last.level === "MINOR" && <Pill>2군</Pill>}
+          {last.byLevel
+            ? <Pill>1군 · 2군</Pill>
+            : last.level === "MINOR" && <Pill>2군</Pill>}
           {last.level === "ARMY" && <Pill tone="danger">🪖 복무</Pill>}
           {last.allStar && <Pill tone="gold">⭐ 올스타</Pill>}
           {last.teamRank && <Pill tone={last.teamRank <= 3 ? "gold" : "neutral"}>정규시즌 {last.teamRank}위</Pill>}
@@ -642,7 +644,7 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
         <Wrap eyebrow="All-Star Break" title="올스타 브레이크"
           desc={g.allStar ? "올스타전을 마치고 후반기에 들어갑니다." : "짧은 휴식을 마치고 후반기에 들어갑니다."}>
           {g.seasonGoal && <GoalCard g={g} />}
-          {g.halfLine && <Strip label="전반기 성적" line={g.halfLine} level={g.seasonLevel} role={g.seasonRole} />}
+          {g.halfLine && <Strip label="전반기 성적" line={g.halfLine} where={whereLabel(g)} />}
           {g.pendingTrade ? (
             <div className="card mb-3 px-4 py-3.5">
               <div className="flex items-center gap-2">
@@ -676,7 +678,7 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
       return (
         <Wrap eyebrow="October" title="가을야구"
           desc={`정규시즌 ${g.teamRank}위로 포스트시즌에 진출했습니다.`}>
-          {g.seasonLine && <Strip label="정규시즌 최종" line={g.seasonLine} level={g.seasonLevel} role={g.seasonRole} />}
+          {g.seasonLine && <Strip label="정규시즌 최종" line={g.seasonLine} where={whereLabel(g)} />}
           <Primary onClick={() => run({ type: "PLAY_POSTSEASON" })} busy={busy} label="가을야구 진행 중…">가을야구 시작 🍁</Primary>
         </Wrap>
       );
@@ -1280,8 +1282,25 @@ function HofVoteBox({ g, vote, busy, run }: {
 }
 
 /** 접힌 형태의 성적 요약 한 줄 */
-function Strip({ label, line, level, role }: {
-  label: string; line: StatLine; level?: string | null; role?: string | null;
+/**
+ * 이 기록을 어디서 쌓았는가.
+ * 지금 소속을 그대로 쓰면, 6월까지 1군에서 뛰고 7월에 내려간 선수의
+ * 전반기 기록이 통째로 "2군"으로 적힌다.
+ */
+function whereLabel(g: GameState): { text: string; pro: boolean } | null {
+  const by = g.seasonByLevel;
+  if (by?.KBO && by?.MINOR) return { text: "1군 · 2군", pro: true };
+  if (by?.KBO) return { text: `1군 · ${g.seasonRole ?? ""}`, pro: true };
+  if (by?.MINOR) return { text: `2군 · ${g.seasonRole ?? ""}`, pro: false };
+  if (!g.seasonLevel) return null;
+  return {
+    text: `${LEVEL_SHORT[g.seasonLevel] ?? g.seasonLevel}${g.seasonRole ? ` · ${g.seasonRole}` : ""}`,
+    pro: g.seasonLevel === "KBO",
+  };
+}
+
+function Strip({ label, line, where }: {
+  label: string; line: StatLine; where?: { text: string; pro: boolean } | null;
 }) {
   const cells = isHitterLine(line)
     ? [["AVG", fmt3(line.avg)], ["HR", String(line.hr)], ["RBI", String(line.rbi)],
@@ -1293,11 +1312,7 @@ function Strip({ label, line, level, role }: {
     <div className="card mb-3 px-3.5 py-3">
       <div className="mb-1.5 flex items-center gap-1.5">
         <span className="eyebrow">{label}</span>
-        {level && (
-          <Pill tone={level === "KBO" ? "brand" : "neutral"}>
-            {LEVEL_SHORT[level] ?? level}{role ? ` · ${role}` : ""}
-          </Pill>
-        )}
+        {where && <Pill tone={where.pro ? "brand" : "neutral"}>{where.text}</Pill>}
       </div>
       <div className="tabular grid grid-cols-5 gap-1">
         {cells.map(([k, v]) => (

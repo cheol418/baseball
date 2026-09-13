@@ -30,8 +30,6 @@ type Mood = "hot" | "cold" | "normal" | "out";
 
 const MONTH_MS = 1500;
 const CARD_MS = 2000;
-/** 엔트리 이동은 놓치면 안 되는 통보라 조금 더 오래 둔다 */
-const MOVE_MS = 2600;
 
 /* ------------------------------------------------------------------ */
 
@@ -251,7 +249,10 @@ export function Broadcast({ g, kind, onDone }: {
       const t = setTimeout(onDone, 450);
       return () => clearTimeout(t);
     }
-    const dur = steps[i].kind === "month" ? MONTH_MS : steps[i].kind === "move" ? MOVE_MS : CARD_MS;
+    // 엔트리 이동은 그 달이 끝난 자리에서 확인을 받는다 —
+    // 중계가 다 끝난 뒤에 알려주면 "언제 바뀐 건지" 알 수 없다
+    if (steps[i].kind === "move") return;
+    const dur = steps[i].kind === "month" ? MONTH_MS : CARD_MS;
     const t = setTimeout(() => setI((v) => v + 1), dur);
     return () => clearTimeout(t);
   }, [i, steps, onDone]);
@@ -266,7 +267,7 @@ export function Broadcast({ g, kind, onDone }: {
     : g.seasonLevel === "KBO" ? "1군" : g.seasonLevel === "MINOR" ? "2군" : null;
   const step = steps[Math.min(i, steps.length - 1)];
   if (!step) return null;
-  const stepMs = step.kind === "month" ? MONTH_MS : step.kind === "move" ? MOVE_MS : CARD_MS;
+  const stepMs = step.kind === "month" ? MONTH_MS : CARD_MS;
 
   return (
     <div className="flex min-h-[62vh] flex-col justify-center px-4 py-6">
@@ -299,7 +300,8 @@ export function Broadcast({ g, kind, onDone }: {
                 className="block h-full rounded-full bg-white"
                 style={
                   idx < i ? { width: "100%", opacity: 0.55 }
-                  : idx === i ? { animation: `fillBar ${stepMs}ms linear forwards` }
+                  : idx === i && step.kind !== "move" ? { animation: `fillBar ${stepMs}ms linear forwards` }
+                  : idx === i ? { width: "100%" }
                   : { width: 0 }
                 }
               />
@@ -313,7 +315,16 @@ export function Broadcast({ g, kind, onDone }: {
           {step.kind === "round" && <RoundPanel key={`r${i}`} step={step} />}
           {step.kind === "hs" && <HsPanel key={`h${i}`} step={step} />}
           {step.kind === "game" && <GamePanel key={`g${i}`} step={step} />}
-          {step.kind === "move" && <MovePanel key={`v${i}`} step={step} />}
+          {step.kind === "move" && (
+            <div key={`v${i}`}>
+              <MovePanel step={step} />
+              <button
+                onClick={() => setI((v) => v + 1)}
+                className="mt-4 w-full rounded-xl bg-white/90 py-2.5 text-[13px] font-extrabold text-[#0e2a4d] transition hover:bg-white">
+                확인
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

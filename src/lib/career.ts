@@ -1009,16 +1009,7 @@ function playHalf(
         icon: move.type === "UP" ? "⬆️" : move.type === "DOWN" ? "⬇️" : promoted ? "📈" : "📉",
         title, tone: promoted ? "good" : "bad", body,
       });
-      // 자리가 바뀌는 건 놓치면 안 되는 소식이라 확인을 받는다
-      notify(s, {
-        icon: move.type === "UP" ? "⬆️" : move.type === "DOWN" ? "⬇️" : promoted ? "📈" : "📉",
-        eyebrow: "Roster", title, tone: promoted ? "epic" : "bad",
-        body: `${m.label}이 끝나고 엔트리가 조정되었습니다. ${body}`,
-        change: [
-          { label: "자리", from: fromLabel, to: toLabel },
-          ...(salary ? [{ label: "연봉", from: "—", to: formatMoney(salary) }] : []),
-        ],
-      });
+      // 엔트리 이동은 중계 안에서 그 달 자리에 멈춰 확인을 받는다 (통보 큐에 또 넣지 않는다)
     }
     out.push(entry);
   }
