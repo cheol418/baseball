@@ -5,6 +5,7 @@ import { fmt2, fmt3 } from "./stats";
 import { isHitterLine, mergeLines } from "@/lib/sim";
 import { TOURNAMENTS } from "@/lib/national";
 import { formatMoney } from "@/lib/career";
+import { roleTier } from "@/lib/roles";
 import { teamById } from "@/lib/teams";
 import type {
   AmateurTournament, GameState, HitterLine, MonthLine, PitcherLine, StatLine, TournamentSlot,
@@ -18,7 +19,10 @@ type Step =
   | { kind: "round"; name: string; opponent: string; win: boolean; score: string }
   | { kind: "hs"; t: AmateurTournament }
   /** 엔트리 이동 통보 — 콜업·말소는 커리어가 꺾이는 순간이라 따로 보여준다 */
-  | { kind: "move"; move: NonNullable<MonthLine["move"]>; month: string; teamName: string }
+  | {
+      kind: "move"; move: NonNullable<MonthLine["move"]>; month: string; teamName: string;
+      fromRole: string; fromLabel: string; toLabel: string;
+    }
   /** 올스타전 · 국제대회 한 경기 */
   | { kind: "game"; tag: string; round: string; opponent: string; won: boolean; score: string; line: StatLine; mvp?: boolean; appeared?: boolean };
 
@@ -189,7 +193,15 @@ function buildSteps(g: GameState, kind: BroadcastKind): Step[] {
       note: noteOf(m.line, mood, g.seed + i),
     });
     // 그 달이 끝나고 엔트리가 바뀌었다면 바로 이어서 통보한다
-    if (m.move) steps.push({ kind: "move", move: m.move, month: m.label, teamName });
+    if (m.move) {
+      const next = months[i + 1];
+      steps.push({
+        kind: "move", move: m.move, month: m.label, teamName,
+        fromRole: m.role,
+        fromLabel: `${m.level === "KBO" ? "1군" : "2군"} ${m.role}`,
+        toLabel: `${(next?.level ?? m.level) === "KBO" ? "1군" : "2군"} ${m.move.role}`,
+      });
+    }
   }
 
   if (kind === "H1") {
@@ -321,25 +333,31 @@ const MOOD_STYLE: Record<Mood, { badge: string; color: string }> = {
 
 /** 1군 콜업 · 2군 말소 통보 */
 function MovePanel({ step }: { step: Extract<Step, { kind: "move" }> }) {
-  const up = step.move.type === "UP";
+  const t = step.move.type;
+  const promoted = t === "UP" || (t === "ROLE" && roleTier(step.move.role) > roleTier(step.fromRole));
+  const title = t === "UP" ? "1군 엔트리 등록"
+    : t === "DOWN" ? "1군 엔트리 말소"
+      : promoted ? "보직 상승" : "보직 하락";
   return (
     <div className="pop text-center">
-      <div className="text-[40px] leading-none">{up ? "⬆️" : "⬇️"}</div>
+      <div className="text-[40px] leading-none">
+        {t === "UP" ? "⬆️" : t === "DOWN" ? "⬇️" : promoted ? "📈" : "📉"}
+      </div>
       <div className="mt-2 text-[10px] font-black uppercase tracking-[0.2em] opacity-60">
         {step.teamName} · {step.month} 종료
       </div>
-      <div className="mt-1 text-[24px] font-black" style={{ color: up ? "#ffd166" : "#ffb4a2" }}>
-        {up ? "1군 엔트리 등록" : "1군 엔트리 말소"}
+      <div className="mt-1 text-[24px] font-black" style={{ color: promoted ? "#ffd166" : "#ffb4a2" }}>
+        {title}
       </div>
       <p className="mt-1.5 text-[12.5px] leading-relaxed opacity-85">
-        {up
-          ? `${step.move.role}(으)로 1군에 올라갑니다.`
-          : "2군에서 다시 준비합니다."}
+        {t === "UP" ? `${step.move.role}(으)로 1군에 올라갑니다.`
+          : t === "DOWN" ? "2군에서 다시 준비합니다."
+            : promoted ? "한 달 활약을 인정받았습니다." : "자리를 지키지 못했습니다."}
       </p>
       <div className="mt-3 inline-flex items-center gap-2 rounded-xl bg-white/12 px-3.5 py-2 text-[12px] font-extrabold">
-        <span className="opacity-70">{up ? "2군" : "1군"}</span>
+        <span className="opacity-70">{step.fromLabel}</span>
         <span className="opacity-50">→</span>
-        <span>{up ? "1군" : "2군"} {step.move.role}</span>
+        <span>{step.toLabel}</span>
       </div>
       {step.move.salary !== undefined && (
         <div className="mt-2 text-[12px] font-bold" style={{ color: "#ffd166" }}>

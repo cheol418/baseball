@@ -18,7 +18,8 @@ for (const [kind, pos, style] of [
     // 통보는 확인하면 소비되지만 autoplay는 확인하지 않으므로 그대로 쌓인다
     for (const n of g.notices ?? []) seen[n.title] = (seen[n.title] ?? 0) + 1;
     // 엔트리 이동은 시즌 기록의 monthLines에 남지 않으므로 로그로 센다
-    moves += g.logs.filter((l) => l.title === "1군 콜업" || l.title === "2군 이동 통보").length;
+    moves += g.logs.filter((l) =>
+      ["1군 콜업", "2군 이동 통보", "보직 상승", "보직 하락"].includes(l.title)).length;
   }
 }
 

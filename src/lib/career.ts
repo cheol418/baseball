@@ -845,7 +845,16 @@ function monthlyForm(line: StatLine, level: LevelTag): number {
  * 월말 엔트리 조정 — 2군에서 잘하면 콜업, 1군에서 부진하면 말소.
  * 기량(제자리 판정)과 그 달 성적을 함께 본다.
  */
-function reviewRoster(s: GameState, rng: RNG, form: number): { type: "UP" | "DOWN"; role: string } | null {
+/**
+ * 월말 엔트리 점검.
+ *
+ * 1군↔2군만이 아니라 **1군 안에서 주전↔준주전↔백업**도 움직인다.
+ * 잘하면 자리가 올라가고 못하면 밀린다 — 시즌 내내 보직이 고정이면
+ * 한 달 한 달 잘하는 의미가 없다.
+ */
+function reviewRoster(
+  s: GameState, rng: RNG, form: number,
+): { type: "UP" | "DOWN" | "ROLE"; role: string } | null {
   if (!s.contract || s.seasonLevel === "ARMY") return null;
   const team = teamById(s.contract.teamId);
   const proYears = s.seasons.filter((r) => r.level === "KBO" || r.level === "MINOR").length;
@@ -859,8 +868,18 @@ function reviewRoster(s: GameState, rng: RNG, form: number): { type: "UP" | "DOW
       role: proper.level === "KBO" ? proper.role : s.player.kind === "HITTER" ? "백업" : "추격조",
     };
   }
-  const chance = clamp(0.03 - form * 0.34 + (proper.level === "MINOR" ? 0.3 : 0), 0, 0.55);
-  return rng.chance(chance) ? { type: "DOWN", role: minorRoleOf(s.player) } : null;
+
+  // 2군 강등이 먼저 — 부진이 심하면 자리 조정으로 끝나지 않는다
+  const demote = clamp(0.03 - form * 0.34 + (proper.level === "MINOR" ? 0.3 : 0), 0, 0.55);
+  if (rng.chance(demote)) return { type: "DOWN", role: minorRoleOf(s.player) };
+
+  // 1군에 남는다면 자리는 그 달 활약에 따라 오르내린다
+  const now = s.seasonRole ?? defaultRole(s.player);
+  if (proper.level !== "KBO" || proper.role === now) return null;
+  const up = roleTier(proper.role) > roleTier(now);
+  // 올라갈 땐 잘해야 하고, 밀릴 땐 못해야 한다
+  const chance = clamp((up ? 0.10 + form * 0.30 : 0.08 - form * 0.26), 0, 0.5);
+  return rng.chance(chance) ? { type: "ROLE", role: proper.role } : null;
 }
 
 /** 한 반기를 월 단위로 치른다 — 매달 끝에 엔트리가 바뀔 수 있다 */
@@ -889,27 +908,47 @@ function playHalf(
     const entry: MonthLine = { key: m.key, label: m.label, line, level, role };
     const move = lastMonth ? null : reviewRoster(s, rng, monthlyForm(line, level));
     if (move) {
-      s.seasonLevel = move.type === "UP" ? "KBO" : "MINOR";
+      const fromLabel = `${level === "KBO" ? "1군" : "2군"} ${role}`;
+      if (move.type !== "ROLE") s.seasonLevel = move.type === "UP" ? "KBO" : "MINOR";
       s.seasonRole = move.role;
       if (s.contract) s.contract.role = move.role;
+      const toLabel = `${s.seasonLevel === "KBO" ? "1군" : "2군"} ${move.role}`;
 
       // 1군에 처음 등록되면 그 해 연봉이 조정된다 (시즌당 1회)
       let salary: number | undefined;
       if (move.type === "UP" && !s.calledUpThisSeason && s.contract) {
         s.calledUpThisSeason = true;
-        const cap = MAX_SALARY;
-        const next = clamp(Math.round((s.contract.salary * 1.3) / 100) * 100, MIN_SALARY, cap);
+        const next = clamp(Math.round((s.contract.salary * 1.3) / 100) * 100, MIN_SALARY, MAX_SALARY);
         if (next > s.contract.salary) { salary = next; s.contract.salary = next; }
       }
       entry.move = { type: move.type, role: move.role, salary };
+
+      const promoted = move.type === "UP" || (move.type === "ROLE" && roleTier(move.role) > roleTier(role));
+      const title = move.type === "UP" ? "1군 콜업"
+        : move.type === "DOWN" ? "2군 이동 통보"
+          : promoted ? "보직 상승" : "보직 하락";
+      const body = move.type === "UP"
+        ? `${m.label}을 마치고 1군 엔트리에 등록되었습니다. ${move.role}(으)로 출발합니다.`
+          + (salary ? ` 1군 등록으로 연봉이 ${formatMoney(salary)}(으)로 조정되었습니다.` : "")
+        : move.type === "DOWN"
+          ? `${m.label}까지의 부진으로 1군 엔트리에서 말소되었습니다.`
+          : promoted
+            ? `${m.label} 활약을 인정받아 ${move.role}(으)로 올라섰습니다.`
+            : `${m.label} 부진으로 ${move.role}(으)로 밀렸습니다.`;
+
       log(s, {
-        icon: move.type === "UP" ? "⬆️" : "⬇️",
-        title: move.type === "UP" ? "1군 콜업" : "2군 이동 통보",
-        tone: move.type === "UP" ? "good" : "bad",
-        body: move.type === "UP"
-          ? `${m.label}을 마치고 1군 엔트리에 등록되었습니다. ${move.role}(으)로 출발합니다.`
-            + (salary ? ` 1군 등록으로 연봉이 ${formatMoney(salary)}(으)로 조정되었습니다.` : "")
-          : `${m.label}까지의 부진으로 1군 엔트리에서 말소되었습니다.`,
+        icon: move.type === "UP" ? "⬆️" : move.type === "DOWN" ? "⬇️" : promoted ? "📈" : "📉",
+        title, tone: promoted ? "good" : "bad", body,
+      });
+      // 자리가 바뀌는 건 놓치면 안 되는 소식이라 확인을 받는다
+      notify(s, {
+        icon: move.type === "UP" ? "⬆️" : move.type === "DOWN" ? "⬇️" : promoted ? "📈" : "📉",
+        eyebrow: "Roster", title, tone: promoted ? "epic" : "bad",
+        body: `${m.label}이 끝나고 엔트리가 조정되었습니다. ${body}`,
+        change: [
+          { label: "자리", from: fromLabel, to: toLabel },
+          ...(salary ? [{ label: "연봉", from: "—", to: formatMoney(salary) }] : []),
+        ],
       });
     }
     out.push(entry);
@@ -1637,6 +1676,7 @@ export function advance(prev: GameState, action: Action): GameState {
       const opt = nego?.options.find((o) => o.id === action.optionId);
       if (nego && opt && s.contract) {
         const success = opt.id === "accept" || rng.chance(opt.odds);
+        const trustBefore = s.trust;
         const cap = MAX_SALARY;
         const next = clamp(
           Math.round((nego.offer * (success ? opt.upside : opt.downside)) / 100) * 100,
@@ -1649,17 +1689,32 @@ export function advance(prev: GameState, action: Action): GameState {
         // 구단이 삭감을 제시한 해에는 협상에 성공해도 작년보다 적을 수 있다.
         // "성공인데 마이너스"로 읽히지 않게 무엇이 달라졌는지 밝힌다.
         const cut = success && diff < 0;
+        const title = opt.id === "accept" ? "연봉 계약 완료"
+          : success ? (cut ? `${opt.label} — 삭감 폭 축소` : `${opt.label} 성공`)
+            : `${opt.label} 결렬`;
+        const icon = opt.id === "accept" ? "✍️" : success ? (cut ? "🩹" : "📈") : "📉";
+        const body = success
+          ? cut
+            ? `구단이 ${formatMoney(nego.offer)}까지 깎으려 했지만 ${formatMoney(next)}으로 막았습니다.`
+            : opt.id === "accept"
+              ? "구단이 제시한 금액에 그대로 사인했습니다."
+              : "성적을 근거로 한 요구가 받아들여졌습니다."
+          : `요구가 받아들여지지 않아 제시액(${formatMoney(nego.offer)})보다 낮은 금액에 사인했습니다.`;
+
         log(s, {
-          icon: opt.id === "accept" ? "✍️" : success ? (cut ? "🩹" : "📈") : "📉",
-          title: opt.id === "accept" ? "연봉 계약 완료"
-            : success ? (cut ? `${opt.label} — 삭감 폭 축소` : `${opt.label} 성공`)
-              : `${opt.label} 결렬`,
+          icon, title,
           tone: success ? (cut ? "neutral" : "good") : "bad",
-          body: success
-            ? cut
-              ? `구단이 ${formatMoney(nego.offer)}까지 깎으려 했지만 ${formatMoney(next)}으로 막았습니다. ${change}`
-              : change
-            : `요구가 받아들여지지 않아 제시액(${formatMoney(nego.offer)})보다 낮은 금액에 사인했습니다. ${change}`,
+          body: `${body} ${change}`,
+        });
+        // 협상 결과는 바로 스토브리그로 넘어가 놓치기 쉽다 — 확인을 받는다
+        notify(s, {
+          icon, eyebrow: "Contract", title,
+          tone: success && !cut ? "epic" : cut || !success ? "bad" : "neutral",
+          body,
+          change: [
+            { label: "연봉", from: formatMoney(nego.previous), to: formatMoney(next) },
+            { label: "구단 신뢰", from: String(Math.round(trustBefore)), to: String(Math.round(s.trust)) },
+          ],
         });
       }
       s.pendingNegotiation = null;

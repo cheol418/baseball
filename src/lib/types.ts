@@ -131,8 +131,8 @@ export interface MonthLine {
   /** 그 달을 어디서 보냈는지 */
   level: LevelTag;
   role: string;
-  /** 그 달이 끝난 뒤 일어난 엔트리 이동 */
-  move?: { type: "UP" | "DOWN"; role: string; salary?: number };
+  /** 그 달이 끝난 뒤 일어난 엔트리 이동 (ROLE = 같은 레벨 안에서 자리만 바뀜) */
+  move?: { type: "UP" | "DOWN" | "ROLE"; role: string; salary?: number };
 }
 
 /** 시즌 1건의 기록 */
