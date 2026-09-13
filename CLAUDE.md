@@ -27,17 +27,52 @@ npx tsx scripts/hellcheck.ts  # 지옥 훈련이 항상 최고인지 (1500건 �
 **`audit.ts`는 어떤 변경 후에도 돌린다.** 예외 0 · 무한정지 0 · 이상값 0 · 전 단계 도달이 기준선이다.
 
 ### 2. 스케일을 건드리면 기준선을 전부 같이 옮긴다
-능력치는 **0~120** 스케일이고 리그 평균은 `LEAGUE_AVG_ABILITY = 70.5` (`rng.ts`).
-능력치 분포를 바꾸면 아래를 **함께** 옮겨야 리그 성적이 인플레되지 않는다.
 
-- `rng.ts` — `LEAGUE_AVG_ABILITY`, `n50()`
-- `player.ts` — `gradeOf()` 등급 문턱
-- `career.ts` — `assignRole()`의 `bar`, `shouldForceRetire()`의 `releaseBar`, `marketValue()`, `makeTransferTargets()`
-- `national.ts` — 대회별 `bar`
-- `sim.ts` — `LEVEL_ADJ`
-- `amateur.ts` — `FIELD_LEVEL`
+능력치는 **0~120**, 리그 평균은 `LEAGUE_AVG_ABILITY = 70.5` (`rng.ts`).
+**생성 시 능력치(`player.ts`의 `base`/`room`)를 건드리면 OVR 분포 전체가 움직인다.**
+아래 목록은 OVR 절대값을 문턱으로 쓰는 곳 전부다 — 하나라도 빠뜨리면 조용히 어긋난다.
 
-과거에 이걸 빠뜨려서 리그 타율이 .293까지 뛰고 대표팀이 한 번도 안 뽑히는 버그가 각각 있었다.
+#### 스케일의 뿌리
+| 위치 | 무엇 |
+|---|---|
+| `rng.ts` | `LEAGUE_AVG_ABILITY` · `n50()` — 성적 계산의 기준점 |
+| `player.ts` | `rollCandidate()`의 `base`(현재 52) · `room` — **생성 분포 자체** |
+| `player.ts` | `ABILITY_MAX`(120) |
+
+#### OVR 절대값을 문턱으로 쓰는 곳
+| 위치 | 무엇 | 현재 값 |
+|---|---|---|
+| `player.ts` | `gradeOf()` 등급 문턱 | S 95 / A 87 / B 79 / C 69 / D 55 |
+| `career.ts` | `assignRole()`의 `bar` | 73 기준 ± 팀 성향 |
+| `career.ts` | `shouldForceRetire()`의 `releaseBar` | 나이별 61~76 |
+| `career.ts` | `retirementAdvice()` | `ovr < 72` (36세 이상) |
+| `career.ts` | `marketValue()` | `(ovr − 72) × 1200` |
+| `career.ts` | `makeTransferTargets()` | `merit (ovr − 76)` · `contendFit (ovr − 78)` · `release (ovr − 80)` |
+| **`career.ts`** | **`draftScore()`** | `ovr × 0.55` · `potWeight` · `upside` |
+| **`career.ts`** | **`runDraft()` 지명 순위 밴드** | 91 / 84 / 78 / 72 / 66 / 59 |
+| **`career.ts`** | **`draftForecast()` 표기 밴드 + `odds`** | 같은 6단계 · `(score − 54) / 34` |
+| `national.ts` | 대회별 `bar` (대표팀 발탁) | AG 76 · P12 80 · OLY 81 · WBC 84 |
+| `national.ts` | `isCalledUp()`의 `overall(p) − 78` | — |
+| `national.ts` | `sangmuOdds()`의 `(ovr − 72)` | — |
+| `sim.ts` | `LEVEL_ADJ` (레벨별 난이도) | HS 25 · COLLEGE 15 · MINOR 8 |
+| `amateur.ts` | `FIELD_LEVEL` (아마추어 상대 수준) | HS 47 · COLLEGE 60 |
+| `events.ts` | 포지션 전환 조건 `overall(p) < 78` | — |
+
+#### 바꿨으면 반드시 돌린다
+```bash
+npx tsx scripts/audit.ts       # 예외·정지·이상값
+npx tsx scripts/balance.ts     # 전성기 OVR (기준선 79~82)
+npx tsx scripts/statdist.ts    # 리그 타율·ERA 인플레 확인
+npx tsx scripts/draft.ts       # 고졸/대졸 지명 순위
+npx tsx scripts/draftscore.ts  # 성적 ↔ 예상 라운드가 붙어 있는지
+npx tsx scripts/debut.ts       # 1군 데뷔·주전 정착 나이
+```
+
+**실제로 겪은 사고 세 번**
+- 리그 타율이 `.293`까지 뜀 — `LEVEL_ADJ`를 안 옮김
+- 대표팀이 한 번도 안 뽑힘 — 대회 `bar`를 안 옮김
+- **생성 OVR을 44→52로 올리고 드래프트 밴드를 안 옮겨, OVR 45·WAR −0.2가 2~3라운드로 지명됨**
+  (점수가 통째로 +4.4 올라 전원이 한 단계씩 상위로 밀렸다)
 
 ### 3. 새 phase·action을 만들면 스크립트도 가르친다
 `scripts/autoplay.ts`와 `scripts/audit.ts`의 switch에 추가하지 않으면
