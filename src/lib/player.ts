@@ -315,13 +315,28 @@ export interface CreateOptions {
   styleId: string;
   /** 투수만 사용 */
   armSlot?: ArmSlot;
+  /**
+   * 완성도 ↔ 성장 여지 축. −1 완성형(즉시 전력) · 0 균형형 · +1 원석형(대기만성).
+   * 이게 없으면 재능이 시작 능력치와 잠재력을 함께 올려버려,
+   * OVR이 낮은 후보가 재능·잠재력까지 낮은 "그냥 나쁜 선수"가 된다.
+   */
+  bias?: number;
 }
+
+/** 후보 유형 — 생성 화면에서 셋을 나란히 보여준다 */
+export const CANDIDATE_KINDS = [
+  { bias: -1, name: "완성형", desc: "지금 당장 쓸 수 있지만 천장이 낮다" },
+  { bias: 0, name: "균형형", desc: "무난한 출발과 무난한 성장" },
+  { bias: 1, name: "원석형", desc: "지금은 거칠지만 크게 자랄 수 있다" },
+] as const;
 
 /** 고교 3학년 선수 후보 1명 생성 */
 export function rollCandidate(opts: CreateOptions, rng: RNG): Player {
   const style = STYLES.find((s) => s.id === opts.styleId) ?? STYLES[0];
   const keys = abilityKeys(opts.kind);
-  const talent = clamp(0.75 + rng.normal() * 0.13, 0.6, 1.45);
+  // 재능이 높을수록 지금은 덜 완성되어 있고, 대신 자랄 여지가 크다
+  const bias = opts.bias ?? 0;
+  const talent = clamp(0.75 + rng.normal() * 0.13 + bias * 0.16, 0.6, 1.45);
   // 투수는 투구폼이 능력치 배분에 함께 반영된다
   const slot = opts.kind === "PITCHER" ? armSlotById(opts.armSlot) : null;
 
@@ -330,10 +345,10 @@ export function rollCandidate(opts: CreateOptions, rng: RNG): Player {
 
   for (const k of keys) {
     const w = (style.weights[k] ?? 0) + (slot?.weights[k] ?? 0);
-    const base = 44 + w * 0.9 + rng.normal() * 7 + (talent - 1) * 14;
+    const base = 44 + w * 0.9 + rng.normal() * 7 + (talent - 1) * 14 - bias * 7;
     const cur = clamp(Math.round(base), 22, 80);
     // 포텐셜은 현재치 + 재능/랜덤
-    const room = 10 + talent * 26 + rng.float(0, 18) + (w > 0 ? 8 : 0);
+    const room = 10 + talent * 26 + rng.float(0, 18) + (w > 0 ? 8 : 0) + bias * 9;
     setAb(abilities, k, cur);
     setAb(potential, k, clamp(Math.round(cur + room), cur + 5, ABILITY_MAX));
   }

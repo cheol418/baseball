@@ -6,7 +6,7 @@ import { AbilityBar, AppBar, Column, Pill, Section } from "@/components/ui";
 import { newGame } from "@/lib/career";
 import {
   abilityKeys, ARM_SLOTS, gradeOf, HAND_LABEL, HITTER_POSITIONS, overall,
-  PITCHER_POSITIONS, platoonProfile, RECOMMENDED_POSITIONS, rollCandidate,
+  CANDIDATE_KINDS, PITCHER_POSITIONS, platoonProfile, RECOMMENDED_POSITIONS, rollCandidate,
   scoutedOverall, scoutedPotential, STYLES, traitById, type CreateOptions,
 } from "@/lib/player";
 import { RNG } from "@/lib/rng";
@@ -41,9 +41,9 @@ export default function CreatePage() {
   };
 
   const candidates = useMemo(
-    () => [0, 1, 2].map((i) => {
+    () => CANDIDATE_KINDS.map((c, i) => {
       const seed = baseSeed + i * 7919 + 1;
-      return { seed, player: rollCandidate(opts, new RNG(seed)) };
+      return { seed, kind: c, player: rollCandidate({ ...opts, bias: c.bias }, new RNG(seed)) };
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [baseSeed, name, number, kind, position, bats, throwsH, styleId, armSlot],
@@ -226,13 +226,14 @@ export default function CreatePage() {
                 <button key={i} onClick={() => setPicked(i)}
                   className={`card px-4 py-3.5 text-left transition ${picked === i ? "!border-[var(--brand)] ring-2 ring-[var(--brand)]/20" : ""}`}>
                   <div className="flex items-center gap-2">
-                    <span className="text-[14px] font-extrabold">후보 {i + 1}</span>
+                    <span className="text-[14px] font-extrabold">{c.kind.name}</span>
                     <Pill tone="brand">{gradeOf(ovr)} · OVR {ovr}</Pill>
                     <Pill tone="gold">잠재 {scout.lo}~{scout.hi}</Pill>
                     <span className="ml-auto text-[11px] font-bold text-[var(--ink-3)]">
                       재능 {(c.player.talent * 100).toFixed(0)}
                     </span>
                   </div>
+                  <div className="mt-0.5 text-[11px] text-[var(--ink-3)]">{c.kind.desc}</div>
                   <div className="mt-1.5 flex items-center gap-1.5">
                     <Pill>{trait.name}</Pill>
                     <span className="text-[11px] text-[var(--ink-3)]">{trait.desc}</span>
