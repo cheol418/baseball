@@ -141,5 +141,6 @@ UI는 `src/app/page.tsx`(홈) · `create/page.tsx`(4단계 생성) · `play/[id]
 
 ## 문서
 
+- `docs/ARCHITECTURE.md` — 프로젝트 구조도 (모듈 관계·시즌 흐름·시뮬레이션 방식)
 - `README.md` — 게임 시스템 설명 (플레이어·개발자용)
 - `docs/HISTORY.md` — 개발 이력, 결정 이유, 발견한 버그
