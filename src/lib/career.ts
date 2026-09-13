@@ -301,10 +301,16 @@ export function draftScore(s: GameState): number {
   const pot = potentialOverall(s.player);
   const amateur = s.seasons.filter((x) => x.level === "HS" || x.level === "COLLEGE");
   const last = amateur[amateur.length - 1];
+  // 성적. 이 항이 작으면 "타율 .261에 WAR −0.2인데 상위 지명"이 나온다 —
+  // 아마추어 리그 평균(타자 OPS .70 / 투수 ERA 4.2) 대비로 폭을 넓게 잡는다.
   let perf = 0;
   if (last) {
-    if (isHitterLine(last.line)) perf = (last.line.ops - 0.75) * 30 + last.line.hr * 0.4;
-    else perf = (4.5 - last.line.era) * 3 + last.line.so * 0.05;
+    if (isHitterLine(last.line)) {
+      perf = (last.line.ops - 0.70) * 42 + last.line.hr * 0.9 + last.line.war * 2.4;
+    } else {
+      const q = last.line as PitcherLine;
+      perf = (4.2 - q.era) * 4.2 + q.so * 0.07 + q.war * 2.4;
+    }
   }
   // 전국대회에서 큰 무대를 밟은 경험은 스카우트 평가에 직접 반영된다.
   // 가장 최근 아마추어 시즌을 본다 (대학에 갔다면 대학 성적)
@@ -319,7 +325,7 @@ export function draftScore(s: GameState): number {
   // 어릴수록 잠재력의 비중이 커진다
   const potWeight = s.player.age <= 19 ? 0.28 : s.player.age <= 21 ? 0.24 : 0.2;
 
-  return ovr * 0.62 + pot * potWeight + perf + s.player.fame * 0.12 + tourneyBonus + upside;
+  return ovr * 0.55 + pot * potWeight + perf + s.player.fame * 0.12 + tourneyBonus + upside;
 }
 
 /** UI에 보여줄 지명 확률과 예상 라운드 */
