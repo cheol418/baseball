@@ -337,10 +337,10 @@ export function draftScore(s: GameState): number {
 /** UI에 보여줄 지명 확률과 예상 라운드 */
 export function draftForecast(s: GameState) {
   const score = draftScore(s);
-  const odds = clamp((score - 42) / 34, 0.02, 0.96);
+  const odds = clamp((score - 54) / 34, 0.02, 0.96);
   const round =
-    score >= 78 ? "1라운드 상위" : score >= 72 ? "1라운드" : score >= 66 ? "2~3라운드"
-    : score >= 60 ? "4~6라운드" : score >= 54 ? "7~9라운드" : score >= 47 ? "10라운드" : "미지명 유력";
+    score >= 91 ? "1라운드 상위" : score >= 84 ? "1라운드" : score >= 78 ? "2~3라운드"
+    : score >= 72 ? "4~6라운드" : score >= 66 ? "7~9라운드" : score >= 59 ? "10라운드" : "미지명 유력";
   return { odds, round };
 }
 
@@ -349,12 +349,12 @@ function runDraft(s: GameState, rng: RNG) {
   const spread = s.player.age <= 19 ? 5.5 : s.player.age <= 21 ? 4 : 3;
   const score = draftScore(s) + rng.normal() * spread;
   let overallPick: number;
-  if (score >= 78) overallPick = rng.int(1, 3);
-  else if (score >= 72) overallPick = rng.int(1, 10);
-  else if (score >= 66) overallPick = rng.int(5, 20);
-  else if (score >= 60) overallPick = rng.int(15, 40);
-  else if (score >= 54) overallPick = rng.int(30, 70);
-  else if (score >= 47) overallPick = rng.int(60, 100);
+  if (score >= 91) overallPick = rng.int(1, 3);
+  else if (score >= 84) overallPick = rng.int(1, 10);
+  else if (score >= 78) overallPick = rng.int(5, 20);
+  else if (score >= 72) overallPick = rng.int(15, 40);
+  else if (score >= 66) overallPick = rng.int(30, 70);
+  else if (score >= 59) overallPick = rng.int(60, 100);
   else overallPick = 0;
 
   const collegeSeasons = s.seasons.filter((x) => x.level === "COLLEGE").length;
@@ -1212,18 +1212,14 @@ export function advance(prev: GameState, action: Action): GameState {
         return s;
       }
       if (action.path === "DRAFT") {
-        if (s.seasons.filter((x) => x.level === "COLLEGE").length === 0) {
-          s.player.age += 1; s.year += 1;
-          grow(s.player, rng, null, developmentRate("HS", "주전", s.player.age) * amateurDevBonus(s));
-        }
+        // 지명은 마지막 시즌을 마친 그 상태로 받는다.
+        // 여기서 나이를 올리고 성장시키면 진로 화면의 지명 확률과 드래프트 화면의 확률이
+        // 어긋나 보인다 (유저가 고르기만 했는데 확률이 오른다).
         s.phase = "DRAFT";
         log(s, { icon: "📋", title: "신인 드래프트 신청", tone: "neutral", body: "프로 지명을 기다립니다." });
       } else {
-        // 고교 졸업 후 입학할 때만 한 해를 넘긴다 (2학년 뒤 잔류는 그대로)
-        if (s.seasons.filter((x) => x.level === "COLLEGE").length === 0) {
-          s.player.age += 1;
-          s.year += 1;
-        }
+        // 대학 진학도 지명과 마찬가지로 나이를 여기서 올리지 않는다.
+        // 입단 시점(DO_DRAFT)에 한 번만 올려야 고졸·대졸 입단 나이가 어긋나지 않는다.
         s.draftMissed = false;
         s.phase = "COLLEGE_SEASON";
         grow(s.player, rng, null, developmentRate("HS", "주전", s.player.age) * amateurDevBonus(s));
@@ -1236,6 +1232,10 @@ export function advance(prev: GameState, action: Action): GameState {
     case "DO_DRAFT": {
       runDraft(s, rng);
       if (s.phase !== "PATH_CHOICE") {
+        // 지명을 받은 뒤 한 해를 넘겨 프로 첫 캠프에 합류한다 (가을 지명 → 이듬해 봄 입단)
+        s.player.age += 1;
+        s.year += 1;
+        grow(s.player, rng, null, developmentRate("HS", "주전", s.player.age) * amateurDevBonus(s));
         s.pendingTraining = makeTrainingOptions(s.player, rng);
         s.phase = "SPRING_CAMP";
       }
