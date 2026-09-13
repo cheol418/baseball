@@ -304,6 +304,25 @@ export interface SecondLife {
   story: string;
 }
 
+/**
+ * 유저에게 반드시 보여줘야 하는 통보.
+ *
+ * 콜업·이적·발탁처럼 커리어가 실제로 꺾이는 사건이 로그 한 줄로만 지나가면
+ * 유저는 무슨 일이 있었는지 모른 채 다음 화면으로 넘어간다.
+ */
+export interface Notice {
+  id: string;
+  icon: string;
+  eyebrow: string;
+  title: string;
+  body: string;
+  tone: "good" | "bad" | "epic" | "neutral";
+  /** 무엇이 무엇으로 바뀌었는지 (팀 이동·보직 변경·연봉 조정) */
+  change?: { label: string; from: string; to: string }[];
+  /** 강조 색 (주로 팀 컬러) */
+  accent?: string;
+}
+
 export interface GameState {
   id: string;
   seed: number;
@@ -331,6 +350,12 @@ export interface GameState {
   hofVote?: HofVote | null;
   /** 은퇴 후 걸어간 길 */
   secondLife?: SecondLife | null;
+  /** 아직 유저에게 보여주지 않은 통보 (앞에서부터 하나씩 확인) */
+  notices?: Notice[];
+  /** 올해 상무에 지원했는가 — 한 해에 한 번만 지원할 수 있다 */
+  sangmuApplied?: boolean;
+  /** 커리어 통산 상무 지원 횟수 */
+  sangmuTries?: number;
   hofScore?: number;
 
   /* --- 시즌 진행 --- */

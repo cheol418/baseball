@@ -1,5 +1,5 @@
 /** 테스트용 자동 플레이 — 새 상태 머신 전 구간을 통과시킨다 */
-import { advance, legacyContext, secondLifeOptions, type Action } from "../src/lib/career";
+import { advance, canVolunteer, legacyContext, secondLifeOptions, type Action } from "../src/lib/career";
 import type { GameState } from "../src/lib/types";
 
 export interface AutoOptions {
@@ -54,7 +54,9 @@ export function autoPlay(start: GameState, opt: AutoOptions = {}): GameState {
       case "POSTSEASON": act({ type: "PLAY_POSTSEASON" }); break;
       case "SEASON_END": act({ type: "FINISH_SEASON" }); break;
       case "INTERNATIONAL": act({ type: "JOIN_NATIONAL", join: joinNational }); break;
-      case "MILITARY_CHOICE": act({ type: "ENLIST", option: military }); break;
+      case "MILITARY_CHOICE":
+        act({ type: "ENLIST", option: canVolunteer(g) ? military : "ACTIVE" });
+        break;
       case "MILITARY_SEASON": act({ type: "SERVE" }); break;
       case "EVENT": {
         const o = g.pendingEvent?.options ?? [];
@@ -64,6 +66,11 @@ export function autoPlay(start: GameState, opt: AutoOptions = {}): GameState {
       }
       case "NEGOTIATION": act({ type: "NEGOTIATE", optionId: nego }); break;
       case "STOVE": {
+        // 상무는 지원 → 선발이다. 병역 미해결이면 해마다 지원한다
+        if (military === "SANGMU" && canVolunteer(g) && !g.sangmuApplied) {
+          act({ type: "APPLY_SANGMU" });
+          break;
+        }
         const targets = g.pendingTransfers ?? [];
         if (!g.transferRequested && targets.length && Math.random() < transferChance) {
           act({ type: "REQUEST_TRANSFER", teamId: targets[0].teamId });

@@ -1,6 +1,7 @@
 import { makeTrainingOptions, overall } from "./player";
 import { RNG } from "./rng";
 import { emptyLine } from "./sim";
+import { TEAM_ID_ALIAS } from "./teams";
 import type { GameState, Phase } from "./types";
 
 /**
@@ -72,11 +73,31 @@ export function migrateSave(raw: unknown): GameState | null {
   if (typeof g.transferRequested !== "boolean") g.transferRequested = false;
   // 예전 세이브의 은퇴 안내는 모두 강제 은퇴였다
   if (typeof g.retireForced !== "boolean") g.retireForced = true;
+  if (!Array.isArray(g.notices)) g.notices = [];
+  if (typeof g.sangmuApplied !== "boolean") g.sangmuApplied = false;
+  if (typeof g.sangmuTries !== "number") g.sangmuTries = 0;
   def("pendingTraining", null);
   def("pendingOffers", null);
   if (g.lastSeasonIndex === undefined) {
     g.lastSeasonIndex = g.seasons.length ? g.seasons.length - 1 : null;
   }
+
+  // 구단 재편 — 고양 드래곤즈 → 고척 히어로즈, 전주 블레이즈 → 잠실 베어스
+  const team = (id: unknown) => (typeof id === "string" ? TEAM_ID_ALIAS[id] ?? id : id);
+  if (g.contract) g.contract.teamId = team(g.contract.teamId) as string;
+  if (g.draftPick) g.draftPick.teamId = team(g.draftPick.teamId) as string;
+  g.wishTeamId = team(g.wishTeamId) as string;
+  for (const rec of g.seasons) {
+    rec.teamId = team(rec.teamId) as string;
+    if (rec.ps) for (const r of rec.ps.rounds) void r;
+  }
+  if (Array.isArray(g.pendingTransfers)) {
+    for (const t of g.pendingTransfers) t.teamId = team(t.teamId) as string;
+  }
+  if (Array.isArray(g.pendingOffers)) {
+    for (const o of g.pendingOffers) o.teamId = team(o.teamId) as string;
+  }
+  if (g.pendingTrade) g.pendingTrade.teamId = team(g.pendingTrade.teamId) as string;
 
   // 아마추어 대회 필드명 변경 흡수
   for (const rec of g.seasons as unknown as Record<string, unknown>[]) {

@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
-import { AbilityBar, AppBar, Column, Container, Empty, Pill, Section } from "@/components/ui";
+import { AbilityBar, AppBar, Column, Container, Empty, Pill, Section, SeasonProgress } from "@/components/ui";
 import { Broadcast, type BroadcastKind } from "@/components/broadcast";
 import { KeyStats, SeasonTable, fmt2, fmt3 } from "@/components/stats";
 import {
   FA_SERVICE, MAX_SALARY, MILITARY_DEADLINE, MILITARY_OPTIONS, advance,
-  canVolunteer, careerTotals, computeHof, draftForecast, formatMoney,
+  canVolunteer, careerTotals, computeHof, draftForecast, formatMoney, sangmuOdds,
   retirementHonors, type Action,
 } from "@/lib/career";
 import { fanFeed, seasonHeadline } from "@/lib/flavor";
@@ -25,7 +25,8 @@ import { saveGame, useGame } from "@/lib/storage";
 import { isFranchiseRole } from "@/lib/roles";
 import { teamById } from "@/lib/teams";
 import {
-  MILITARY_LABEL, type GameState, type HitterLine, type HofVote, type IntlResult, type PitcherLine,
+  MILITARY_LABEL, type GameState, type HitterLine, type HofVote, type IntlResult,
+  type Notice, type PitcherLine,
   type SeasonRecord, type StatLine,
 } from "@/lib/types";
 
@@ -80,6 +81,13 @@ export default function PlayPage() {
     }, 340);
   };
 
+  // 통보는 중계가 끝난 뒤에 띄운다 (중계 중에 덮으면 경기를 가린다)
+  const notice = !anim ? g?.notices?.[0] ?? null : null;
+  const dismissNotice = () => {
+    if (!g) return;
+    saveGame({ ...g, notices: (g.notices ?? []).slice(1) });
+  };
+
   if (!hydrated) return <main className="p-8 text-center text-[13px] text-[var(--ink-3)]">불러오는 중…</main>;
   if (!g) {
     return (
@@ -105,6 +113,7 @@ export default function PlayPage() {
 
   return (
     <main className="pb-10">
+      {notice && <NoticeOverlay notice={notice} onClose={dismissNotice} />}
       <AppBar
         title={`${p.name} · ${g.year}년`}
         back="/"
@@ -155,6 +164,15 @@ export default function PlayPage() {
         </Container>
       </div>
 
+      {!anim && (
+        <SeasonProgress
+          phase={g.phase}
+          year={g.year}
+          extra={g.pendingTournament && g.intlJoined
+            ? `${TOURNAMENTS[g.pendingTournament].short} 대표팀`
+            : g.military === "SANGMU" || g.military === "ACTIVE" ? "복무 중" : null}
+        />
+      )}
       {!anim && (
       <nav className="sticky top-[49px] z-20 border-b border-[var(--line)] bg-[var(--surface)]">
         <Container className="flex px-2 lg:px-6">
@@ -715,9 +733,11 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
     case "MILITARY_CHOICE":
       return (
         <Wrap eyebrow="Military Service" title="입영 통지"
-          desc={`${MILITARY_DEADLINE}세가 되어 더 이상 병역을 미룰 수 없습니다. 복무 형태를 선택하세요.`}>
+          desc={`${MILITARY_DEADLINE}세가 되어 더 이상 병역을 미룰 수 없습니다.`
+            + (canVolunteer(g) ? " 복무 형태를 선택하세요." : " 상무 지원 기회는 모두 지나갔습니다.")}>
           <div className="flex flex-col gap-2">
-            {MILITARY_OPTIONS.map((o) => (
+            {/* 상무는 스토브리그에 지원해서 뽑혀야 간다 — 입영 통지 시점에는 대개 현역뿐이다 */}
+            {MILITARY_OPTIONS.filter((o) => o.id === "ACTIVE" || canVolunteer(g)).map((o) => (
               <button key={o.id} onClick={() => run({ type: "ENLIST", option: o.id })} disabled={busy}
                 className="card px-4 py-3.5 text-left transition hover:!border-[var(--brand)] disabled:opacity-50">
                 <div className="flex items-center gap-2">
@@ -830,9 +850,22 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
               </div>
             </>
           )}
-          {canVolunteer(g) && !g.transferRequested && (
-            <button onClick={() => run({ type: "VOLUNTEER_ARMY" })} disabled={busy}
-              className="btn btn-ghost mb-2 w-full py-3 text-[13px]">🎽 상무 야구단 자원입대</button>
+          {canVolunteer(g) && !g.sangmuApplied && (
+            <button onClick={() => run({ type: "APPLY_SANGMU" })} disabled={busy}
+              className="card mb-2 w-full px-4 py-3 text-left transition hover:border-[var(--brand)]">
+              <div className="flex items-center gap-2">
+                <span className="text-[13.5px] font-extrabold">🎽 상무 야구단 지원</span>
+                <Pill tone="gold">선발 확률 {Math.round(sangmuOdds(g, overall(g.player)) * 100)}%</Pill>
+              </div>
+              <div className="mt-0.5 text-[11.5px] text-[var(--ink-3)]">
+                해마다 정원이 있어 지원해도 떨어질 수 있습니다. 합격하면 18개월간 퓨처스리그에서 뜁니다.
+              </div>
+            </button>
+          )}
+          {g.sangmuApplied && g.military === "PENDING" && (
+            <div className="card mb-2 px-4 py-3 text-[11.5px] text-[var(--ink-3)]">
+              🎽 올해 상무 지원에서 떨어졌습니다. 내년에 다시 지원할 수 있습니다.
+            </div>
           )}
           <Primary onClick={() => run({ type: "SKIP_STOVE" })} busy={busy}>
             {g.year + 1} 스프링캠프로 →
@@ -1018,6 +1051,55 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
       );
     }
   }
+}
+
+/**
+ * 통보 오버레이 — 콜업·이적·발탁처럼 커리어가 꺾이는 사건은
+ * 로그 한 줄로 흘려보내지 않고 확인을 받고 넘어간다.
+ */
+function NoticeOverlay({ notice, onClose }: { notice: Notice; onClose: () => void }) {
+  const accent = notice.accent
+    ?? (notice.tone === "bad" ? "var(--danger)" : notice.tone === "epic" ? "var(--gold)" : "var(--brand)");
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-5 backdrop-blur-[2px]"
+      onClick={onClose}>
+      <div
+        className="pop w-full max-w-[420px] overflow-hidden rounded-2xl bg-[var(--surface)] shadow-2xl"
+        onClick={(e) => e.stopPropagation()}>
+        <div className="px-6 pt-6 text-center" style={{ background: `${accent}12` }}>
+          <div className="text-[44px] leading-none">{notice.icon}</div>
+          <div className="mt-2 text-[9.5px] font-black uppercase tracking-[0.2em] text-[var(--ink-3)]">
+            {notice.eyebrow}
+          </div>
+          <div className="mt-0.5 pb-5 text-[20px] font-black" style={{ color: accent }}>
+            {notice.title}
+          </div>
+        </div>
+
+        <div className="px-6 py-4">
+          <p className="text-[12.5px] leading-relaxed text-[var(--ink-2)]">{notice.body}</p>
+
+          {notice.change && notice.change.length > 0 && (
+            <ul className="mt-3 flex flex-col gap-1.5">
+              {notice.change.map((c, i) => (
+                <li key={i} className="flex items-center gap-2 rounded-lg bg-[var(--surface-2)] px-3 py-2 text-[12px]">
+                  <span className="w-[62px] shrink-0 text-[var(--ink-3)]">{c.label}</span>
+                  <span className="text-[var(--ink-3)]">{c.from}</span>
+                  <span className="text-[var(--ink-3)]">→</span>
+                  <span className="font-extrabold" style={{ color: accent }}>{c.to}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <button onClick={onClose} className="btn btn-primary mt-4 w-full py-2.5 text-[13px]">
+            확인
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /** 그해 국제대회 — 경기별 기록과 대회 통산 */

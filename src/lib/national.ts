@@ -216,8 +216,29 @@ export const MILITARY_OPTIONS: MilitaryOption[] = [
 export const isServing = (m: MilitaryStatus) => m === "SANGMU" || m === "ACTIVE";
 
 /** 상무 지원 가능 여부 (마지노선 전 자발적 입대) */
+/** 상무 지원은 커리어에서 두 번까지 — 모집 시기가 정해져 있어 무한정 두드릴 수 없다 */
+export const SANGMU_MAX_TRIES = 2;
+
 export function canVolunteer(s: GameState): boolean {
-  return s.military === "PENDING" && s.player.age >= 24 && s.player.age < MILITARY_DEADLINE;
+  return s.military === "PENDING"
+    && s.player.age >= 22 && s.player.age < MILITARY_DEADLINE
+    && (s.sangmuTries ?? 0) < SANGMU_MAX_TRIES;
+}
+
+/**
+ * 상무 야구단 선발 확률.
+ *
+ * 상무는 지원한다고 다 가는 곳이 아니다 — 해마다 정원이 있고 경쟁이 붙는다.
+ * 1군에서 검증된 선수가 유리하고, 나이가 많으면 뽑을 이유가 줄어든다.
+ */
+export function sangmuOdds(s: GameState, ovr: number): number {
+  const kbo = s.seasons.filter((r) => r.level === "KBO");
+  const last = kbo[kbo.length - 1];
+  const war = last?.line.war ?? 0;
+  // 1군 경력이 없으면 서류에서 밀린다
+  const proven = kbo.length >= 2 ? 0.12 : kbo.length === 1 ? 0.05 : 0;
+  const age = s.player.age <= 24 ? 0.07 : s.player.age <= 26 ? 0.03 : -0.06;
+  return clamp(0.06 + (ovr - 72) * 0.013 + war * 0.03 + proven + age, 0.04, 0.48);
 }
 
 /** 현역 복무로 인한 능력치 손실 */

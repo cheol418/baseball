@@ -20,6 +20,14 @@ export const ROLE_PT: Record<string, number> = {
   마무리: 1.0, 필승조: 1.0, 불펜: 1.0, 추격조: 0.6,
 };
 
+/**
+ * 수비 가치 중 어깨가 차지하는 비중.
+ * 포수는 도루 저지가 곧 수비이고, 1루수는 어깨를 쓸 일이 거의 없다.
+ */
+const ARM_WEIGHT: Record<string, number> = {
+  C: 0.45, RF: 0.35, SS: 0.3, "3B": 0.3, CF: 0.25, LF: 0.2, "2B": 0.2, "1B": 0.08, DH: 0,
+};
+
 const POS_ADJ: Record<string, number> = {
   C: 12.5, SS: 7, "2B": 2.5, "3B": 2, CF: 2.5, LF: -7, RF: -7, "1B": -12.5, DH: -17.5,
 };
@@ -136,7 +144,13 @@ export function simHitter(inp: SimInput): HitterLine {
   const lgWoba = 0.335 + LEVEL_ADJ[level] * 0.0018;
   const wraa = ((woba - lgWoba) / 1.25) * pa;
   const defW = p.position === "DH" ? 0 : 1;
-  const defRuns = n50(getAb(p.abilities, "defense" as never)) * 13 * (pa / 600) * defW;
+  // 수비 가치는 글러브(수비)와 어깨(송구)로 나뉜다.
+  // 포수의 도루 저지, 우익수의 보살처럼 자리마다 어깨의 비중이 다르다.
+  const armW = ARM_WEIGHT[p.position] ?? 0.15;
+  const fieldSkill = n50(getAb(p.abilities, "defense" as never)) * (1 - armW)
+    + n50(getAb(p.abilities, "arm" as never)) * armW;
+  // 계수 17 — 리그 최고 수비수가 한 시즌 +12런 안팎이 되도록 (FanGraphs 기준 +15~20)
+  const defRuns = fieldSkill * 17 * (pa / 600) * defW;
   const posAdj = (POS_ADJ[p.position] ?? 0) * (pa / 600);
   const repl = pa * 0.0335;
   const levelScale = level === "KBO" ? 1 : level === "MINOR" ? 0.7 : 0.45;
@@ -425,7 +439,8 @@ export const emptyLine = (kind: "HITTER" | "PITCHER"): StatLine =>
 export function judgeAllStar(
   line: StatLine, level: LevelTag, fame: number, rng: RNG, role?: string | null,
 ): boolean {
-  if (level !== "KBO") return false;
+  // 실제 KBO도 퓨처스 올스타전을 따로 연다 — 2군에서 잘하면 그쪽에 뽑힌다
+  if (level !== "KBO" && level !== "MINOR") return false;
   let score: number;
 
   if (isHitterLine(line)) {
@@ -449,6 +464,8 @@ export function judgeAllStar(
     }
   }
   score += fame * 0.006;
+  // 2군 기록은 부풀려 나오므로 기준을 높게 잡는다
+  if (level === "MINOR") score -= 1.6;
   // 압도적인 전반기를 보내고도 떨어지는 일은 드물어야 한다
   return rng.next() < clamp(score * 0.19, 0, 0.92);
 }
@@ -470,17 +487,22 @@ export function oneGameShare(p: Player): number {
 
 /** KBO 올스타는 나눔·드림 두 팀으로 나뉜다 */
 const ALLSTAR_SIDES = ["나눔 올스타", "드림 올스타"] as const;
+/** 퓨처스는 북부·남부 리그로 나뉜다 */
+const FUTURES_SIDES = ["북부 올스타", "남부 올스타"] as const;
 
-export function simAllStarGame(p: Player, teamId: string, rng: RNG): AllStarGame {
+export function simAllStarGame(
+  p: Player, teamId: string, rng: RNG, level: LevelTag = "KBO",
+): AllStarGame {
   // 구단을 반으로 갈라 소속을 정한다 (실제 KBO와 같은 방식)
   const sideIdx = ["SEO", "INC", "SUW", "DAJ", "DAG"].includes(teamId) ? 0 : 1;
-  const side = ALLSTAR_SIDES[sideIdx];
-  const opponent = ALLSTAR_SIDES[1 - sideIdx];
+  const sides = level === "MINOR" ? FUTURES_SIDES : ALLSTAR_SIDES;
+  const side = sides[sideIdx];
+  const opponent = sides[1 - sideIdx];
 
   // 한 경기 — 타자는 3~4타석, 투수는 1~2이닝
   const share = p.kind === "HITTER" ? 1 / 144 : 1 / 60;
   const base = {
-    player: p, level: "KBO" as const, teamPower: 80, availability: 1, rng, share, minGames: 1,
+    player: p, level, teamPower: 80, availability: 1, rng, share, minGames: 1,
     // 올스타전은 잔치다 — 타자에게 유리하게 흘러간다
     extraAdj: p.kind === "HITTER" ? 6 : -4,
   };

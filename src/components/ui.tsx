@@ -109,3 +109,66 @@ export function Empty({ children }: { children: ReactNode }) {
     </div>
   );
 }
+
+/* ------------------------------------------------------------------ */
+/* 시즌 진행 표시                                                       */
+/* ------------------------------------------------------------------ */
+
+/** 한 시즌 안에서 지금 어느 구간인지 */
+const SEASON_STAGES = [
+  { key: "CAMP", label: "스프링캠프", icon: "🏋️" },
+  { key: "H1", label: "전반기", icon: "⚾" },
+  { key: "AS", label: "올스타", icon: "⭐" },
+  { key: "H2", label: "후반기", icon: "⚾" },
+  { key: "PS", label: "가을야구", icon: "🍁" },
+  { key: "END", label: "시즌 총평", icon: "📋" },
+  { key: "CONTRACT", label: "계약", icon: "✍️" },
+  { key: "STOVE", label: "스토브리그", icon: "❄️" },
+] as const;
+
+/** 단계별로 어느 칸에 있는지 — 아마추어·군 복무는 시즌 흐름 밖이다 */
+const STAGE_OF: Record<string, number> = {
+  SPRING_CAMP: 0, INTERNATIONAL: 0, MILITARY_CHOICE: 0,
+  FIRST_HALF: 1,
+  ALL_STAR: 2,
+  POSTSEASON: 4,
+  SEASON_END: 5, EVENT: 5,
+  NEGOTIATION: 6, FA: 6,
+  STOVE: 7,
+};
+
+export function SeasonProgress({ phase, year, extra }: {
+  phase: string; year: number; extra?: string | null;
+}) {
+  const at = STAGE_OF[phase];
+  if (at === undefined) return null;
+  return (
+    <div className="border-b border-[var(--line)] bg-[var(--surface)]">
+      <Container className="px-3 py-2 lg:px-6">
+        <div className="flex items-center gap-1.5 overflow-x-auto">
+          <span className="shrink-0 pr-1 text-[10px] font-black text-[var(--ink-3)]">{year}</span>
+          {SEASON_STAGES.map((st, i) => {
+            const done = i < at;
+            const now = i === at;
+            return (
+              <span
+                key={st.key}
+                className={`flex shrink-0 items-center gap-1 rounded-full px-2 py-[3px] text-[10.5px] font-bold transition ${
+                  now ? "bg-[var(--brand)] text-white"
+                    : done ? "text-[var(--ink-3)]" : "text-[var(--ink-3)] opacity-40"
+                }`}>
+                {now && <span>{st.icon}</span>}
+                {st.label}
+              </span>
+            );
+          })}
+          {extra && (
+            <span className="ml-auto shrink-0 rounded-full bg-[var(--gold)]/15 px-2 py-[3px] text-[10.5px] font-black text-[var(--gold)]">
+              {extra}
+            </span>
+          )}
+        </div>
+      </Container>
+    </div>
+  );
+}

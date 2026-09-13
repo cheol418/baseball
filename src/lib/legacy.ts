@@ -82,6 +82,9 @@ export interface LegacyContext {
   rings: number;
   /** 지도자 자질로 쓰이는 멘탈 */
   mental: number;
+  /** 동료·구단과의 관계 — 사람을 상대하는 자리일수록 중요하다 */
+  teammate: number;
+  trust: number;
   /** 마지막 소속팀 */
   teamName: string;
   /** 프랜차이즈로 대우받았는가 */
@@ -97,7 +100,7 @@ const PATHS: PathDef[] = [
     icon: "📋",
     desc: "유니폼을 벗고 곧바로 지도자의 길로 들어선다.",
     when: (c) => c.seasons >= 5,
-    fit: (c) => c.mental * 0.5 + c.seasons * 2.2 + c.war * 0.4,
+    fit: (c) => c.mental * 0.4 + c.teammate * 0.3 + c.seasons * 2.2 + c.war * 0.4,
     good: (c) => `${c.teamName} 1군 ${c.kind === "HITTER" ? "타격" : "투수"}코치를 거쳐 수석코치까지 올랐습니다. 젊은 선수들이 그를 찾습니다.`,
     plain: (c) => `${c.teamName} 2군에서 지도자 생활을 시작했습니다. 조용하지만 꾸준한 두 번째 커리어입니다.`,
   },
@@ -106,8 +109,8 @@ const PATHS: PathDef[] = [
     name: "감독",
     icon: "🎩",
     desc: "언젠가 더그아웃의 맨 앞자리에 서는 것을 목표로 한다.",
-    when: (c) => c.seasons >= 10 && (c.hof >= 200 || c.mental >= 70),
-    fit: (c) => c.mental * 0.8 + c.hof * 0.12 + c.rings * 10,
+    when: (c) => c.seasons >= 10 && (c.hof >= 200 || c.mental >= 70) && c.teammate >= 45,
+    fit: (c) => c.mental * 0.5 + c.teammate * 0.35 + c.hof * 0.12 + c.rings * 10,
     good: (c) => `코치 생활을 거쳐 ${c.teamName} 감독에 취임했습니다. 부임 3년 차에 팀을 한국시리즈로 이끌었습니다.`,
     plain: () => "몇 해 동안 코치로 일한 뒤 감독대행을 맡았지만, 정식 감독까지는 닿지 못했습니다.",
   },
@@ -137,7 +140,7 @@ const PATHS: PathDef[] = [
     icon: "🏢",
     desc: "구단 운영과 선수 관리를 맡는 프런트로 들어간다.",
     when: (c) => c.seasons >= 8,
-    fit: (c) => c.mental * 0.7 + c.hof * 0.06,
+    fit: (c) => c.mental * 0.45 + c.trust * 0.35 + c.hof * 0.06,
     good: (c) => `${c.teamName} 단장에 선임되어 팀을 다시 만들었습니다. 프런트 야구의 모범이라는 평가를 받습니다.`,
     plain: () => "구단 운영팀에서 일하며 현장과 사무실을 잇는 역할을 맡고 있습니다.",
   },
@@ -177,6 +180,8 @@ export function legacyContext(s: GameState, hofScore: number): LegacyContext {
     mvp: kbo.reduce((a, b) => a + b.awards.filter((x) => x.includes("MVP")).length, 0),
     rings: kbo.filter((r) => r.champion).length,
     mental,
+    teammate: s.teammate,
+    trust: s.trust,
     teamName: last ? teamById(last.teamId).name : "고향 팀",
     franchise: kbo.some((r) => isFranchiseRole(r.role)) || kbo.filter((r) => roleTier(r.role) >= 5).length >= 5,
     name: s.player.name,

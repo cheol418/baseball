@@ -3,7 +3,7 @@ import { RNG } from "../src/lib/rng";
 import { rollCandidate, overall, STYLES, HITTER_POSITIONS, PITCHER_POSITIONS, ARM_SLOTS } from "../src/lib/player";
 import {
   newGame, advance, computeHof, careerTotals, formatMoney,
-  legacyContext, secondLifeOptions, type Action,
+  legacyContext, secondLifeOptions, canVolunteer, type Action,
 } from "../src/lib/career";
 import { isHitterLine } from "../src/lib/sim";
 import type { GameState, Hand, Kind } from "../src/lib/types";
@@ -60,7 +60,10 @@ function play(seed: number, opt: { college: boolean; military: "SANGMU" | "ACTIV
         case "POSTSEASON": act({ type: "PLAY_POSTSEASON" }); break;
         case "SEASON_END": act({ type: "FINISH_SEASON" }); break;
         case "INTERNATIONAL": act({ type: "JOIN_NATIONAL", join: opt.joinNat }); break;
-        case "MILITARY_CHOICE": act({ type: "ENLIST", option: opt.military }); break;
+        // 상무는 미리 지원해서 붙어야 간다 — 입영 통지 시점엔 대개 현역만 남는다
+        case "MILITARY_CHOICE":
+          act({ type: "ENLIST", option: canVolunteer(g) ? opt.military : "ACTIVE" });
+          break;
         case "MILITARY_SEASON": act({ type: "SERVE" }); break;
         case "EVENT": {
           const o = g.pendingEvent!.options;
@@ -69,6 +72,11 @@ function play(seed: number, opt: { college: boolean; military: "SANGMU" | "ACTIV
         }
         case "NEGOTIATION": act({ type: "NEGOTIATE", optionId: opt.nego }); break;
         case "STOVE": {
+          // 상무는 지원해서 뽑혀야 간다 — 병역 미해결이면 해마다 지원해 본다
+          if (opt.military === "SANGMU" && canVolunteer(g) && !g.sangmuApplied) {
+            act({ type: "APPLY_SANGMU" });
+            break;
+          }
           const t = g.pendingTransfers;
           if (!g.transferRequested && t?.length && rng.next() < opt.transfer) act({ type: "REQUEST_TRANSFER", teamId: t[rng.int(0, t.length - 1)].teamId });
           else act({ type: "SKIP_STOVE" });
@@ -149,7 +157,7 @@ for (const g of finals) {
 }
 
 const allPhases = ["EVENT","HS_SEASON","PATH_CHOICE","COLLEGE_SEASON","DRAFT","SPRING_CAMP","FIRST_HALF","ALL_STAR","POSTSEASON","SEASON_END","INTERNATIONAL","MILITARY_CHOICE","MILITARY_SEASON","NEGOTIATION","STOVE","FA","RETIRE_CHOICE","SECOND_LIFE","RETIRED"];
-const allActions = ["TRADE_DECIDE","CHOOSE_EVENT","SIM_AMATEUR","CHOOSE_PATH","DO_DRAFT","TRAIN","PLAY_FIRST_HALF","PLAY_SECOND_HALF","PLAY_POSTSEASON","FINISH_SEASON","JOIN_NATIONAL","ENLIST","SERVE","NEGOTIATE","REQUEST_TRANSFER","VOLUNTEER_ARMY","SKIP_STOVE","ACCEPT_OFFER","DEFER_FA","RETIRE","KEEP_PLAYING","CHOOSE_SECOND_LIFE","HOF_BALLOT"];
+const allActions = ["TRADE_DECIDE","CHOOSE_EVENT","SIM_AMATEUR","CHOOSE_PATH","DO_DRAFT","TRAIN","PLAY_FIRST_HALF","PLAY_SECOND_HALF","PLAY_POSTSEASON","FINISH_SEASON","JOIN_NATIONAL","ENLIST","SERVE","NEGOTIATE","REQUEST_TRANSFER","APPLY_SANGMU","SKIP_STOVE","ACCEPT_OFFER","DEFER_FA","RETIRE","KEEP_PLAYING","CHOOSE_SECOND_LIFE","HOF_BALLOT"];
 
 console.log(`■ 스트레스 테스트 — 커리어 ${finals.length}개, 예외 ${crashes}, 정지 ${stuck}\n`);
 console.log(`  거치지 않은 단계: ${allPhases.filter((p) => !phaseSeen.has(p) && p !== "RETIRED").join(", ") || "없음"}`);

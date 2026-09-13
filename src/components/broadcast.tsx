@@ -4,9 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { fmt2, fmt3 } from "./stats";
 import { isHitterLine, mergeLines } from "@/lib/sim";
 import { TOURNAMENTS } from "@/lib/national";
+import { formatMoney } from "@/lib/career";
 import { teamById } from "@/lib/teams";
 import type {
-  AmateurTournament, GameState, HitterLine, PitcherLine, StatLine, TournamentSlot,
+  AmateurTournament, GameState, HitterLine, MonthLine, PitcherLine, StatLine, TournamentSlot,
 } from "@/lib/types";
 
 export type BroadcastKind = "H1" | "H2" | "PS" | "HS" | "INTL";
@@ -16,6 +17,8 @@ type Step =
   | { kind: "card"; icon: string; title: string; body: string; tone: "good" | "bad" | "epic" | "neutral" }
   | { kind: "round"; name: string; opponent: string; win: boolean; score: string }
   | { kind: "hs"; t: AmateurTournament }
+  /** 엔트리 이동 통보 — 콜업·말소는 커리어가 꺾이는 순간이라 따로 보여준다 */
+  | { kind: "move"; move: NonNullable<MonthLine["move"]>; month: string; teamName: string }
   /** 올스타전 · 국제대회 한 경기 */
   | { kind: "game"; tag: string; round: string; opponent: string; won: boolean; score: string; line: StatLine; mvp?: boolean; appeared?: boolean };
 
@@ -23,6 +26,8 @@ type Mood = "hot" | "cold" | "normal" | "out";
 
 const MONTH_MS = 1500;
 const CARD_MS = 2000;
+/** 엔트리 이동은 놓치면 안 되는 통보라 조금 더 오래 둔다 */
+const MOVE_MS = 2600;
 
 /* ------------------------------------------------------------------ */
 
@@ -149,17 +154,21 @@ function buildSteps(g: GameState, kind: BroadcastKind): Step[] {
   const base: StatLine[] = kind === "H2" && g.halfLine ? [g.halfLine] : [];
   // 3월에 열리는 대회(WBC)는 개막 전이므로 월별 기록보다 앞에 온다
   const steps: Step[] = [];
-  steps.push(...months.map((m, i) => {
+  const teamName = g.contract ? teamById(g.contract.teamId).name : "";
+  for (let i = 0; i < months.length; i++) {
+    const m = months[i];
     const mood = moodOf(m.line);
-    return {
-      kind: "month" as const,
+    steps.push({
+      kind: "month",
       label: m.label,
       line: m.line,
       cume: mergeLines([...base, ...months.slice(0, i + 1).map((x) => x.line)]),
       mood,
       note: noteOf(m.line, mood, g.seed + i),
-    };
-  }));
+    });
+    // 그 달이 끝나고 엔트리가 바뀌었다면 바로 이어서 통보한다
+    if (m.move) steps.push({ kind: "move", move: m.move, month: m.label, teamName });
+  }
 
   if (kind === "H1") {
     // 올스타 브레이크 — 선정 발표가 먼저, 경기는 그 다음이다
@@ -202,7 +211,7 @@ export function Broadcast({ g, kind, onDone }: {
       const t = setTimeout(onDone, 450);
       return () => clearTimeout(t);
     }
-    const dur = steps[i].kind === "month" ? MONTH_MS : CARD_MS;
+    const dur = steps[i].kind === "month" ? MONTH_MS : steps[i].kind === "move" ? MOVE_MS : CARD_MS;
     const t = setTimeout(() => setI((v) => v + 1), dur);
     return () => clearTimeout(t);
   }, [i, steps, onDone]);
@@ -217,7 +226,7 @@ export function Broadcast({ g, kind, onDone }: {
     : g.seasonLevel === "KBO" ? "1군" : g.seasonLevel === "MINOR" ? "2군" : null;
   const step = steps[Math.min(i, steps.length - 1)];
   if (!step) return null;
-  const stepMs = step.kind === "month" ? MONTH_MS : CARD_MS;
+  const stepMs = step.kind === "month" ? MONTH_MS : step.kind === "move" ? MOVE_MS : CARD_MS;
 
   return (
     <div className="flex min-h-[62vh] flex-col justify-center px-4 py-6">
@@ -264,6 +273,7 @@ export function Broadcast({ g, kind, onDone }: {
           {step.kind === "round" && <RoundPanel key={`r${i}`} step={step} />}
           {step.kind === "hs" && <HsPanel key={`h${i}`} step={step} />}
           {step.kind === "game" && <GamePanel key={`g${i}`} step={step} />}
+          {step.kind === "move" && <MovePanel key={`v${i}`} step={step} />}
         </div>
       </div>
 
@@ -280,6 +290,37 @@ const MOOD_STYLE: Record<Mood, { badge: string; color: string }> = {
   normal: { badge: "— 평범", color: "rgba(255,255,255,0.75)" },
   out: { badge: "🏥 결장", color: "#ffb4a2" },
 };
+
+/** 1군 콜업 · 2군 말소 통보 */
+function MovePanel({ step }: { step: Extract<Step, { kind: "move" }> }) {
+  const up = step.move.type === "UP";
+  return (
+    <div className="pop text-center">
+      <div className="text-[40px] leading-none">{up ? "⬆️" : "⬇️"}</div>
+      <div className="mt-2 text-[10px] font-black uppercase tracking-[0.2em] opacity-60">
+        {step.teamName} · {step.month} 종료
+      </div>
+      <div className="mt-1 text-[24px] font-black" style={{ color: up ? "#ffd166" : "#ffb4a2" }}>
+        {up ? "1군 엔트리 등록" : "1군 엔트리 말소"}
+      </div>
+      <p className="mt-1.5 text-[12.5px] leading-relaxed opacity-85">
+        {up
+          ? `${step.move.role}(으)로 1군에 올라갑니다.`
+          : "2군에서 다시 준비합니다."}
+      </p>
+      <div className="mt-3 inline-flex items-center gap-2 rounded-xl bg-white/12 px-3.5 py-2 text-[12px] font-extrabold">
+        <span className="opacity-70">{up ? "2군" : "1군"}</span>
+        <span className="opacity-50">→</span>
+        <span>{up ? "1군" : "2군"} {step.move.role}</span>
+      </div>
+      {step.move.salary !== undefined && (
+        <div className="mt-2 text-[12px] font-bold" style={{ color: "#ffd166" }}>
+          1군 등록으로 연봉 조정 · {formatMoney(step.move.salary)}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function MonthPanel({ step }: { step: Extract<Step, { kind: "month" }> }) {
   const m = MOOD_STYLE[step.mood];

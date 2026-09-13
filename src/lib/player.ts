@@ -345,10 +345,10 @@ export function rollCandidate(opts: CreateOptions, rng: RNG): Player {
 
   for (const k of keys) {
     const w = (style.weights[k] ?? 0) + (slot?.weights[k] ?? 0);
-    const base = 44 + w * 0.9 + rng.normal() * 7 + (talent - 1) * 14 - bias * 7;
+    const base = 52 + w * 0.9 + rng.normal() * 7 + (talent - 1) * 14 - bias * 7;
     const cur = clamp(Math.round(base), 22, 80);
     // 포텐셜은 현재치 + 재능/랜덤
-    const room = 10 + talent * 26 + rng.float(0, 18) + (w > 0 ? 8 : 0) + bias * 9;
+    const room = 4 + talent * 21 + rng.float(0, 15) + (w > 0 ? 7 : 0) + bias * 8;
     setAb(abilities, k, cur);
     setAb(potential, k, clamp(Math.round(cur + room), cur + 5, ABILITY_MAX));
   }
@@ -503,8 +503,10 @@ export function developmentRate(
 ): number {
   if (!level) return 1;
   switch (level) {
-    case "HS": return 1.15;
-    case "COLLEGE": return 1.25;
+    // 아마추어 시절은 출발점이 이미 높은 대신 성장 폭을 줄였다 —
+    // 대학 한 시즌에 OVR이 +16씩 뛰면 성장이 아니라 순간이동처럼 보인다
+    case "HS": return 0.78;
+    case "COLLEGE": return 0.88;
     case "MINOR":
       // 유망주 구간에서만 퓨처스 풀타임의 이점이 크다
       if (age <= 21) return 1.4;
@@ -514,10 +516,10 @@ export function developmentRate(
     case "KBO": {
       // 입지가 단단할수록 전담 코치가 붙고 실전 기회도 많다
       const tier = roleTier(role);
-      if (tier >= 6) return 1.24; // 간판·에이스 — 구단이 전력으로 관리한다
-      if (tier >= 5) return 1.16;
-      if (tier >= 4) return 1.08;
-      if (tier >= 3) return 1.02;
+      if (tier >= 6) return 1.15; // 간판·에이스 — 구단이 전력으로 관리한다
+      if (tier >= 5) return 1.09;
+      if (tier >= 4) return 1.04;
+      if (tier >= 3) return 1.0;
       return 0.94; // 백업·추격조는 출장이 적어 실전 성장이 더디다
     }
     default: return 1;
@@ -543,7 +545,7 @@ export function grow(
    */
   const breakable = p.age <= 31;
   const breakOdds = clamp(
-    (p.trait === "latebloom" ? 0.34 : p.trait === "genius" ? 0.28 : 0.2)
+    (p.trait === "latebloom" ? 0.26 : p.trait === "genius" ? 0.22 : 0.15)
     * (0.6 + p.talent * 0.5) * devRate,
     0.06, 0.8,
   );
@@ -568,7 +570,7 @@ export function grow(
     if (af > 0) {
       // 성장기: 포텐셜에 가까울수록 둔화
       // 어릴수록·전성기일수록 훈련 효과가 크다 (30세를 넘기면 효율이 떨어진다)
-      const trainBoost = p.age <= 23 ? 1.45 : p.age <= 27 ? 1.3 : p.age <= 29 ? 1.12 : 0.9;
+      const trainBoost = p.age <= 23 ? 1.28 : p.age <= 27 ? 1.14 : p.age <= 29 ? 1.0 : 0.82;
       d = (af * (1.0 + headroom * 1.8) * (0.72 + p.talent * 0.42)
         + focused * effBonus * trainBoost * (0.45 + headroom * 0.7)) * devRate;
       d += rng.normal() * 1.3;
@@ -583,7 +585,11 @@ export function grow(
         + focused * effBonus * guard * (pot > cur ? 1 : 0.45);
       d += rng.normal() * 0.7;
     }
-    const next = clamp(Math.round(cur + d), 15, af > 0 ? pot : ABILITY_MAX);
+    // 한 오프시즌에 능력치가 +20씩 뛰면 성장이 아니라 순간이동이다.
+    // 실제로는 한 해에 한 항목이 크게 좋아져도 그 폭이 제한적이다.
+    const capUp = focus?.targets.includes(k) ? 8 : 5;
+    const capped = clamp(d, -12, capUp);
+    const next = clamp(Math.round(cur + capped), 15, af > 0 ? pot : ABILITY_MAX);
     if (next !== cur) deltas[k] = next - cur;
     setAb(p.abilities, k, next);
   }
