@@ -495,21 +495,30 @@ function buildNegotiation(s: GameState, rec: SeasonRecord): Negotiation {
     0.1, 0.85,
   );
 
+  /** 만원 단위로 다듬고 상·하한을 지킨다 */
+  const money = (v: number) => clamp(Math.round(v / 100) * 100, MIN_SALARY, cap);
+
   const options: NegotiationOption[] = [
     {
       id: "accept", label: "구단 제시액 수용",
       desc: "군말 없이 사인한다. 구단과의 관계가 좋아진다.",
-      odds: 1, upside: 1, downside: 1, trustOnSuccess: 3, trustOnFail: 0,
+      odds: 1, onSuccess: offer, onFail: offer, trustOnSuccess: 3, trustOnFail: 0,
     },
     {
       id: "push", label: "재협상 요구",
       desc: "성적을 근거로 인상을 요구한다. 무리하면 관계가 나빠진다.",
-      odds: leverage, upside: 1.18, downside: 0.97, trustOnSuccess: -2, trustOnFail: -7,
+      odds: leverage,
+      onSuccess: money(offer * 1.18),
+      // 판이 깨지면 구단이 칼을 빼 든다 — 직전 연봉보다 깎인다
+      onFail: money(Math.min(offer * 0.97, prev * 0.93)),
+      trustOnSuccess: -2, trustOnFail: -7,
     },
     {
       id: "arbitration", label: "연봉조정 신청",
       desc: "구단과 끝까지 맞선다. 이기면 크게 오르지만 지면 타격이 크다.",
-      odds: clamp(leverage * 0.55, 0.05, 0.55), upside: 1.45, downside: 0.86,
+      odds: clamp(leverage * 0.55, 0.05, 0.55),
+      onSuccess: money(offer * 1.62),
+      onFail: money(Math.min(offer * 0.86, prev * 0.80)),
       trustOnSuccess: -8, trustOnFail: -18,
     },
   ];
@@ -1754,10 +1763,7 @@ export function advance(prev: GameState, action: Action): GameState {
         const success = opt.id === "accept" || rng.chance(opt.odds);
         const trustBefore = s.trust;
         const cap = MAX_SALARY;
-        const next = clamp(
-          Math.round((nego.offer * (success ? opt.upside : opt.downside)) / 100) * 100,
-          MIN_SALARY, cap,
-        );
+        const next = clamp(success ? opt.onSuccess : opt.onFail, MIN_SALARY, cap);
         s.contract.salary = next;
         s.trust = clamp(s.trust + (success ? opt.trustOnSuccess : opt.trustOnFail), 0, 100);
         const diff = next - nego.previous;

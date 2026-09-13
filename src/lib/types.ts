@@ -561,10 +561,10 @@ export interface NegotiationOption {
   desc: string;
   /** 성공 확률 (0~1). accept는 1 */
   odds: number;
-  /** 성공 시 제시액 대비 배수 */
-  upside: number;
-  /** 실패 시 제시액 대비 배수 */
-  downside: number;
+  /** 성공했을 때 받는 금액 (만원) */
+  onSuccess: number;
+  /** 실패했을 때 받는 금액 (만원) — 요구가 셀수록 직전 연봉보다 크게 깎인다 */
+  onFail: number;
   trustOnSuccess: number;
   trustOnFail: number;
 }

@@ -207,9 +207,9 @@ export function simPitcher(inp: SimInput): PitcherLine {
 
   let g: number, gs: number, ip: number;
   if (isSP) {
-    gs = allocate(inp, 29 * availability);
+    gs = allocate(inp, 30 * availability);
     g = gs;
-    const ipPerStart = clamp(5.6 + 1.8 * n50(a("stamina")), 3.6, 7.4);
+    const ipPerStart = clamp(5.75 + 1.95 * n50(a("stamina")), 3.6, 7.4);
     ip = Math.round(gs * ipPerStart * 10) / 10;
   } else if (isCP) {
     g = allocate(inp, 58 * availability);
@@ -299,9 +299,9 @@ function leagueLeaders(rng: RNG) {
     avg: rng.float(0.330, 0.368),
     rbi: rng.int(112, 142),
     sb: rng.int(34, 58),
-    w: rng.int(13, 17),
+    w: rng.int(13, 16),
     era: rng.float(2.35, 3.15),
-    so: rng.int(138, 180),
+    so: rng.int(146, 190),
     sv: rng.int(28, 40),
     hld: rng.int(26, 36),
   };
@@ -337,8 +337,11 @@ export function judgeAwards(
     if (line.so >= lead.so) out.push("탈삼진왕");
     if (line.sv >= lead.sv) out.push("세이브왕");
     if (line.hld >= lead.hld) out.push("홀드왕");
-    if (line.war >= 3.8 && rng.chance(0.6)) out.push("골든글러브");
-    if (line.war >= 5.4 && rng.chance(0.65)) out.push("정규시즌 MVP");
+    // 투수 WAR는 구조적으로 타자보다 천장이 낮다(상위3% 4.7 vs 5.9).
+    // 같은 문턱을 쓰면 투수가 MVP를 거의 못 받는다 — 자리마다 문턱을 따로 둔다.
+    // 골든글러브는 투수 1자리뿐이다(타자는 포지션별 9자리) — 더 희소하게
+    if (line.war >= 3.7 && rng.chance(0.42)) out.push("골든글러브");
+    if (line.war >= 4.6 && rng.chance(0.65)) out.push("정규시즌 MVP");
     if (isRookie && line.war >= 1.8 && rng.chance(0.75)) out.push("신인왕");
   }
   // 중요한 상이 앞에 오도록 정렬

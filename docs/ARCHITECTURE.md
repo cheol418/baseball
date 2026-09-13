@@ -151,8 +151,8 @@ npx tsx scripts/audit.ts      # ★ 288개 커리어 전 경로 스트레스 테
 |---|---|
 | 성장·능력 | `balance` `potcap` `aging` `devrate` `training` `hellcheck` `styles` |
 | 진입·데뷔 | `draft` `draftscore` `debut` `rookieyear` `rookiestat` `amateur` |
-| 시즌·기록 | `statdist` `games` `totals` `war` `park` `awards` `goals` `allstar` |
-| 커리어 운영 | `salary` `fa` `transfer` `transferodds` `transfersweep` `roles` `roster` |
+| 시즌·기록 | `statdist` `games` `totals` `war` `park` `awards` `titles` `goals` `allstar` |
+| 커리어 운영 | `salary` `nego` `fa` `transfer` `transferodds` `transfersweep` `roles` `roster` |
 | 병역·국제 | `service` `sangmu` `national` `intlline` |
 | 시스템 | `systems` `features` `notices` `legacy` `migration` `check` |
 

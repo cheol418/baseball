@@ -808,17 +808,16 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
                   )}
                 </div>
                 <div className="mt-0.5 text-[12px] text-[var(--ink-3)]">{o.desc}</div>
-                {o.id !== "accept" && (() => {
-                  const cap = g.faUsed === 0 ? Math.min(150000, MAX_SALARY) : MAX_SALARY;
-                  const at = (m: number) => Math.min(cap, Math.round(n.offer * m));
-                  return (
-                    <div className="tabular mt-1.5 text-[11px] font-bold">
-                      <span className="text-[var(--brand-2)]">성공 {formatMoney(at(o.upside))}</span>
-                      <span className="mx-1.5 text-[var(--ink-3)]">/</span>
-                      <span className="text-[var(--danger)]">실패 {formatMoney(at(o.downside))}</span>
-                    </div>
-                  );
-                })()}
+                {o.id !== "accept" && (
+                  <div className="tabular mt-1.5 text-[11px] font-bold">
+                    <span className="text-[var(--brand-2)]">성공 {formatMoney(o.onSuccess)}</span>
+                    <span className="mx-1.5 text-[var(--ink-3)]">/</span>
+                    <span className="text-[var(--danger)]">
+                      실패 {formatMoney(o.onFail)}
+                      {o.onFail < n.previous && " ↓"}
+                    </span>
+                  </div>
+                )}
               </button>
             ))}
           </div>
