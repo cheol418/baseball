@@ -2,7 +2,7 @@ import { RNG, clamp } from "./rng";
 import { overall } from "./player";
 import { emptyLine, isHitterLine, mergeLines, oneGameShare, simHitter, simPitcher } from "./sim";
 import type {
-  GameState, IntlGame, IntlResult, MilitaryStatus, PitcherLine, Player, StatLine,
+  GameState, HitterLine, IntlGame, IntlResult, MilitaryStatus, PitcherLine, Player, StatLine,
   Tournament, TournamentId,
 } from "./types";
 
@@ -42,6 +42,34 @@ export function tournamentOf(year: number): Tournament | null {
   return TOURNAMENTS.WBC;
 }
 
+/**
+ * 포지션별 경쟁률.
+ *
+ * 대표팀 엔트리는 자리마다 뽑는 인원이 다르다.
+ * 투수는 10명 넘게 뽑지만 포수는 두세 명, 지명타자는 한 자리뿐이다.
+ * 그래서 같은 기량이라도 포수는 쉽게 뽑히고 지명타자는 훨씬 어렵다.
+ *
+ * 값이 클수록 뽑히기 쉽다.
+ */
+const POS_SLOTS: Record<string, number> = {
+  // 선발 로테이션과 불펜을 합쳐 가장 많이 뽑는다
+  SP: 6, RP: 3, CP: 2,
+  // 안방은 자리가 적지만 대체 자원도 적어 한 명은 반드시 들어간다
+  C: 5,
+  // 중앙 내야·외야는 수비 때문에 여러 명을 데려간다
+  SS: 4, "2B": 3, CF: 4,
+  // 코너는 타격으로만 경쟁한다
+  "3B": 2, LF: 1, RF: 1, "1B": 0, DH: -3,
+};
+
+/**
+ * 수비 부담이 큰 자리는 방망이 기준이 낮다.
+ * 포수를 타율로 뽑지는 않는다 — 안방을 볼 수 있으면 타격이 약해도 데려간다.
+ */
+const BAR_RELIEF: Record<string, number> = {
+  C: 7, SS: 4, CF: 2, "2B": 2, "3B": 1,
+};
+
 /** 대표팀 발탁 여부 */
 export function isCalledUp(s: GameState, t: Tournament, rng: RNG): boolean {
   const p = s.player;
@@ -50,16 +78,39 @@ export function isCalledUp(s: GameState, t: Tournament, rng: RNG): boolean {
   if (!kbo.length) return false;
 
   const last = kbo[kbo.length - 1];
+  // 직전 시즌을 2군에서 보냈다면 뽑히지 않는다
+  if (s.seasons[s.seasons.length - 1]?.level !== "KBO") return false;
+
   const ovr = overall(p);
-  let score = (ovr - t.bar) * 1.1 + last.line.war * 2.2 + p.fame * 0.06;
+  let score = (ovr - t.bar) * 1.1 + last.line.war * 1.5 + p.fame * 0.06;
+
+  /**
+   * 대표팀은 WAR로 뽑지 않는다.
+   * 홈런왕·타점왕을 수비 가치가 낮다는 이유로 빼지는 않으므로,
+   * **눈에 보이는 성적**(타이틀·홈런·타점·승·세이브)을 크게 본다.
+   * 이게 없으면 지명타자·1루수가 구조적으로 불리해진다.
+   */
+  const l = last.line as HitterLine & PitcherLine;
+  if (l.pa !== undefined) {
+    score += Math.max(0, l.hr - 18) * 0.34 + Math.max(0, l.rbi - 75) * 0.07
+      + Math.max(0, (l.ops - 0.82) * 22);
+  } else {
+    score += Math.max(0, l.w - 9) * 0.7 + Math.max(0, l.sv - 18) * 0.35
+      + Math.max(0, (3.9 - l.era) * 2.4) + Math.max(0, l.so - 120) * 0.02;
+  }
+  // 타이틀은 대표팀 선발의 가장 확실한 근거다
+  const titles = last.awards.filter((a) => a.endsWith("왕") || a.includes("MVP")).length;
+  score += titles * 7 + last.awards.length * 2;
+  if (last.allStar) score += 3;
+  // 자리마다 뽑는 인원이 다르다 — 포수는 한 명은 들어가고 지명타자는 한 자리를 다툰다
+  score += POS_SLOTS[p.position] ?? 0;
+  score += (BAR_RELIEF[p.position] ?? 0) * 1.1;
+
   // 아시안게임은 병역 미필 유망주를 대거 뽑는다 (실제 대표팀 구성과 같은 이유)
   if (t.id === "ASIAN_GAMES" && s.military === "PENDING" && p.age <= 27) score += 8;
   if (t.id === "ASIAN_GAMES" && p.age >= 30) score -= 6;
-  if (last.awards.length) score += last.awards.length * 3;
-  // 2군에 머문 시즌 뒤에는 뽑히지 않는다
-  if (last.level !== "KBO") return false;
 
-  return rng.next() < clamp(0.03 + score * 0.026, 0.01, 0.75);
+  return rng.next() < clamp(0.03 + score * 0.026, 0.01, 0.82);
 }
 
 /** 대회별 일정 — 라운드 이름과 상대 후보 */

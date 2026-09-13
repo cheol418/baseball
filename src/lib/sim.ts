@@ -96,9 +96,16 @@ export function simHitter(inp: SimInput): HitterLine {
     (0.300 + 0.048 * n50(a("contact")) * cond + 0.030 * n50(a("speed")) + rng.normal() * 0.017) * parkHit,
     0.21, 0.42,
   );
+  /**
+   * 타구당 홈런율.
+   *
+   * 파워를 끝까지 올린 보람이 있어야 한다 — 실제 KBO 홈런왕은 35~50개다
+   * (2024 디아즈 50 · 데이비슨 46). 파워가 주도하되, 맞혀야 넘길 수 있으므로
+   * 컨택도 함께 본다.
+   */
   const hrPerBall = clamp(
-    (0.030 + 0.055 * n50(a("power")) * cond + 0.005 * n50(a("contact")) + rng.normal() * 0.006) * parkHr,
-    0.001, 0.17,
+    (0.014 + 0.100 * n50(a("power")) * cond + 0.016 * n50(a("contact")) + rng.normal() * 0.006) * parkHr,
+    0.001, 0.22,
   );
 
   // 올스타전·국제대회처럼 한두 경기만 떼어 돌릴 때도 타석은 나와야 한다

@@ -428,8 +428,36 @@ function buildNegotiation(s: GameState, rec: SeasonRecord): Negotiation {
     : roleTier(rec.role) >= 5 ? 0.09
       : roleTier(rec.role) >= 4 ? 0.04 : 0;
 
-  let mult = 0.95 + clamp(war * 0.075, -0.3, 0.6)
-    + awardWeight + intlWeight + asWeight + milWeight + roleWeight;
+  /**
+   * 눈에 보이는 성적. WAR만 보면 지명타자·1루수가 같은 활약을 하고도
+   * 구조적으로 헐값이 된다 — 구단은 홈런과 타점으로도 지갑을 연다.
+   */
+  const l = rec.line as HitterLine & PitcherLine;
+  const statWeight = l.pa !== undefined
+    ? Math.max(0, l.hr - 22) * 0.007 + Math.max(0, l.rbi - 85) * 0.0016
+      + Math.max(0, (l.avg - 0.305) * 1.1) + Math.max(0, (l.ops - 0.870) * 0.8)
+    : Math.max(0, l.w - 11) * 0.015 + Math.max(0, l.sv - 22) * 0.008
+      + Math.max(0, l.hld - 20) * 0.006 + Math.max(0, (3.70 - l.era) * 0.07)
+      + Math.max(0, l.ip - 155) * 0.0008;
+
+  // 젊을수록 앞으로가 길어 값을 더 쳐준다
+  const ageWeight = s.player.age <= 25 ? 0.08 : s.player.age <= 28 ? 0.04
+    : s.player.age <= 31 ? 0 : s.player.age <= 34 ? -0.05 : -0.10;
+
+  // 가을야구에서의 활약과 우승 반지
+  const ps = rec.ps;
+  const psWeight = (rec.champion ? 0.06 : 0)
+    + (ps ? clamp(ps.line.war * 0.05, 0, 0.08) : 0);
+
+  // 한 시즌을 온전히 뛰었는가 — 자주 빠지면 구단이 값을 낮춘다
+  const healthWeight = clamp((s.seasonAvailability - 0.82) * 0.35, -0.12, 0.04);
+
+  // 인지도는 티켓·굿즈로 이어진다
+  const fameWeight = clamp((s.player.fame - 55) * 0.0016, -0.05, 0.08);
+
+  let mult = 0.95 + clamp(war * 0.055, -0.3, 0.45)
+    + awardWeight + intlWeight + asWeight + milWeight + roleWeight
+    + statWeight + ageWeight + psWeight + healthWeight + fameWeight;
   if (rec.level !== "KBO") mult = Math.min(mult, 1.05);
   if (s.serviceYears <= 2) mult = Math.min(mult, 2.4);
   // 실제 KBO 연봉 구조 — 최저연봉 근처는 조금만 잘해도 크게 오르고,
@@ -452,7 +480,7 @@ function buildNegotiation(s: GameState, rec: SeasonRecord): Negotiation {
   // 인상률만으로는 연봉이 복리로 불어나 결국 상한에 붙는다.
   // 실제 구단은 "지금 이 선수의 값어치"를 기준으로 다시 계산하므로,
   // 직전 연봉에서 출발한 금액을 적정 몸값 쪽으로 끌어당긴다.
-  const fair = clamp(marketValue(s) * 0.37, MIN_SALARY, cap);
+  const fair = clamp(marketValue(s) * 0.30, MIN_SALARY, cap);
   const raised = prev * mult * star;
   // 연차가 쌓일수록 시장가에 가깝게 평가받는다
   const pull = clamp(0.22 + s.serviceYears * 0.035, 0.22, 0.55);
@@ -502,8 +530,32 @@ function marketValue(s: GameState): number {
   // 태극마크 경력은 시장에서 프리미엄이 붙는다
   const medals = s.intlResults.filter((r) => r.medal).length;
   const intlFactor = 1 + Math.min(0.15, medals * 0.04);
+
+  /**
+   * 구단은 WAR로만 지갑을 열지 않는다.
+   * 홈런왕·타점왕을 수비 가치가 낮다는 이유로 싸게 사지는 못하므로
+   * **눈에 보이는 성적**을 따로 친다. 이게 없으면 지명타자·1루수가
+   * 같은 활약을 하고도 구조적으로 헐값이 된다.
+   */
+  let counting = 0;
+  for (const r of recent) {
+    const l = r.line as HitterLine & PitcherLine;
+    if (l.pa !== undefined) {
+      counting += Math.max(0, l.hr - 20) * 210 + Math.max(0, l.rbi - 80) * 42
+        + Math.max(0, (l.ops - 0.83) * 14000);
+    } else {
+      counting += Math.max(0, l.w - 10) * 480 + Math.max(0, l.sv - 20) * 260
+        + Math.max(0, (3.9 - l.era) * 1600);
+    }
+  }
+  counting /= Math.max(1, recent.length);
+  // 타이틀은 몸값의 가장 확실한 근거다
+  const titles = recent.reduce((a, r) =>
+    a + r.awards.filter((x) => x.endsWith("왕") || x.includes("MVP")).length, 0);
+
   return clamp(
-    (recentWar * 9000 + (ovr - 72) * 1200 + s.player.fame * 185) * ageP * milFactor * intlFactor,
+    (recentWar * 9000 + (ovr - 72) * 1200 + s.player.fame * 185 + counting + titles * 4200)
+      * ageP * milFactor * intlFactor,
     4000, MAX_SALARY,
   );
 }
@@ -515,12 +567,22 @@ function buildOffer(s: GameState, t: Team, base: number, ageP: number, rng: RNG,
     : clamp(Math.round(ageP * 4 + rng.float(-1, 1.4)), 1, 6);
 
   const total = clamp(Math.round((base * years * fit) / 500) * 500, MIN_SALARY, MAX_SALARY * 6);
-  // 나이가 많고 부상 이력이 있을수록 옵션 비중이 커진다 — 구단이 위험을 나눠 진다
+  /**
+   * 옵션 비중 — 구단이 위험을 얼마나 나눠 지려 하는가.
+   *
+   * 원소속팀은 그 선수를 가장 잘 안다. 몸 상태도, 성실함도 겪어봤으니
+   * 굳이 옵션으로 걸지 않고 보장으로 안긴다 — 실제 잔류 계약이 그렇다.
+   * 반대로 타팀은 검증이 덜 돼 있어 옵션을 크게 건다.
+   * 자금이 넉넉한 구단일수록 보장을 늘리고, 쪼들리는 구단은 옵션으로 미룬다.
+   */
   const durability = getAb(s.player.abilities, "durability" as never);
-  const optionRate = clamp(
-    0.08 + (s.player.age - 30) * 0.022 + (55 - durability) * 0.003 + rng.float(-0.02, 0.04),
-    0.04, 0.38,
-  );
+  const optionRate = homeTeam
+    ? clamp(0.02 + (s.player.age - 34) * 0.012 + (50 - durability) * 0.002, 0, 0.12)
+    : clamp(
+      0.14 + (s.player.age - 30) * 0.022 + (55 - durability) * 0.003
+      + (70 - t.money) * 0.0035 + rng.float(-0.02, 0.05),
+      0.05, 0.42,
+    );
   const incentive = Math.round((total * optionRate) / 500) * 500;
   const signingBonus = Math.round(((total - incentive) * 0.35) / 500) * 500;
   const salary = clamp(
