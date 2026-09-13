@@ -154,7 +154,7 @@ npx tsx scripts/audit.ts      # ★ 288개 커리어 전 경로 스트레스 테
 | 시즌·기록 | `statdist` `games` `totals` `war` `park` `awards` `titles` `goals` `allstar` |
 | 커리어 운영 | `salary` `nego` `fa` `transfer` `transferodds` `transfersweep` `roles` `roster` |
 | 병역·국제 | `service` `sangmu` `national` `intlline` |
-| 시스템 | `systems` `features` `notices` `legacy` `migration` `check` |
+| 시스템 | `systems` `features` `notices` `textcheck` `legacy` `migration` `check` |
 
 `autoplay.ts`는 나머지 스크립트가 공유하는 자동 플레이 엔진이다.
 **새 phase·action을 만들면 `autoplay.ts`와 `audit.ts`의 switch에 반드시 추가한다.**

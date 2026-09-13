@@ -692,8 +692,9 @@ function openSeason(s: GameState, rng: RNG, campInjury = 0, availCap = 1) {
     s.contract!.role = role;
   }
   const inj = rollInjury(s.player, rng);
+  const carried = s.nextSeasonAvailability;
   s.seasonAvailability = clamp(
-    inj.availability * (1 - campInjury) * s.nextSeasonAvailability * availCap, 0.05, 1,
+    inj.availability * (1 - campInjury) * carried * availCap, 0.05, 1,
   );
   s.nextSeasonAvailability = 1;
   s.seasonNote = inj.note;
@@ -703,9 +704,16 @@ function openSeason(s: GameState, rng: RNG, campInjury = 0, availCap = 1) {
     s.seasonLevel = "MINOR";
     s.seasonRole = minorRoleOf(s.player);
     if (s.contract) s.contract.role = s.seasonRole;
+    // 가동률이 떨어지는 원인은 셋이다 — 시즌 부상뿐 아니라
+    // 스프링캠프에서 다쳤거나, 지난 시즌 부상의 재활이 넘어왔을 수도 있다.
+    // 시즌 부상만 전제하면 문구에 빈칸(null)이 박힌다. (실제로 겪음)
+    const reason = inj.note
+      ?? (campInjury > 0 ? "스프링캠프에서 다친 몸이 아직 올라오지 않았습니다."
+        : carried < 1 ? "지난 시즌 부상의 재활이 해를 넘겼습니다."
+          : "몸 상태가 1군에서 뛸 수준에 미치지 못합니다.");
     notify(s, {
       icon: "🏥", eyebrow: "Injury", title: "부상자 명단 등재", tone: "bad",
-      body: `${inj.note} 1군 엔트리에서 말소되고 2군에서 재활에 들어갑니다.`
+      body: `${reason} 1군 엔트리에서 말소되고 2군에서 재활에 들어갑니다.`
         + " 몸이 올라오면 다시 콜업될 수 있습니다.",
       change: [{ label: "소속", from: "1군", to: "2군 재활" }],
     });

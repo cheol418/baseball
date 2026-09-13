@@ -22,6 +22,7 @@ npx tsx scripts/features.ts   # 이벤트 체인·목표·대기록 발생률
 npx tsx scripts/war.ts        # WAR가 세이버메트릭스 표준식과 맞는지
 npx tsx scripts/training.ts   # 훈련 선택지별 성장량 비교
 npx tsx scripts/hellcheck.ts  # 지옥 훈련이 항상 최고인지 (1500건 전수)
+npx tsx scripts/textcheck.ts  # 화면 문구에 null/undefined가 박히는지 (25만건)
 ```
 
 **`audit.ts`는 어떤 변경 후에도 돌린다.** 예외 0 · 무한정지 0 · 이상값 0 · 전 단계 도달이 기준선이다.
@@ -185,7 +186,8 @@ UI는 `src/app/page.tsx`(홈) · `create/page.tsx`(4단계 생성) · `play/[id]
 `draftscore`(고교 성적 ↔ 지명 예상), `rookieyear`(신인 첫 시즌 소속),
 `rookiestat`(신인 성적·훈련 상승폭), `sangmu`(상무 지원), `notices`(통보 발생),
 `hellcheck`(지옥 훈련 도박 균형), `transferodds`(표기 확률 ↔ 실제 성사율),
-`service`(복무 기간·복귀 시점), `school`(학교 전력 효과)을 쓴다.
+`service`(복무 기간·복귀 시점), `school`(학교 전력 효과),
+`titles`(성적 대비 수상), `nego`(협상 도박 균형), `textcheck`(문구 빈칸)을 쓴다.
 
 ## 문서
 
