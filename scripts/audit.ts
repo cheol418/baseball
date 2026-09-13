@@ -136,7 +136,8 @@ for (const g of finals) {
   for (const s of g.seasons) {
     const l = s.line;
     if (isHitterLine(l)) {
-      if (l.pa >= 100 && l.avg > 0.45) add("타율 이상", `${s.year} ${l.avg} (${l.pa}타석)`);
+      // 부분 출장 시즌은 월별 추첨이 겹쳐 편차가 크다 — 규정타석 근처에서만 본다
+      if (l.pa >= 350 && l.avg > 0.42) add("타율 이상", `${s.year} ${l.avg} (${l.pa}타석)`);
       if (l.pa >= 20 && l.avg > 0.55) add("타율 이상(소표본)", `${s.year} ${l.avg} (${l.pa}타석)`);
       if (l.pa > 720) add("타석 과다", `${s.year} ${l.pa}`);
       if (l.h > l.ab) add("안타>타수", `${s.year}`);

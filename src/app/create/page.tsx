@@ -244,16 +244,26 @@ export default function CreatePage() {
               const trait = traitById(c.player.trait);
               return (
                 <button key={i} onClick={() => setPicked(i)}
-                  className={`card px-4 py-3.5 text-left transition ${picked === i ? "!border-[var(--brand)] ring-2 ring-[var(--brand)]/20" : ""}`}>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[14px] font-extrabold">{c.kind.name}</span>
+                  className={`card px-4 py-3.5 text-left transition ${
+                    picked === i ? "!border-[var(--brand)] ring-2 ring-[var(--brand)]/20"
+                      : c.player.gifted ? "!border-[var(--gold)]" : ""
+                  }`}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[14px] font-extrabold">
+                      {c.player.gifted && "★ "}{c.kind.name}
+                    </span>
+                    {c.player.gifted && <Pill tone="gold">특급 유망주</Pill>}
                     <Pill tone="brand">{gradeOf(ovr)} · OVR {ovr}</Pill>
                     <Pill tone="gold">잠재 {scout.lo}~{scout.hi}</Pill>
                     <span className="ml-auto text-[11px] font-bold text-[var(--ink-3)]">
                       재능 {(c.player.talent * 100).toFixed(0)}
                     </span>
                   </div>
-                  <div className="mt-0.5 text-[11px] text-[var(--ink-3)]">{c.kind.desc}</div>
+                  <div className="mt-0.5 text-[11px] text-[var(--ink-3)]">
+                    {c.player.gifted
+                      ? "완성도와 성장 여지를 모두 갖췄습니다. 좀처럼 나오지 않습니다."
+                      : c.kind.desc}
+                  </div>
                   <div className="mt-1.5 flex items-center gap-1.5">
                     <Pill>{trait.name}</Pill>
                     <span className="text-[11px] text-[var(--ink-3)]">{trait.desc}</span>

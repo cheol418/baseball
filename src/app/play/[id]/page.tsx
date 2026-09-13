@@ -9,6 +9,7 @@ import { KeyStats, SeasonTable, fmt2, fmt3 } from "@/components/stats";
 import {
   FA_SERVICE, MAX_SALARY, MILITARY_DEADLINE, MILITARY_OPTIONS, advance,
   canVolunteer, careerTotals, computeHof, draftForecast, formatMoney, sangmuOdds,
+  seasonsAtLevel,
   retirementHonors, type Action,
 } from "@/lib/career";
 import { fanFeed, seasonHeadline } from "@/lib/flavor";
@@ -1380,8 +1381,12 @@ function DetailLine({ line }: { line: StatLine }) {
 }
 
 function CareerTab({ g }: { g: GameState }) {
-  const kbo = g.seasons.filter((s) => s.level === "KBO");
-  const other = g.seasons.filter((s) => s.level !== "KBO");
+  const kbo = seasonsAtLevel(g.seasons, "KBO");
+  // 1군을 오간 시즌은 2군 표에도 그 몫만 들어간다
+  const other = [
+    ...g.seasons.filter((x) => x.level !== "KBO" && x.level !== "MINOR"),
+    ...seasonsAtLevel(g.seasons, "MINOR"),
+  ].sort((a, b) => a.year - b.year || (a.level === "MINOR" ? 1 : -1));
   const totals = careerTotals(g.seasons, g.player.kind, "KBO");
   const counted = g.seasons.flatMap((s) => s.awards)
     .reduce<Record<string, number>>((a, x) => ({ ...a, [x]: (a[x] ?? 0) + 1 }), {});

@@ -324,6 +324,9 @@ export interface CreateOptions {
 }
 
 /** 후보 유형 — 생성 화면에서 셋을 나란히 보여준다 */
+/** 후보 한 명이 특급 유망주로 나올 확률 — 셋 중 하나라도 나올 확률은 약 20% */
+export const GIFTED_ODDS = 0.07;
+
 export const CANDIDATE_KINDS = [
   { bias: -1, name: "완성형", desc: "지금 당장 쓸 수 있지만 천장이 낮다" },
   { bias: 0, name: "균형형", desc: "무난한 출발과 무난한 성장" },
@@ -336,7 +339,18 @@ export function rollCandidate(opts: CreateOptions, rng: RNG): Player {
   const keys = abilityKeys(opts.kind);
   // 재능이 높을수록 지금은 덜 완성되어 있고, 대신 자랄 여지가 크다
   const bias = opts.bias ?? 0;
-  const talent = clamp(0.75 + rng.normal() * 0.13 + bias * 0.16, 0.6, 1.45);
+
+  /**
+   * 특급 유망주.
+   *
+   * 완성도와 성장 여지는 원칙적으로 맞바꿈이지만, 가끔은 **둘 다 갖춘 선수**가 나온다.
+   * 드물게 터져야 "다시 뽑기"에 의미가 생기고, 만났을 때 반갑다.
+   */
+  const gifted = rng.chance(GIFTED_ODDS);
+  const talent = clamp(
+    0.75 + rng.normal() * 0.13 + bias * 0.16 + (gifted ? 0.14 : 0),
+    0.6, 1.45,
+  );
   // 투수는 투구폼이 능력치 배분에 함께 반영된다
   const slot = opts.kind === "PITCHER" ? armSlotById(opts.armSlot) : null;
 
@@ -345,10 +359,12 @@ export function rollCandidate(opts: CreateOptions, rng: RNG): Player {
 
   for (const k of keys) {
     const w = (style.weights[k] ?? 0) + (slot?.weights[k] ?? 0);
-    const base = 52 + w * 0.9 + rng.normal() * 7 + (talent - 1) * 14 - bias * 7;
+    const base = 52 + w * 0.9 + rng.normal() * 7 + (talent - 1) * 14
+      - bias * 7 + (gifted ? 5 : 0);
     const cur = clamp(Math.round(base), 22, 80);
     // 포텐셜은 현재치 + 재능/랜덤
-    const room = 4 + talent * 21 + rng.float(0, 15) + (w > 0 ? 7 : 0) + bias * 8;
+    const room = 4 + talent * 21 + rng.float(0, 15) + (w > 0 ? 7 : 0)
+      + bias * 8 + (gifted ? 6 : 0);
     setAb(abilities, k, cur);
     setAb(potential, k, clamp(Math.round(cur + room), cur + 5, ABILITY_MAX));
   }
@@ -379,6 +395,7 @@ export function rollCandidate(opts: CreateOptions, rng: RNG): Player {
     abilities,
     potential,
     talent,
+    gifted,
     fame: trait.id === "star" ? 18 : 8,
     condition: 80,
     injury: 0,

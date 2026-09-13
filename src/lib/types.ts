@@ -152,6 +152,11 @@ export interface SeasonRecord {
   note?: string;
   /** 전반기 성적 (프로 시즌만) */
   half?: StatLine;
+  /**
+   * 한 시즌에 1군·2군을 오갔다면 각각의 기록.
+   * `line`은 둘을 합친 값이라, 통산 기록을 낼 때는 이쪽을 쓴다.
+   */
+  byLevel?: { KBO?: StatLine; MINOR?: StatLine };
   /** 아마추어 전국대회 (고교·대학 시즌만) */
   tournaments?: AmateurTournament[];
   /** 가을야구 결과 */
@@ -245,6 +250,8 @@ export interface Player {
   injury: number; // 남은 부상 정도 0~100 (0이면 건강)
   trait: string; // 특성
   traitDesc: string;
+  /** 완성도와 성장 여지를 모두 갖춘 특급 유망주로 태어났는가 */
+  gifted?: boolean;
 }
 
 export interface Contract {
@@ -369,6 +376,8 @@ export interface GameState {
   halfLine: StatLine | null;
   /** 정규시즌 누적 성적 (후반기 종료 후) */
   seasonLine: StatLine | null;
+  /** 이번 시즌 1군·2군에서 각각 남긴 기록 (오간 시즌을 나눠 보여주기 위해) */
+  seasonByLevel?: { KBO: StatLine | null; MINOR: StatLine | null };
   /** 이번 시즌 소속 레벨·보직 (스프링캠프에서 확정) */
   seasonLevel: LevelTag | null;
   seasonRole: string | null;

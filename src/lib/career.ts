@@ -702,6 +702,7 @@ function openSeason(s: GameState, rng: RNG, campInjury = 0, availCap = 1) {
     });
   }
   s.kboShare = 0;
+  s.seasonByLevel = undefined;
   // 1군에서 시즌을 시작하면 콜업 인상 대상이 아니다 (강등 후 복귀는 인상 없음)
   s.calledUpThisSeason = s.seasonLevel === "KBO";
   s.seasonGoal = makeSeasonGoal(s, rng);
@@ -968,6 +969,12 @@ function playHalf(
     if (level === "KBO") s.kboShare += m.share;
 
     const entry: MonthLine = { key: m.key, label: m.label, line, level, role };
+    // 1군·2군을 오간 시즌은 나중에 따로 보여줘야 하므로 그때그때 갈라 담는다
+    if (level === "KBO" || level === "MINOR") {
+      const bucket = s.seasonByLevel ?? { KBO: null, MINOR: null };
+      bucket[level] = bucket[level] ? mergeLines([bucket[level], line]) : line;
+      s.seasonByLevel = bucket;
+    }
     const move = lastMonth ? null : reviewRoster(s, rng, monthlyForm(line, level));
     if (move) {
       const fromLabel = `${level === "KBO" ? "1군" : "2군"} ${role}`;
@@ -1074,6 +1081,9 @@ function closeSeason(s: GameState, rng: RNG) {
     awards: [...new Set(awards)],
     teamRank: s.teamRank ?? undefined,
     champion: s.postseason?.champion ?? false,
+    byLevel: s.seasonByLevel && s.seasonByLevel.KBO && s.seasonByLevel.MINOR
+      ? { KBO: s.seasonByLevel.KBO, MINOR: s.seasonByLevel.MINOR }
+      : undefined,
     note: [
       s.seasonNote ?? "",
       s.kboShare > 0 && s.kboShare < 1
@@ -1229,6 +1239,7 @@ function startNextYear(s: GameState, rng: RNG) {
   s.seasonNote = null;
   s.kboShare = 0;
   s.calledUpThisSeason = false;
+  s.seasonByLevel = undefined;
   s.pendingTrade = null;
   s.sangmuApplied = false;
 
@@ -2021,8 +2032,24 @@ export { legacyContext, secondLifeOptions, HOF_CUT, HOF_WAIT } from "./legacy";
 /* 통산 기록                                                            */
 /* ------------------------------------------------------------------ */
 
+/**
+ * 레벨별 시즌 기록.
+ *
+ * 한 시즌에 1군·2군을 오갔다면 그 시즌은 **양쪽에 나뉘어 들어간다.**
+ * 안 그러면 8월에 콜업돼 한 달을 1군에서 뛴 기록이 통째로 2군 기록이 되어버린다.
+ */
+export function seasonsAtLevel(seasons: SeasonRecord[], level: LevelTag): SeasonRecord[] {
+  const out: SeasonRecord[] = [];
+  for (const s of seasons) {
+    const split = s.byLevel?.[level as "KBO" | "MINOR"];
+    if (split) out.push({ ...s, level, line: split });
+    else if (s.level === level) out.push(s);
+  }
+  return out;
+}
+
 export function careerTotals(seasons: SeasonRecord[], kind: "HITTER" | "PITCHER", level?: LevelTag) {
-  const rows = seasons.filter((s) => (level ? s.level === level : true));
+  const rows = level ? seasonsAtLevel(seasons, level) : seasons;
   if (kind === "HITTER") {
     const t = rows.reduce((a, s) => {
       const l = s.line as HitterLine;
