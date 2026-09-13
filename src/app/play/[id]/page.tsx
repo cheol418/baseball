@@ -598,8 +598,14 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
               </div>
             </div>
           )}
+          <div className="eyebrow mb-2 mt-1">1 · 훈련 강도</div>
           <HellToggle g={g} on={hell} onChange={setHell} />
 
+          <div className="eyebrow mb-2 mt-4">2 · 훈련 방향</div>
+          <p className="mb-2 text-[11px] leading-relaxed text-[var(--ink-3)]">
+            어떤 선수가 되고 싶은지 고릅니다. 어떤 능력이 오를지는 코칭스태프가 정합니다.
+            {hell && <b className="text-[var(--danger)]"> 지옥 훈련이 켜져 있습니다.</b>}
+          </p>
           <div className="flex flex-col gap-2">
             {g.pendingTraining?.map((o) => (
               <button key={o.id} onClick={() => run({ type: "TRAIN", optionId: o.id, hell })} disabled={busy}
@@ -1074,32 +1080,41 @@ function HellToggle({ g, on, onChange }: {
 }) {
   const left = HELL_LIMIT - (g.hellUsed ?? 0);
   const odds = Math.round(hellOdds(g.player) * 100);
-  if (left <= 0) {
-    return (
-      <div className="card mb-3 px-3.5 py-2.5 text-[11.5px] text-[var(--ink-3)]">
-        🔥 지옥 훈련은 커리어에 {HELL_LIMIT}번뿐입니다. 남은 기회가 없습니다.
-      </div>
-    );
-  }
+  const spent = left <= 0;
+
   return (
-    <button
-      onClick={() => onChange(!on)}
-      className={`mb-3 w-full rounded-xl border px-3.5 py-3 text-left transition ${
-        on ? "border-[var(--danger)] bg-[var(--danger)]/8" : "border-[var(--line)] bg-[var(--surface)]"
-      }`}>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[14px] font-extrabold">🔥 지옥 훈련</span>
-        <Pill tone={on ? "danger" : "neutral"}>남은 기회 {left}회</Pill>
-        <Pill tone="gold">성공 {odds}%</Pill>
-        <span className={`ml-auto text-[11px] font-black ${on ? "text-[var(--danger)]" : "text-[var(--ink-3)]"}`}>
-          {on ? "켜짐" : "꺼짐"}
-        </span>
-      </div>
-      <p className="mt-1 text-[11.5px] leading-relaxed text-[var(--ink-3)]">
-        고른 방향에 몸을 갈아 넣습니다. <b>성공하면 성장 폭이 크게 뛰고, 실패하면 한 해를 버립니다.</b>
-        {" "}부상 위험도 조금 늘어납니다.
-      </p>
-    </button>
+    <div className="grid grid-cols-2 gap-2">
+      <button
+        onClick={() => onChange(false)}
+        className={`rounded-xl border px-3.5 py-3 text-left transition ${
+          !on ? "border-[var(--brand)] bg-[var(--brand)]/6" : "border-[var(--line)] bg-[var(--surface)]"
+        }`}>
+        <div className="text-[13.5px] font-extrabold">🏋️ 일반 훈련</div>
+        <p className="mt-1 text-[11px] leading-relaxed text-[var(--ink-3)]">
+          정석대로 한 겨울을 보냅니다. 결과가 확실합니다.
+        </p>
+      </button>
+
+      <button
+        onClick={() => !spent && onChange(true)}
+        disabled={spent}
+        className={`rounded-xl border px-3.5 py-3 text-left transition ${
+          spent ? "border-[var(--line)] bg-[var(--surface-2)] opacity-55"
+            : on ? "border-[var(--danger)] bg-[var(--danger)]/8" : "border-[var(--line)] bg-[var(--surface)]"
+        }`}>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[13.5px] font-extrabold">🔥 지옥 훈련</span>
+          {spent
+            ? <Pill tone="neutral">소진</Pill>
+            : <Pill tone={on ? "danger" : "gold"}>{left}회 남음</Pill>}
+        </div>
+        <p className="mt-1 text-[11px] leading-relaxed text-[var(--ink-3)]">
+          {spent
+            ? `커리어에 ${HELL_LIMIT}번뿐입니다. 남은 기회가 없습니다.`
+            : <>성공 <b>{odds}%</b>. 되면 크게 늘지만, 실패하면 한 해를 버립니다.</>}
+        </p>
+      </button>
+    </div>
   );
 }
 

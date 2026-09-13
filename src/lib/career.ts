@@ -6,7 +6,7 @@ import {
   potentialOverall, setAb,
 } from "./player";
 import {
-  HALF_SHARE, isHitterLine, judgeAllStar, judgeAwards, MAJOR_TITLES, mergeLines,
+  emptyLine, HALF_SHARE, isHitterLine, judgeAllStar, judgeAwards, MAJOR_TITLES, mergeLines,
   simAllStarGame, simHitter, simPitcher,
 } from "./sim";
 import {
@@ -598,6 +598,56 @@ const POS_MARKET: Record<string, number> = {
   C: 8, SS: 6, "2B": 3, CF: 3, "3B": 2, LF: -3, RF: -3, "1B": -6, DH: -9,
   SP: 4, CP: 1, RP: -2,
 };
+
+/**
+ * 시즌 개막 준비 — 보직 확정 · 부상 판정 · 구단 목표.
+ * 스프링캠프를 마쳤을 때와, 전역해 후반기에 합류할 때 모두 이 경로를 탄다.
+ *
+ * `availCap`을 주면 그 비율만큼만 뛸 수 있다 (후반기 합류는 0.45).
+ */
+function openSeason(s: GameState, rng: RNG, campInjury = 0, availCap = 1) {
+  const team = s.contract ? teamById(s.contract.teamId) : null;
+  if (s.contract?.role === "육성선수") {
+    s.seasonLevel = "MINOR";
+    s.seasonRole = defaultRole(s.player);
+  } else if (team) {
+    // 프로에서 보낸 해 (1군·2군 모두 포함)
+    const proYears = s.seasons.filter((r) => r.level === "KBO" || r.level === "MINOR").length;
+    const { level, role } = assignRole(s.player, team, s.serviceYears, s.trust, rng, proYears);
+    s.seasonLevel = level;
+    s.seasonRole = role;
+    s.contract!.role = role;
+  }
+  const inj = rollInjury(s.player, rng);
+  s.seasonAvailability = clamp(
+    inj.availability * (1 - campInjury) * s.nextSeasonAvailability * availCap, 0.05, 1,
+  );
+  s.nextSeasonAvailability = 1;
+  s.seasonNote = inj.note;
+
+  // 크게 다치면 1군 엔트리를 비워야 한다 — 실제로도 재활은 2군에서 한다
+  if (s.seasonLevel === "KBO" && s.seasonAvailability < 0.6 * availCap) {
+    s.seasonLevel = "MINOR";
+    s.seasonRole = minorRoleOf(s.player);
+    if (s.contract) s.contract.role = s.seasonRole;
+    notify(s, {
+      icon: "🏥", eyebrow: "Injury", title: "부상자 명단 등재", tone: "bad",
+      body: `${inj.note} 1군 엔트리에서 말소되고 2군에서 재활에 들어갑니다.`
+        + " 몸이 올라오면 다시 콜업될 수 있습니다.",
+      change: [{ label: "소속", from: "1군", to: "2군 재활" }],
+    });
+  }
+  s.kboShare = 0;
+  // 1군에서 시즌을 시작하면 콜업 인상 대상이 아니다 (강등 후 복귀는 인상 없음)
+  s.calledUpThisSeason = s.seasonLevel === "KBO";
+  s.seasonGoal = makeSeasonGoal(s, rng);
+  if (s.seasonGoal) {
+    log(s, {
+      icon: "🎯", title: "구단이 제시한 목표", tone: "neutral",
+      body: `${s.seasonGoal.label} — ${s.seasonGoal.desc}`,
+    });
+  }
+}
 
 export function makeTransferTargets(s: GameState, rng: RNG): TransferTarget[] {
   if (!s.contract) return [];
@@ -1275,48 +1325,7 @@ export function advance(prev: GameState, action: Action): GameState {
       }
       s.pendingTraining = null;
 
-      // 올 시즌 보직 확정
-      const team = s.contract ? teamById(s.contract.teamId) : null;
-      if (s.contract?.role === "육성선수") {
-        s.seasonLevel = "MINOR";
-        s.seasonRole = defaultRole(s.player);
-      } else if (team) {
-        // 프로에서 보낸 해 (1군·2군 모두 포함)
-        const proYears = s.seasons.filter((r) => r.level === "KBO" || r.level === "MINOR").length;
-        const { level, role } = assignRole(s.player, team, s.serviceYears, s.trust, rng, proYears);
-        s.seasonLevel = level;
-        s.seasonRole = role;
-        s.contract!.role = role;
-      }
-      const inj = rollInjury(s.player, rng);
-      s.seasonAvailability = clamp(
-        inj.availability * (1 - campInjury) * s.nextSeasonAvailability, 0.05, 1,
-      );
-      s.nextSeasonAvailability = 1;
-      s.seasonNote = inj.note;
-
-      // 크게 다치면 1군 엔트리를 비워야 한다 — 실제로도 재활은 2군에서 한다
-      if (s.seasonLevel === "KBO" && s.seasonAvailability < 0.6) {
-        s.seasonLevel = "MINOR";
-        s.seasonRole = minorRoleOf(s.player);
-        if (s.contract) s.contract.role = s.seasonRole;
-        notify(s, {
-          icon: "🏥", eyebrow: "Injury", title: "부상자 명단 등재", tone: "bad",
-          body: `${inj.note} 1군 엔트리에서 말소되고 2군에서 재활에 들어갑니다.`
-            + " 몸이 올라오면 다시 콜업될 수 있습니다.",
-          change: [{ label: "소속", from: "1군", to: "2군 재활" }],
-        });
-      }
-      s.kboShare = 0;
-      // 1군에서 시즌을 시작하면 콜업 인상 대상이 아니다 (강등 후 복귀는 인상 없음)
-      s.calledUpThisSeason = s.seasonLevel === "KBO";
-      s.seasonGoal = makeSeasonGoal(s, rng);
-      if (s.seasonGoal) {
-        log(s, {
-          icon: "🎯", title: "구단이 제시한 목표", tone: "neutral",
-          body: `${s.seasonGoal.label} — ${s.seasonGoal.desc}`,
-        });
-      }
+      openSeason(s, rng, campInjury);
       // 대표팀 발탁은 시즌 개막 전에 통보된다 (대회는 시즌 중에 치른다)
       const tourney = tournamentOf(s.year);
       if (tourney && s.seasonLevel === "KBO" && isCalledUp(s, tourney, rng)) {
@@ -1560,34 +1569,49 @@ export function advance(prev: GameState, action: Action): GameState {
       s.militaryLeft = Math.round((s.militaryLeft - serveShare) * 10) / 10;
       const discharged = s.militaryLeft <= 0;
 
-      s.seasons.push({
-        year: s.year, age: p.age, level: "ARMY", teamId: "-",
-        teamName: s.military === "SANGMU" ? "상무 야구단" : "현역 복무",
-        position: p.position, role: s.military === "SANGMU" ? "주전" : "복무",
-        salary: 0, line, awards: [],
-        note: half
-          ? "전반기까지 복무를 마치고 후반기에 팀으로 돌아왔습니다."
-          : s.military === "SANGMU" ? undefined : "야구를 떠나 있는 동안 기량이 떨어졌습니다.",
-      });
-      s.lastSeasonIndex = s.seasons.length - 1;
-
-      if (discharged) {
-        s.military = "DONE";
-        log(s, {
-          icon: "🎽", title: "전역", tone: "good",
-          body: "18개월 복무를 마치고 팀에 복귀했습니다.",
+      // 전역하는 해는 시즌 기록을 따로 남기지 않는다 —
+      // 전반기는 부대에, 후반기는 팀에 있으므로 그 해는 소속팀 시즌으로 친다.
+      if (!discharged) {
+        s.seasons.push({
+          year: s.year, age: p.age, level: "ARMY", teamId: "-",
+          teamName: s.military === "SANGMU" ? "상무 야구단" : "현역 복무",
+          position: p.position, role: s.military === "SANGMU" ? "주전" : "복무",
+          salary: 0, line, awards: [],
+          note: s.military === "SANGMU" ? undefined : "야구를 떠나 있는 동안 기량이 떨어졌습니다.",
         });
-        s.pendingTraining = makeTrainingOptions(s.player, rng);
-        s.monthLines = null; s.halfLine = null; s.seasonLine = null;
-        s.postseason = null; s.teamRank = null; s.allStar = false; s.allStarGame = null; s.seasonNote = null;
-        s.phase = "SPRING_CAMP";
-        // 반 시즌만 복무한 해는 그 자리에서 시즌이 끝난다 — 해를 넘겨 스프링캠프로 간다
+        s.lastSeasonIndex = s.seasons.length - 1;
         s.player.age += 1;
         s.year += 1;
-      } else {
-        s.player.age += 1;
-        s.year += 1;
+        bump();
+        return s;
       }
+
+      /* ---- 전역 — 그 해 후반기부터 뛴다 ---- */
+      const wasSangmu = s.military === "SANGMU";
+      s.military = "DONE";
+      s.monthLines = null; s.seasonLine = null;
+      s.postseason = null; s.teamRank = null; s.allStar = false; s.allStarGame = null;
+      s.pendingTraining = null;
+      // 전반기는 부대에 있었으므로 기록이 없다
+      s.halfLine = emptyLine(p.kind);
+      // 스프링캠프를 건너뛰고 곧바로 시즌에 합류한다 (후반기만 뛸 수 있다)
+      openSeason(s, rng, 0, 0.8);
+      s.phase = "ALL_STAR";
+
+      log(s, {
+        icon: "🎽", title: "전역", tone: "good",
+        body: `18개월 복무를 마치고 ${s.year} 시즌 후반기부터 팀에 합류합니다.`,
+      });
+      notify(s, {
+        icon: "🎽", eyebrow: "Discharge", title: "전역 · 후반기 합류", tone: "epic",
+        body: wasSangmu
+          ? "상무에서 실전 감각을 유지한 채 돌아왔습니다. 올스타 브레이크에 맞춰 1군에 합류합니다."
+          : "18개월을 야구와 떨어져 지냈습니다. 몸을 끌어올리며 후반기부터 뛰게 됩니다.",
+        change: [
+          { label: "소속", from: wasSangmu ? "상무 야구단" : "현역 복무", to: `${s.seasonLevel === "KBO" ? "1군" : "2군"} ${s.seasonRole}` },
+          { label: "출전", from: "—", to: "후반기부터" },
+        ],
+      });
       bump();
       return s;
     }
