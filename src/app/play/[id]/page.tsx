@@ -26,6 +26,7 @@ import { isHitterLine, subtractLine, titleOfStat } from "@/lib/sim";
 import { saveGame, useGame } from "@/lib/storage";
 import { isFranchiseRole } from "@/lib/roles";
 import { teamById } from "@/lib/teams";
+import { Emblem } from "@/components/emblem";
 import {
   MILITARY_LABEL, type GameState, type HitterLine, type HofVote, type IntlResult,
   type Notice, type PitcherLine,
@@ -123,9 +124,16 @@ export default function PlayPage() {
       />
 
       <div style={{ background: team ? `linear-gradient(135deg, ${team.color}, ${team.color}cc)` : "var(--brand)" }}>
-        <Container className="px-4 py-4 lg:flex lg:items-center lg:justify-between lg:gap-8 lg:px-6">
+        <Container className="px-4 py-4">
         <div className="flex items-center gap-3 text-white">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15 text-[20px] font-black">{p.number}</div>
+          <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-[20px] font-black">
+            {p.number}
+            {team && (
+              <span className="absolute -bottom-1 -right-1 rounded-full bg-white p-[2px] shadow">
+                <Emblem teamId={team.id} size={20} />
+              </span>
+            )}
+          </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <span className="truncate text-[18px] font-black">{p.name}</span>
@@ -149,7 +157,7 @@ export default function PlayPage() {
             </div>
           </div>
         </div>
-        <div className="mt-3 grid grid-cols-4 gap-1.5 text-white lg:mt-0 lg:w-[460px] lg:shrink-0">
+        <div className="mt-3 grid grid-cols-4 gap-1.5 text-white">
           <MiniStat label="연봉" value={g.contract ? formatMoney(g.contract.salary) : "—"} />
           <MiniStat label="OVR" value={`${gradeOf(ovr)} ${ovr}`} />
           <MiniStat label="구단 신뢰" value={`${Math.round(g.trust)}`} />
@@ -168,10 +176,10 @@ export default function PlayPage() {
 
       {!anim && (
       <nav className="sticky top-[49px] z-20 border-b border-[var(--line)] bg-[var(--surface)]">
-        <Container className="flex px-2 lg:px-6">
+        <Container className="flex px-2">
           {([["season", "시즌"], ["career", "커리어"], ["player", "선수"], ["log", "기록"]] as [Tab, string][]).map(([k, label]) => (
             <button key={k} onClick={() => setTab(k)}
-              className={`flex-1 border-b-2 py-2.5 text-[13px] font-bold transition lg:max-w-[160px] lg:flex-none lg:px-8 ${
+              className={`flex-1 border-b-2 py-2.5 text-[13px] font-bold transition ${
                 tab === k ? "border-[var(--danger)] text-[var(--brand)]" : "border-transparent text-[var(--ink-3)] hover:text-[var(--ink-2)]"
               }`}>{label}</button>
           ))}
@@ -179,7 +187,7 @@ export default function PlayPage() {
       </nav>
       )}
 
-      <Container className="lg:px-2">
+      <Container>
         {tab === "season" && !anim && (
           <SeasonProgress
             phase={g.phase}
@@ -193,12 +201,12 @@ export default function PlayPage() {
           anim ? (
             <Broadcast key={anim} g={g} kind={anim} onDone={() => setAnimQueue((q) => q.slice(1))} />
           ) : (
-            <div key={g.phase} className="stage lg:grid lg:grid-cols-[minmax(0,620px)_340px] lg:items-start lg:justify-center lg:gap-4">
+            <div key={g.phase} className="stage">
               <div className="min-w-0">
                 {(g.phase === "SEASON_END" || g.phase === "PATH_CHOICE" || g.phase === "DRAFT") && <SeasonReview g={g} />}
                 <ActionCard g={g} busy={busy} run={run} />
               </div>
-              <aside className="min-w-0 lg:sticky lg:top-[104px]">
+              <aside className="min-w-0">
                 <Section eyebrow="Recent" title="최근 소식">
                   <LogList logs={g.logs.slice(0, 5)} />
                 </Section>
@@ -261,7 +269,7 @@ function SeasonReview({ g }: { g: GameState }) {
       <div className="card px-4 py-4">
         <div className="text-[15px] font-black">{seasonHeadline(last)}</div>
         <div className="mt-2 mb-3 flex flex-wrap items-center gap-1.5">
-          <Pill tone="brand">{last.teamName}</Pill>
+          <Pill tone="brand"><Emblem teamId={last.teamId} size={13} className="mr-1 -ml-0.5 align-[-2px]" />{last.teamName}</Pill>
           <Pill>{last.role}</Pill>
           {last.byLevel
             ? <Pill>1군 · 2군</Pill>
@@ -656,7 +664,7 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
               </div>
               <p className="mt-1 text-[12px] leading-relaxed text-[var(--ink-2)]">{g.pendingTrade.note}</p>
               <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-[var(--surface-2)] px-3 py-2">
-                <span className="h-7 w-7 shrink-0 rounded-md" style={{ background: teamById(g.pendingTrade.teamId).color }} />
+                <Emblem teamId={g.pendingTrade.teamId} size={28} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[12.5px] font-extrabold">{teamById(g.pendingTrade.teamId).name}</span>
                   <span className="block text-[10.5px] text-[var(--ink-3)]">
@@ -846,7 +854,7 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
                   return (
                     <button key={t.teamId} onClick={() => run({ type: "REQUEST_TRANSFER", teamId: t.teamId })} disabled={busy}
                       className="card flex items-center gap-3 px-3.5 py-2.5 text-left transition hover:!border-[var(--brand)] disabled:opacity-50">
-                      <span className="h-8 w-8 shrink-0 rounded-lg" style={{ background: tm.color }} />
+                      <Emblem teamId={tm.id} size={32} />
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-1.5">
                           <span className="truncate text-[13px] font-extrabold">{tm.name}</span>
@@ -907,7 +915,7 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
                 <button key={o.teamId} onClick={() => run({ type: "ACCEPT_OFFER", teamId: o.teamId })} disabled={busy}
                   className="card px-4 py-3.5 text-left transition hover:!border-[var(--brand)] disabled:opacity-50">
                   <div className="flex items-center gap-3">
-                    <span className="h-9 w-9 shrink-0 rounded-lg" style={{ background: t.color }} />
+                    <Emblem teamId={t.id} size={36} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[13.5px] font-extrabold">{t.name}</span>
                       <span className="block truncate text-[11px] text-[var(--ink-3)]">{o.note} · 전력 {t.power}</span>
@@ -1419,7 +1427,7 @@ function CareerTab({ g }: { g: GameState }) {
   if (potmTotal) counted["이달의 선수"] = potmTotal;
 
   return (
-    <div className="mx-auto w-full max-w-[860px]">
+    <div className="mx-auto w-full max-w-[460px]">
       <Section eyebrow="KBO" title="프로 통산 기록">
         {kbo.length === 0
           ? <Empty>아직 1군 기록이 없습니다.</Empty>

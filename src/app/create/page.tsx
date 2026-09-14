@@ -13,6 +13,7 @@ import { RNG } from "@/lib/rng";
 import { schoolOf } from "@/lib/school";
 import { saveGame } from "@/lib/storage";
 import { TEAMS } from "@/lib/teams";
+import { Emblem } from "@/components/emblem";
 import type { ArmSlot, Hand, Kind, Position } from "@/lib/types";
 
 const HANDS: Hand[] = ["R", "L", "S"];
@@ -212,7 +213,7 @@ export default function CreatePage() {
               {TEAMS.map((t) => (
                 <button key={t.id} onClick={() => setWishTeam(t.id)}
                   className={`card flex items-center gap-2 px-3 py-2.5 text-left transition ${wishTeam === t.id ? "!border-[var(--brand)] ring-2 ring-[var(--brand)]/20" : ""}`}>
-                  <span className="h-6 w-6 shrink-0 rounded-md" style={{ background: t.color }} />
+                  <Emblem teamId={t.id} size={24} />
                   <span className="min-w-0">
                     <span className="block truncate text-[12.5px] font-bold">{t.short}</span>
                     <span className="block text-[10px] text-[var(--ink-3)]">{t.city} · 전력 {t.power}</span>
@@ -290,7 +291,7 @@ export default function CreatePage() {
       )}
 
       </Column>
-      <div className="fixed inset-x-0 bottom-0 z-30 mx-auto flex w-full max-w-[620px] gap-2 border-t border-[var(--line)] bg-[var(--surface)] px-4 py-3">
+      <div className="fixed inset-x-0 bottom-0 z-30 mx-auto flex w-full max-w-[460px] gap-2 border-t border-[var(--line)] bg-[var(--surface)] px-4 py-3">
         {step > 0 && (
           <button onClick={() => setStep(step - 1)} className="btn btn-ghost flex-1 py-3 text-[14px]">이전</button>
         )}

@@ -6,6 +6,7 @@ import { computeHof, MILITARY_DEADLINE } from "@/lib/career";
 import { gradeOf, overall, POSITION_LABEL } from "@/lib/player";
 import { deleteGame, useGames } from "@/lib/storage";
 import { teamById } from "@/lib/teams";
+import { Emblem } from "@/components/emblem";
 
 const PHASE_LABEL: Record<string, string> = {
   HS_SEASON: "고교 3학년", PATH_CHOICE: "진로 선택", COLLEGE_SEASON: "대학 시절",
@@ -62,11 +63,18 @@ export default function Home() {
               const ovr = overall(g.player);
               return (
                 <li key={g.id} className="card flex items-center gap-3 px-3.5 py-3">
-                  <div
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[13px] font-black text-white"
-                    style={{ background: team?.color ?? "var(--brand)" }}
-                  >
-                    {g.player.number}
+                  <div className="relative shrink-0">
+                    <div
+                      className="flex h-11 w-11 items-center justify-center rounded-xl text-[13px] font-black text-white"
+                      style={{ background: team?.color ?? "var(--brand)" }}
+                    >
+                      {g.player.number}
+                    </div>
+                    {team && (
+                      <span className="absolute -bottom-1 -right-1 rounded-full bg-[var(--surface)] p-[1.5px]">
+                        <Emblem teamId={team.id} size={17} />
+                      </span>
+                    )}
                   </div>
                   <Link href={`/play/${g.id}`} className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">

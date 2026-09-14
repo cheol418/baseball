@@ -6,22 +6,26 @@ import { ABILITY_LABEL, ABILITY_MAX } from "@/lib/player";
 
 /**
  * 페이지 공통 폭.
- * 넓은 화면에서도 한 줄이 길어지지 않도록 본문 열은 좁게 유지하고,
- * 남는 공간은 사이드 패널이 쓴다.
+ *
+ * PC에서도 **모바일과 같은 한 열**로 본다. 화면이 넓다고 정보를 옆으로
+ * 늘어놓으면 기기마다 다른 게임이 되고, 연출(오버레이·중계·카드)도 두 벌로
+ * 만들어야 한다. 한 폭으로 고정하면 손에 쥔 화면 그대로가 PC에도 뜬다.
  */
+export const APP_W = "max-w-[460px]";
+
 export function Container({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`mx-auto w-full max-w-[1000px] ${className}`}>{children}</div>;
+  return <div className={`mx-auto w-full ${APP_W} ${className}`}>{children}</div>;
 }
 
-/** 읽기 좋은 단일 열 (표·목록 화면용) */
+/** 읽기 좋은 단일 열 (표·목록 화면용) — 이제 Container와 같은 폭이다 */
 export function Column({ children }: { children: ReactNode }) {
-  return <div className="mx-auto w-full max-w-[620px]">{children}</div>;
+  return <div className={`mx-auto w-full ${APP_W}`}>{children}</div>;
 }
 
 export function AppBar({ title, back, right }: { title: string; back?: string; right?: ReactNode }) {
   return (
     <header className="sticky top-0 z-30 border-b-[3px] border-[var(--danger)] bg-[var(--brand)] text-[var(--brand-ink)]">
-      <Container className="flex items-center gap-3 px-4 py-3 lg:px-6">
+      <Container className="flex items-center gap-3 px-4 py-3">
         {back ? (
           <Link href={back} aria-label="뒤로" className="-ml-1 rounded-lg px-2 py-1 text-lg leading-none opacity-80 hover:opacity-100">
             ←
