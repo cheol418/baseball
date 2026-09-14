@@ -114,11 +114,53 @@ export function isCalledUp(s: GameState, t: Tournament, rng: RNG): boolean {
 }
 
 /** 대회별 일정 — 라운드 이름과 상대 후보 */
-const SCHEDULE: Record<TournamentId, string[]> = {
-  ASIAN_GAMES: ["예선 1차전", "예선 2차전", "준결승", "결승"],
-  PREMIER12: ["조별리그 1차전", "조별리그 2차전", "조별리그 3차전", "슈퍼라운드", "결승"],
-  OLYMPIC: ["조별리그 1차전", "조별리그 2차전", "녹아웃 스테이지", "준결승", "결승"],
-  WBC: ["1라운드 1차전", "1라운드 2차전", "1라운드 3차전", "8강", "준결승", "결승"],
+/**
+ * 대회 방식.
+ *
+ * 실제 대회를 따라간다 — 조별리그를 몇 경기 치르는지, 슈퍼라운드가 있는지,
+ * 3·4위전이 있는지가 대회마다 다르다.
+ *
+ *  · WBC        5팀 조별리그 4경기 → 8강 → 준결승 → 결승. **3·4위전이 없다**
+ *  · 프리미어12   조별리그 → 슈퍼라운드 → 결승 (3위결정전 있음)
+ *  · 올림픽      조별리그 → 녹아웃 → 준결승 → 결승 (동메달 결정전 있음)
+ *  · 아시안게임   조별예선 → 슈퍼라운드 → 결승 (3·4위전 있음)
+ */
+export type StageKind = "GROUP" | "SUPER" | "KNOCKOUT" | "FINAL";
+
+export interface Stage {
+  name: string;
+  kind: StageKind;
+}
+
+const SCHEDULE: Record<TournamentId, Stage[]> = {
+  ASIAN_GAMES: [
+    { name: "조별예선 1차전", kind: "GROUP" }, { name: "조별예선 2차전", kind: "GROUP" },
+    { name: "슈퍼라운드 1차전", kind: "SUPER" }, { name: "슈퍼라운드 2차전", kind: "SUPER" },
+    { name: "결승", kind: "FINAL" },
+  ],
+  PREMIER12: [
+    { name: "조별리그 1차전", kind: "GROUP" }, { name: "조별리그 2차전", kind: "GROUP" },
+    { name: "조별리그 3차전", kind: "GROUP" }, { name: "조별리그 4차전", kind: "GROUP" },
+    { name: "조별리그 5차전", kind: "GROUP" },
+    { name: "슈퍼라운드 1차전", kind: "SUPER" }, { name: "슈퍼라운드 2차전", kind: "SUPER" },
+    { name: "결승", kind: "FINAL" },
+  ],
+  OLYMPIC: [
+    { name: "조별리그 1차전", kind: "GROUP" }, { name: "조별리그 2차전", kind: "GROUP" },
+    { name: "녹아웃 스테이지", kind: "KNOCKOUT" }, { name: "패자부활전", kind: "KNOCKOUT" },
+    { name: "준결승", kind: "KNOCKOUT" }, { name: "결승", kind: "FINAL" },
+  ],
+  WBC: [
+    { name: "1라운드 1차전", kind: "GROUP" }, { name: "1라운드 2차전", kind: "GROUP" },
+    { name: "1라운드 3차전", kind: "GROUP" }, { name: "1라운드 4차전", kind: "GROUP" },
+    { name: "8강", kind: "KNOCKOUT" }, { name: "준결승", kind: "KNOCKOUT" },
+    { name: "결승", kind: "FINAL" },
+  ],
+};
+
+/** 3·4위전이 있는 대회 — WBC는 없다(2023년부터 폐지) */
+const HAS_BRONZE_GAME: Record<TournamentId, boolean> = {
+  ASIAN_GAMES: true, PREMIER12: true, OLYMPIC: true, WBC: false,
 };
 
 const RIVALS: Record<TournamentId, string[]> = {
@@ -144,34 +186,41 @@ export function simTournament(
   else if (roll >= 0.36) rank = 4;
   else rank = rng.int(5, 8);
 
-  const medal = rank === 1 ? "금" : rank === 2 ? "은" : rank === 3 ? "동" : null;
+  // WBC는 3·4위전이 없어 동메달 자체가 없다
+  const medal = rank === 1 ? "금" : rank === 2 ? "은"
+    : rank === 3 && HAS_BRONZE_GAME[t.id] ? "동" : null;
 
   // 순위에 맞춰 대진을 구성한다
   const full = SCHEDULE[t.id];
-  const beforeFinal = full.slice(0, full.length - 1);   // 결승 전까지
-  const finalName = full[full.length - 1];
+  const groupish = full.filter((x) => x.kind === "GROUP" || x.kind === "SUPER");
+  const knockout = full.filter((x) => x.kind === "KNOCKOUT");
+  const finalStage = full[full.length - 1];
 
-  /** [라운드 이름, 이겼는가] */
-  let bracket: [string, boolean][];
-  if (rank === 1) {
-    bracket = [...beforeFinal.map((r, i) => [r, i < 2 ? rng.chance(0.72) : true] as [string, boolean]), [finalName, true]];
-  } else if (rank === 2) {
-    bracket = [...beforeFinal.map((r, i) => [r, i < 2 ? rng.chance(0.7) : true] as [string, boolean]), [finalName, false]];
-  } else if (rank === 3) {
-    // 준결승에서 지고 3·4위전에서 이긴다
-    bracket = [
-      ...beforeFinal.map((r, i) => [r, i < beforeFinal.length - 1 ? rng.chance(0.7) : false] as [string, boolean]),
-      ["3·4위전", true],
-    ];
-  } else if (rank === 4) {
-    bracket = [
-      ...beforeFinal.map((r, i) => [r, i < beforeFinal.length - 1 ? rng.chance(0.65) : false] as [string, boolean]),
-      ["3·4위전", false],
-    ];
+  /**
+   * 대회를 어디까지 갔는가에 맞춰 실제 치른 경기를 만든다.
+   * 조별리그는 이기고 지고를 섞고, 녹아웃부터는 순위가 곧 결과다.
+   */
+  const bracket: { stage: Stage; won: boolean }[] = [];
+  const pushGroup = (winRate: number) => {
+    for (const st of groupish) bracket.push({ stage: st, won: rng.chance(winRate) });
+  };
+
+  if (rank <= 2) {
+    pushGroup(0.72);
+    for (const st of knockout) bracket.push({ stage: st, won: true });
+    bracket.push({ stage: finalStage, won: rank === 1 });
+  } else if (rank <= 4) {
+    pushGroup(0.66);
+    // 준결승(마지막 녹아웃)에서 진다
+    knockout.forEach((st, i) => bracket.push({ stage: st, won: i < knockout.length - 1 }));
+    if (HAS_BRONZE_GAME[t.id]) {
+      bracket.push({ stage: { name: "3·4위전", kind: "FINAL" }, won: rank === 3 });
+    }
   } else {
-    // 조별리그에서 탈락
-    const group = beforeFinal.slice(0, Math.max(2, beforeFinal.length - 2));
-    bracket = group.map((r) => [r, rng.chance(0.38)] as [string, boolean]);
+    // 조별리그에서 떨어진다 — 녹아웃 무대를 밟지 못한다
+    for (const st of full.filter((x) => x.kind === "GROUP")) {
+      bracket.push({ stage: st, won: rng.chance(0.38) });
+    }
   }
 
   const pool = rng.shuffle(RIVALS[t.id]);
@@ -185,7 +234,7 @@ export function simTournament(
   const reliefSkip = p.kind === "PITCHER" && !isSP ? 0.25 : 0;
 
   for (let i = 0; i < bracket.length; i++) {
-    const [round, won] = bracket[i];
+    const { stage, won } = bracket[i];
     const appeared = p.kind === "HITTER"
       ? true
       : (i % appearEvery === 0) && !rng.chance(reliefSkip);
@@ -208,7 +257,7 @@ export function simTournament(
     const hi = lo + rng.int(1, 5);
 
     games.push({
-      round, opponent: pool[i % pool.length], won,
+      round: stage.name, stage: stage.kind, opponent: pool[i % pool.length], won,
       score: won ? `${hi}-${lo}` : `${lo}-${hi}`,
       line, appeared,
     });

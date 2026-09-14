@@ -548,6 +548,8 @@ export type TournamentSlot = "PRE" | "MID" | "LATE" | "POST";
 /** 국제대회 한 경기 */
 export interface IntlGame {
   round: string;
+  /** 조별리그인가 녹아웃인가 — 중계에서 대회 현황을 그리는 데 쓴다 */
+  stage?: "GROUP" | "SUPER" | "KNOCKOUT" | "FINAL";
   opponent: string;
   won: boolean;
   score: string;

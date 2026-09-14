@@ -11,7 +11,7 @@ import { ClutchCard, ClutchReveal } from "@/components/clutch";
 import { FORM_STYLE, formNote, judgeMonthForm, type MonthForm } from "@/lib/form";
 import { teamById } from "@/lib/teams";
 import type {
-  AmateurTournament, GameState, HitterLine, MonthLine, PitcherLine, StatLine, TournamentSlot,
+  AmateurTournament, GameState, HitterLine, IntlGame, MonthLine, PitcherLine, StatLine, TournamentSlot,
 } from "@/lib/types";
 
 export type BroadcastKind = "H1" | "H2" | "PS" | "HS" | "INTL";
@@ -263,6 +263,72 @@ function LoadingPanel({ title, subtitle, rows, tail }: {
   );
 }
 
+/**
+ * 대회 현황판.
+ *
+ * 경기 카드만 넘어가면 "지금 몇 라운드인지, 올라가고 있는지"가 안 보인다.
+ * 조별리그는 전적으로, 녹아웃은 대진으로 진행 상황을 계속 띄워둔다.
+ */
+function TourneyBoard({ games, upto }: { games: IntlGame[]; upto: number }) {
+  const played = games.slice(0, upto + 1);
+  const group = games.filter((x) => x.stage === "GROUP" || x.stage === "SUPER");
+  const knock = games.filter((x) => x.stage === "KNOCKOUT" || x.stage === "FINAL");
+  const gW = group.filter((x, i) => x.won && i <= upto).length;
+  const gL = group.filter((x, i) => !x.won && i <= upto).length;
+  const groupDone = played.length > group.length;
+
+  return (
+    <div className="mb-3 rounded-xl bg-black/25 px-3 py-2.5">
+      {group.length > 0 && (
+        <div className="flex items-center gap-2">
+          <span className="text-[9px] font-black uppercase tracking-[0.16em] opacity-55">
+            {group[0].stage === "SUPER" ? "슈퍼라운드" : "조별리그"}
+          </span>
+          <span className="tabular text-[11.5px] font-extrabold">
+            {gW}승 {gL}패
+          </span>
+          <span className="ml-auto flex gap-1">
+            {group.map((x, i) => (
+              <span
+                key={x.round}
+                className="h-2 w-2 rounded-full"
+                style={{
+                  background: i > upto ? "rgba(255,255,255,0.18)"
+                    : x.won ? "#8ee6a0" : "#ff9a8a",
+                }}
+              />
+            ))}
+          </span>
+          {groupDone && <span className="ml-1 text-[10px] font-bold opacity-70">통과</span>}
+        </div>
+      )}
+      {knock.length > 0 && (
+        <div className="mt-2 flex items-center gap-1">
+          {knock.map((x) => {
+            const idx = games.indexOf(x);
+            const done = idx <= upto;
+            const now = idx === upto;
+            return (
+              <span key={x.round} className="flex flex-1 items-center gap-1">
+                <span
+                  className={`flex-1 truncate rounded-md px-1.5 py-1 text-center text-[9.5px] font-extrabold transition ${
+                    now ? "bg-white/25"
+                      : done ? (x.won ? "bg-[#8ee6a0]/25" : "bg-[#ff9a8a]/25")
+                        : "bg-white/8 opacity-45"
+                  }`}
+                >
+                  {x.round}
+                </span>
+                {x !== knock[knock.length - 1] && <span className="opacity-35">›</span>}
+              </span>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** 중계 종류별 로딩 화면 내용 */
 function loadingOf(g: GameState, kind: BroadcastKind): { title: string; subtitle: string; rows: { when: string; what: string }[]; tail: string } | null {
   if (kind === "H1") {
@@ -293,6 +359,27 @@ function loadingOf(g: GameState, kind: BroadcastKind): { title: string; subtitle
       title: "가을야구가 열립니다",
       rows: (g.postseason?.rounds ?? []).map((r) => ({ when: "", what: `${r.name} vs ${r.opponent}` })),
       tail: "한 경기에 한 해가 걸려 있습니다.",
+    };
+  }
+  if (kind === "INTL") {
+    const intl = g.intlResults.find((r) => r.year === g.year);
+    if (!intl) return null;
+    const t = TOURNAMENTS[intl.tournamentId];
+    const seen = new Set<string>();
+    const rows: { when: string; what: string }[] = [];
+    for (const gm of intl.games) {
+      const label = gm.stage === "GROUP" ? "조별리그"
+        : gm.stage === "SUPER" ? "슈퍼라운드"
+          : gm.stage === "KNOCKOUT" ? "녹아웃" : "결승";
+      if (seen.has(label)) continue;
+      seen.add(label);
+      rows.push({ when: "", what: label });
+    }
+    return {
+      subtitle: `${g.year} · 국가대표`,
+      title: `${t.name} 대진이 나왔습니다`,
+      rows,
+      tail: `${t.month} 개최 · 태극마크를 달고 나섭니다.`,
     };
   }
   if (kind === "HS") {
@@ -394,6 +481,13 @@ export function Broadcast({ g, kind, onDone, onAction, busy = false }: {
         </div>
 
         <div className="px-4 pb-5 pt-4">
+          {/* 국제대회는 대회 현황을 계속 띄워둔다 — 어디까지 왔는지가 보여야 한다 */}
+          {!warmup && kind === "INTL" && intlOfYear && (
+            <TourneyBoard
+              games={intlOfYear.games}
+              upto={Math.max(0, steps.slice(0, i + 1).filter((x) => x.kind === "game").length - 1)}
+            />
+          )}
           {warmup && loading && <LoadingPanel key="warm" {...loading} />}
           {!warmup && step.kind === "month" && <MonthPanel key={`m${i}`} step={step} />}
           {!warmup && step.kind === "card" && <CardPanel key={`c${i}`} step={step} />}
