@@ -12,6 +12,7 @@ import {
 import {
   HOF_CUT, advanceHofVote, legacyContext, newHofVote, resolveSecondLife,
 } from "./legacy";
+import { applyClutchToLine, resolveClutch, rollClutch } from "./clutch";
 import { judgeMonthForm, potmOdds } from "./form";
 import { PS_CUT, simPostseason } from "./postseason";
 import {
@@ -996,6 +997,42 @@ function reviewRoster(
   return rng.chance(chance) ? { type: "ROLE", role: proper.role } : null;
 }
 
+
+
+/**
+ * 고른 승부처를 실제 기록으로 만든다.
+ * 결과는 그 달의 기록에 그대로 더해진다 — 연출만 하는 장식이 아니다.
+ */
+function settleClutch(s: GameState, rng: RNG, lines: MonthLine[], choice?: string) {
+  const c = s.pendingClutch;
+  s.pendingClutch = null;
+  s.clutchResult = null;
+  if (!c || !choice) return;
+  const r = resolveClutch(c, choice, s, rng);
+  const mi = clamp(r.monthIndex, 0, lines.length - 1);
+  const m = lines[mi];
+  // 그 달을 2군에서 보냈다면 1군 승부처는 없던 일이 된다
+  if (m.level !== "KBO") return;
+  m.line = applyClutchToLine(m.line, r);
+  m.clutch = r;
+  s.clutchResult = r;
+  s.player.fame = clamp(s.player.fame + r.outcome.fame, 0, 100);
+  s.trust = clamp(s.trust + r.outcome.trust, 0, 100);
+  s.player.condition = clamp(s.player.condition + r.outcome.condition, 25, 100);
+  // 1군·2군으로 갈라 담아둔 몫도 함께 맞춘다
+  const bucket = s.seasonByLevel;
+  if (bucket?.KBO) bucket.KBO = applyClutchToLine(bucket.KBO, r);
+}
+
+/**
+ * 반기를 시작하기 전에 승부처를 하나 걸어둔다.
+ * 고르는 것은 지금, 결과가 드러나는 것은 중계가 그 달에 닿았을 때다.
+ */
+function armClutch(s: GameState, rng: RNG, months: readonly { key: string; label: string }[]) {
+  s.pendingClutch = rollClutch(s, rng, months);
+  s.clutchResult = null;
+}
+
 /** 한 반기를 월 단위로 치른다 — 매달 끝에 엔트리가 바뀔 수 있다 */
 function playHalf(
   s: GameState, rng: RNG,
@@ -1321,8 +1358,8 @@ export type Action =
   | { type: "CHOOSE_PATH"; path: "DRAFT" | "COLLEGE" }
   | { type: "DO_DRAFT" }
   | { type: "TRAIN"; optionId: string; hell?: boolean }
-  | { type: "PLAY_FIRST_HALF" }
-  | { type: "PLAY_SECOND_HALF" }
+  | { type: "PLAY_FIRST_HALF"; clutch?: string }
+  | { type: "PLAY_SECOND_HALF"; clutch?: string }
   | { type: "PLAY_POSTSEASON" }
   | { type: "FINISH_SEASON" }
   | { type: "JOIN_NATIONAL"; join: boolean }
@@ -1521,6 +1558,7 @@ export function advance(prev: GameState, action: Action): GameState {
         });
         s.phase = "INTERNATIONAL";
       } else {
+        armClutch(s, rng, H1_MONTHS);
         s.phase = "FIRST_HALF";
       }
       bump();
@@ -1531,6 +1569,7 @@ export function advance(prev: GameState, action: Action): GameState {
     case "PLAY_FIRST_HALF": {
       runTournament(s, rng, "PRE");
       s.monthLines = playHalf(s, rng, H1_MONTHS);
+      settleClutch(s, rng, s.monthLines, action.clutch);
       s.halfLine = mergeLines(s.monthLines.map((m) => m.line));
 
       runTournament(s, rng, "MID");
@@ -1586,6 +1625,7 @@ export function advance(prev: GameState, action: Action): GameState {
         }
       }
       if (s.seasonNote) log(s, { icon: "🏥", title: "부상", tone: "bad", body: s.seasonNote });
+      armClutch(s, rng, H2_MONTHS);
       s.phase = "ALL_STAR";
       bump();
       return s;
@@ -1594,6 +1634,7 @@ export function advance(prev: GameState, action: Action): GameState {
     /* ---- 후반기 ---- */
     case "PLAY_SECOND_HALF": {
       s.monthLines = playHalf(s, rng, H2_MONTHS, true);
+      settleClutch(s, rng, s.monthLines, action.clutch);
       s.seasonLine = mergeLines([s.halfLine, ...s.monthLines.map((m) => m.line)]);
       runTournament(s, rng, "LATE");
 
@@ -1661,6 +1702,7 @@ export function advance(prev: GameState, action: Action): GameState {
         s.player.fame = clamp(s.player.fame - 4, 0, 100);
         log(s, { icon: "🙅", title: "대표팀 고사", tone: "neutral", body: `${t.name} 발탁을 고사하고 소속팀에 전념합니다.` });
       }
+      armClutch(s, rng, H1_MONTHS);
       s.phase = "FIRST_HALF";
       bump();
       return s;

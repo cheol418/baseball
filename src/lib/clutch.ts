@@ -33,6 +33,12 @@ export interface ClutchOutcome {
   /** 한 줄 묘사 */
   body: string;
   tone: "epic" | "good" | "neutral" | "bad";
+  /**
+   * 승부를 이겼는가.
+   * 성공 여부를 id 목록으로 따로 관리했더니 타자의 "헛스윙 삼진"과
+   * 투수의 "삼진으로 위기 탈출"이 같은 id를 써서 뒤엉켰다. 결과 자체에 적는다.
+   */
+  good: boolean;
   /** 그 달 기록에 더해지는 값 */
   stat: Partial<Record<string, number>>;
   fame: number;
@@ -151,67 +157,69 @@ function pitcherOptions(s: GameState): ClutchOption[] {
 
 const HIT_POOL: Record<string, ClutchOutcome[]> = {
   swing: [
-    { id: "walkoff", title: "끝내기 만루홈런", body: "받아친 타구가 담장을 넘어갔습니다. 더그아웃이 쏟아져 나옵니다.", tone: "epic",
-      stat: { hr: 1, rbi: 4, h: 1, r: 1 }, fame: 12, trust: 8, condition: 10 },
-    { id: "hr", title: "역전 투런", body: "가운데 담장을 넘겼습니다. 경기가 뒤집혔습니다.", tone: "epic",
-      stat: { hr: 1, rbi: 2, h: 1, r: 1 }, fame: 8, trust: 6, condition: 8 },
-    { id: "k", title: "헛스윙 삼진", body: "크게 돌린 방망이가 허공을 갈랐습니다.", tone: "bad",
+    { id: "walkoff", good: true, title: "끝내기 만루홈런", body: "받아친 타구가 담장을 넘어갔습니다. 더그아웃이 쏟아져 나옵니다.", tone: "epic",
+      stat: { hr: 1, rbi: 4, h: 1, r: 1 }, fame: 14, trust: 8, condition: 10 },
+    { id: "hr", good: true, title: "역전 투런", body: "가운데 담장을 넘겼습니다. 경기가 뒤집혔습니다.", tone: "epic",
+      stat: { hr: 1, rbi: 2, h: 1, r: 1 }, fame: 10, trust: 6, condition: 8 },
+    { id: "swing_k", good: false, title: "헛스윙 삼진", body: "크게 돌린 방망이가 허공을 갈랐습니다.", tone: "bad",
       stat: { so: 1 }, fame: -2, trust: -4, condition: -8 },
-    { id: "fly", title: "뜬공 아웃", body: "잘 맞았지만 외야수 정면이었습니다.", tone: "bad",
-      stat: {}, fame: -1, trust: -2, condition: -5 },
+    { id: "swing_fly", good: false, title: "큼직한 뜬공", body: "잘 맞았지만 담장 앞에서 잡혔습니다.", tone: "bad",
+      stat: {}, fame: 0, trust: -1, condition: -4 },
   ],
   contact: [
-    { id: "clutch2", title: "싹쓸이 2루타", body: "우중간을 가르는 타구, 주자가 모두 들어왔습니다.", tone: "epic",
+    { id: "clutch2", good: true, title: "싹쓸이 2루타", body: "우중간을 가르는 타구, 주자가 모두 들어왔습니다.", tone: "epic",
       stat: { b2: 1, h: 1, rbi: 3 }, fame: 8, trust: 7, condition: 8 },
-    { id: "single", title: "결승 적시타", body: "중전 안타로 주자를 불러들였습니다.", tone: "good",
+    { id: "single", good: true, title: "결승 적시타", body: "중전 안타로 주자를 불러들였습니다.", tone: "good",
       stat: { h: 1, rbi: 2 }, fame: 5, trust: 5, condition: 6 },
-    { id: "gidp", title: "병살타", body: "잘 맞은 타구가 유격수 정면으로 향했습니다.", tone: "bad",
+    { id: "gidp", good: false, title: "병살타", body: "잘 맞은 타구가 유격수 정면으로 향했습니다.", tone: "bad",
       stat: {}, fame: -2, trust: -4, condition: -7 },
+    { id: "contact_out", good: false, title: "빗맞은 내야 땅볼", body: "배트 끝에 맞아 힘없이 굴러갔습니다.", tone: "bad",
+      stat: {}, fame: -1, trust: -2, condition: -3 },
   ],
   patient: [
-    { id: "bb_win", title: "밀어내기 볼넷", body: "끝까지 골라 결승점을 밀어냈습니다. 화려하진 않지만 이겼습니다.", tone: "good",
-      stat: { bb: 1, rbi: 1 }, fame: 4, trust: 6, condition: 5 },
-    { id: "bb", title: "볼넷 출루", body: "승부를 피하는 공에 손대지 않았습니다. 다음 타자에게 넘깁니다.", tone: "neutral",
-      stat: { bb: 1 }, fame: 1, trust: 3, condition: 2 },
-    { id: "look", title: "루킹 삼진", body: "마지막 공이 존을 스쳤습니다. 심판의 손이 올라갔습니다.", tone: "bad",
-      stat: { so: 1 }, fame: -2, trust: -3, condition: -5 },
+    { id: "bb_win", good: true, title: "밀어내기 볼넷", body: "끝까지 골라 결승점을 밀어냈습니다. 화려하진 않지만 이겼습니다.", tone: "good",
+      stat: { bb: 1, rbi: 1 }, fame: 5, trust: 6, condition: 5 },
+    { id: "bb", good: true, title: "볼넷 출루", body: "승부를 피하는 공에 손대지 않았습니다. 다음 타자에게 넘깁니다.", tone: "neutral",
+      stat: { bb: 1 }, fame: 2, trust: 3, condition: 2 },
+    { id: "look", good: false, title: "루킹 삼진", body: "마지막 공이 존을 스쳤습니다. 심판의 손이 올라갔습니다.", tone: "bad",
+      stat: { so: 1 }, fame: -3, trust: -4, condition: -6 },
+    { id: "patient_out", good: false, title: "파울 끝에 범타", body: "끈질기게 버텼지만 결국 잡혔습니다.", tone: "bad",
+      stat: {}, fame: 0, trust: -1, condition: -3 },
   ],
 };
 
 const PIT_POOL: Record<string, ClutchOutcome[]> = {
   power: [
-    { id: "k3", title: "3구 삼진", body: "몸쪽 높은 직구. 방망이가 나오지 못했습니다.", tone: "epic",
-      stat: { so: 1 }, fame: 10, trust: 8, condition: 9 },
-    { id: "k", title: "삼진으로 위기 탈출", body: "결국 헛스윙을 끌어냈습니다.", tone: "good",
-      stat: { so: 1 }, fame: 6, trust: 6, condition: 7 },
-    { id: "hr_allow", title: "역전 피홈런", body: "가운데로 몰린 공이 그대로 넘어갔습니다.", tone: "bad",
-      stat: { hrAllowed: 1, er: 3, h: 1 }, fame: -3, trust: -7, condition: -10 },
-    { id: "hit", title: "적시타 허용", body: "빠른 공에 타이밍이 맞았습니다.", tone: "bad",
+    { id: "k3", good: true, title: "3구 삼진", body: "몸쪽 높은 직구. 방망이가 나오지 못했습니다.", tone: "epic",
+      stat: { so: 1 }, fame: 12, trust: 8, condition: 9 },
+    { id: "pw_k", good: true, title: "삼진으로 위기 탈출", body: "결국 헛스윙을 끌어냈습니다.", tone: "good",
+      stat: { so: 1 }, fame: 7, trust: 6, condition: 7 },
+    { id: "hr_allow", good: false, title: "역전 피홈런", body: "가운데로 몰린 공이 그대로 넘어갔습니다.", tone: "bad",
+      stat: { hrAllowed: 1, er: 3, h: 1 }, fame: -4, trust: -7, condition: -10 },
+    { id: "pw_hit", good: false, title: "적시타 허용", body: "빠른 공에 타이밍이 맞았습니다.", tone: "bad",
       stat: { h: 1, er: 1 }, fame: -1, trust: -4, condition: -6 },
   ],
   corner: [
-    { id: "kk", title: "연속 삼진", body: "구석만 찔러 두 타자를 연달아 돌려세웠습니다.", tone: "epic",
+    { id: "kk", good: true, title: "연속 삼진", body: "구석만 찔러 두 타자를 연달아 돌려세웠습니다.", tone: "epic",
       stat: { so: 2 }, fame: 8, trust: 8, condition: 8 },
-    { id: "fly_out", title: "얕은 뜬공 처리", body: "배트 끝에 맞은 타구가 내야를 넘지 못했습니다.", tone: "good",
+    { id: "fly_out", good: true, title: "얕은 뜬공 처리", body: "배트 끝에 맞은 타구가 내야를 넘지 못했습니다.", tone: "good",
       stat: {}, fame: 4, trust: 5, condition: 5 },
-    { id: "bb_allow", title: "밀어내기 볼넷", body: "끝내 존에 넣지 못했습니다. 한 점을 내줍니다.", tone: "bad",
-      stat: { bb: 1, er: 1 }, fame: -2, trust: -5, condition: -7 },
+    { id: "bb_allow", good: false, title: "밀어내기 볼넷", body: "끝내 존에 넣지 못했습니다. 한 점을 내줍니다.", tone: "bad",
+      stat: { bb: 1, er: 1 }, fame: -3, trust: -5, condition: -7 },
+    { id: "corner_hit", good: false, title: "구석을 노리다 맞았다", body: "가운데로 몰린 공을 놓치지 않았습니다.", tone: "bad",
+      stat: { h: 1, er: 1 }, fame: -1, trust: -3, condition: -4 },
   ],
   ground: [
-    { id: "dp", title: "병살타 유도", body: "낮게 떨어진 공, 유격수-2루-1루로 이어졌습니다.", tone: "epic",
+    { id: "dp", good: true, title: "병살타 유도", body: "낮게 떨어진 공, 유격수-2루-1루로 이어졌습니다.", tone: "epic",
       stat: {}, fame: 7, trust: 8, condition: 8 },
-    { id: "ground_out", title: "땅볼로 한 점", body: "아웃은 잡았지만 3루 주자가 홈을 밟았습니다.", tone: "neutral",
-      stat: { er: 1 }, fame: 1, trust: 2, condition: 1 },
-    { id: "through", title: "내야 안타", body: "빗맞은 타구가 하필 빈 곳으로 굴러갔습니다.", tone: "bad",
+    { id: "ground_out", good: true, title: "땅볼로 한 점", body: "아웃은 잡았지만 3루 주자가 홈을 밟았습니다.", tone: "neutral",
+      stat: { er: 1 }, fame: 2, trust: 2, condition: 1 },
+    { id: "through", good: false, title: "내야 안타", body: "빗맞은 타구가 하필 빈 곳으로 굴러갔습니다.", tone: "bad",
       stat: { h: 1, er: 1 }, fame: -2, trust: -4, condition: -6 },
+    { id: "ground_bb", good: false, title: "유인구가 빠졌다", body: "낮게만 던지다 볼넷을 내줬습니다.", tone: "bad",
+      stat: { bb: 1 }, fame: -1, trust: -3, condition: -4 },
   ],
 };
-
-/** 성공으로 치는 결과 */
-const SUCCESS = new Set([
-  "walkoff", "hr", "clutch2", "single", "bb_win", "bb",
-  "k3", "k", "kk", "fly_out", "dp",
-]);
 
 /* ------------------------------------------------------------------ */
 
@@ -241,8 +249,8 @@ export function rollClutch(
 export function resolveClutch(c: Clutch, optionId: string, s: GameState, rng: RNG): ClutchResult {
   const opt = c.options.find((o) => o.id === optionId) ?? c.options[0];
   const pool = (s.player.kind === "HITTER" ? HIT_POOL : PIT_POOL)[opt.id];
-  const good = pool.filter((o) => SUCCESS.has(o.id));
-  const bad = pool.filter((o) => !SUCCESS.has(o.id));
+  const good = pool.filter((o) => o.good);
+  const bad = pool.filter((o) => !o.good);
   const success = rng.chance(opt.odds);
   const side = success ? good : bad;
   // 같은 성공이라도 능력이 높을수록 더 극적인 쪽이 나온다

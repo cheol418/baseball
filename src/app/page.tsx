@@ -32,17 +32,17 @@ export default function Home() {
 
   return (
     <main className="pb-16">
-      <AppBar title="이번 생은 야구다!" />
+      <AppBar title="야구는 9회말 2아웃부터" />
 
       <div className="bg-[var(--surface)] px-4 pb-6 pt-7">
         <Column>
-        <div className="eyebrow">New Baseball Life</div>
+        <div className="eyebrow">Bottom of the 9th · 2 Outs</div>
         <h2 className="mt-1 text-[26px] font-black leading-tight tracking-tight">
-          이번 생, 다시 시작할까요?
+          아직 한 타석 남았습니다
         </h2>
         <p className="mt-2 text-[13px] leading-relaxed text-[var(--ink-2)]">
           고교 3학년부터 드래프트, 프로 시즌, FA와 은퇴까지.
-          <br />당신의 선택이 커리어를 바꿉니다.
+          <br />9회말 2아웃에서도 커리어는 뒤집힙니다.
         </p>
         <Link href="/create" className="btn btn-primary mt-5 w-full px-5 py-3.5 text-[15px]">
           ⚾ 새로운 인생 시작 <span aria-hidden>→</span>

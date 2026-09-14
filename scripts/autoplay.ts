@@ -19,12 +19,26 @@ export interface AutoOptions {
   /** true를 반환하면 그 시점에서 멈춘다 */
   stopAt?: (g: GameState) => boolean;
   onStep?: (g: GameState) => void;
+  /** 승부처에서 몇 번째 선택지를 고를 것인가 */
+  clutchPick?: number;
+}
+
+
+/**
+ * 승부처 선택.
+ * 반기를 시작할 때 고르지 않으면 그 승부처는 없던 일이 되어,
+ * 자동 플레이가 실제 플레이보다 심심한 기록을 남긴다. (규칙 3)
+ */
+function pickClutch(g: GameState, which = 0): string | undefined {
+  const c = g.pendingClutch;
+  if (!c) return undefined;
+  return c.options[Math.min(which, c.options.length - 1)].id;
 }
 
 export function autoPlay(start: GameState, opt: AutoOptions = {}): GameState {
   const {
     college = false, joinNational = true, military = "SANGMU",
-    nego = "push", transferChance = 0, secondLife = 0,
+    nego = "push", transferChance = 0, secondLife = 0, clutchPick = 0,
   } = opt;
   let g = start;
   let guard = 0;
@@ -52,10 +66,10 @@ export function autoPlay(start: GameState, opt: AutoOptions = {}): GameState {
         });
         break;
       }
-      case "FIRST_HALF": act({ type: "PLAY_FIRST_HALF" }); break;
+      case "FIRST_HALF": act({ type: "PLAY_FIRST_HALF", clutch: pickClutch(g, clutchPick) }); break;
       case "ALL_STAR":
         if (g.pendingTrade) act({ type: "TRADE_DECIDE", accept: Math.random() < 0.5 });
-        else act({ type: "PLAY_SECOND_HALF" });
+        else act({ type: "PLAY_SECOND_HALF", clutch: pickClutch(g, clutchPick) });
         break;
       case "POSTSEASON": act({ type: "PLAY_POSTSEASON" }); break;
       case "SEASON_END": act({ type: "FINISH_SEASON" }); break;

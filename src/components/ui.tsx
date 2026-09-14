@@ -31,7 +31,7 @@ export function AppBar({ title, back, right }: { title: string; back?: string; r
             ←
           </Link>
         ) : (
-          <span className="rounded-sm bg-[var(--danger)] px-2 py-1 text-[10px] font-black tracking-widest">SLB</span>
+          <span className="rounded-sm bg-[var(--danger)] px-2 py-1 text-[10px] font-black tracking-widest">2 OUT</span>
         )}
         <h1 className="flex-1 truncate text-[15px] font-extrabold">{title}</h1>
         {right}

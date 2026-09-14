@@ -52,10 +52,10 @@ function play(seed: number, opt: { college: boolean; military: "SANGMU" | "ACTIV
           act({ type: "TRAIN", optionId: o[rng.int(0, o.length - 1)].id, hell: rng.chance(0.4) });
           break;
         }
-        case "FIRST_HALF": act({ type: "PLAY_FIRST_HALF" }); break;
+        case "FIRST_HALF": act({ type: "PLAY_FIRST_HALF", clutch: pickClutch(g) }); break;
         case "ALL_STAR":
           if (g.pendingTrade) act({ type: "TRADE_DECIDE", accept: rng.chance(0.5) });
-          else act({ type: "PLAY_SECOND_HALF" });
+          else act({ type: "PLAY_SECOND_HALF", clutch: pickClutch(g) });
           break;
         case "POSTSEASON": act({ type: "PLAY_POSTSEASON" }); break;
         case "SEASON_END": act({ type: "FINISH_SEASON" }); break;
@@ -158,6 +158,18 @@ for (const g of finals) {
 }
 
 const allPhases = ["EVENT","HS_SEASON","PATH_CHOICE","COLLEGE_SEASON","DRAFT","SPRING_CAMP","FIRST_HALF","ALL_STAR","POSTSEASON","SEASON_END","INTERNATIONAL","MILITARY_CHOICE","MILITARY_SEASON","NEGOTIATION","STOVE","FA","RETIRE_CHOICE","SECOND_LIFE","RETIRED"];
+
+/**
+ * 승부처 선택.
+ * 반기를 시작할 때 고르지 않으면 그 승부처는 없던 일이 되어,
+ * 자동 플레이가 실제 플레이보다 심심한 기록을 남긴다. (규칙 3)
+ */
+function pickClutch(g: GameState, which = 0): string | undefined {
+  const c = g.pendingClutch;
+  if (!c) return undefined;
+  return c.options[Math.min(which, c.options.length - 1)].id;
+}
+
 const allActions = ["TRADE_DECIDE","CHOOSE_EVENT","SIM_AMATEUR","CHOOSE_PATH","DO_DRAFT","TRAIN","PLAY_FIRST_HALF","PLAY_SECOND_HALF","PLAY_POSTSEASON","FINISH_SEASON","JOIN_NATIONAL","ENLIST","SERVE","NEGOTIATE","REQUEST_TRANSFER","APPLY_SANGMU","SKIP_STOVE","ACCEPT_OFFER","DEFER_FA","RETIRE","KEEP_PLAYING","CHOOSE_SECOND_LIFE","HOF_BALLOT"];
 
 console.log(`■ 스트레스 테스트 — 커리어 ${finals.length}개, 예외 ${crashes}, 정지 ${stuck}\n`);

@@ -6,6 +6,8 @@ import { isHitterLine, mergeLines } from "@/lib/sim";
 import { TOURNAMENTS } from "@/lib/national";
 import { formatMoney } from "@/lib/career";
 import { roleTier } from "@/lib/roles";
+import type { ClutchResult } from "@/lib/clutch";
+import { ClutchReveal } from "@/components/clutch";
 import { FORM_STYLE, formNote, judgeMonthForm, type MonthForm } from "@/lib/form";
 import { teamById } from "@/lib/teams";
 import type {
@@ -16,6 +18,8 @@ export type BroadcastKind = "H1" | "H2" | "PS" | "HS" | "INTL";
 
 type Step =
   | { kind: "month"; label: string; line: StatLine; cume: StatLine; form: MonthForm; note: string; potm?: boolean }
+  /** 반기 시작 때 고른 승부처의 결과 — 중계가 그 달에 닿으면 펼친다 */
+  | { kind: "clutch"; r: ClutchResult }
   | { kind: "card"; icon: string; title: string; body: string; tone: "good" | "bad" | "epic" | "neutral" }
   | { kind: "round"; name: string; opponent: string; win: boolean; score: string }
   | { kind: "hs"; t: AmateurTournament }
@@ -143,6 +147,8 @@ function buildSteps(g: GameState, kind: BroadcastKind): Step[] {
   for (let i = 0; i < months.length; i++) {
     const m = months[i];
     const form = judgeMonthForm(m.line, m.level);
+    // 승부처는 그 달 기록을 만든 사건이므로 월 카드보다 먼저 보여준다
+    if (m.clutch) steps.push({ kind: "clutch", r: m.clutch });
     steps.push({
       kind: "month",
       label: m.label,
@@ -213,7 +219,8 @@ export function Broadcast({ g, kind, onDone }: {
     }
     // 엔트리 이동은 그 달이 끝난 자리에서 확인을 받는다 —
     // 중계가 다 끝난 뒤에 알려주면 "언제 바뀐 건지" 알 수 없다
-    if (steps[i].kind === "move") return;
+    // 승부처는 유저가 직접 고른 결과다 — 지나가버리면 고른 의미가 없다
+    if (steps[i].kind === "move" || steps[i].kind === "clutch") return;
     const dur = steps[i].kind === "month" ? MONTH_MS : CARD_MS;
     const t = setTimeout(() => setI((v) => v + 1), dur);
     return () => clearTimeout(t);
@@ -277,6 +284,16 @@ export function Broadcast({ g, kind, onDone }: {
           {step.kind === "round" && <RoundPanel key={`r${i}`} step={step} />}
           {step.kind === "hs" && <HsPanel key={`h${i}`} step={step} />}
           {step.kind === "game" && <GamePanel key={`g${i}`} step={step} />}
+          {step.kind === "clutch" && (
+            <div key={`k${i}`}>
+              <ClutchReveal r={step.r} />
+              <button
+                onClick={() => setI((v) => v + 1)}
+                className="mt-4 w-full rounded-xl bg-white/90 py-2.5 text-[13px] font-extrabold text-[#0e2a4d] transition hover:bg-white">
+                확인
+              </button>
+            </div>
+          )}
           {step.kind === "move" && (
             <div key={`v${i}`}>
               <MovePanel step={step} />

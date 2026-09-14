@@ -27,6 +27,7 @@ import { saveGame, useGame } from "@/lib/storage";
 import { isFranchiseRole } from "@/lib/roles";
 import { teamById } from "@/lib/teams";
 import { Emblem } from "@/components/emblem";
+import { ClutchCard } from "@/components/clutch";
 import {
   MILITARY_LABEL, type GameState, type HitterLine, type HofVote, type IntlResult,
   type Notice, type PitcherLine,
@@ -646,7 +647,14 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
         <Wrap eyebrow="First Half" title={`${g.year} 전반기`}
           desc={`${team?.name ?? ""} · ${g.seasonLevel === "KBO" ? "1군" : "2군"} ${g.seasonRole}(으)로 시즌을 시작합니다.`}>
           {g.seasonGoal && <GoalCard g={g} />}
-          <Primary onClick={() => run({ type: "PLAY_FIRST_HALF" })} busy={busy} label="전반기 진행 중…">전반기 시작 ⚾</Primary>
+          {g.pendingClutch ? (
+            <ClutchCard
+              clutch={g.pendingClutch} busy={busy}
+              onPick={(id) => run({ type: "PLAY_FIRST_HALF", clutch: id })}
+            />
+          ) : (
+            <Primary onClick={() => run({ type: "PLAY_FIRST_HALF" })} busy={busy} label="전반기 진행 중…">전반기 시작 ⚾</Primary>
+          )}
         </Wrap>
       );
 
@@ -679,6 +687,11 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
                   className="btn btn-ghost flex-1 py-2.5 text-[13px]">팀에 남는다</button>
               </div>
             </div>
+          ) : g.pendingClutch ? (
+            <ClutchCard
+              clutch={g.pendingClutch} busy={busy}
+              onPick={(id) => run({ type: "PLAY_SECOND_HALF", clutch: id })}
+            />
           ) : (
             <Primary onClick={() => run({ type: "PLAY_SECOND_HALF" })} busy={busy} label="후반기 진행 중…">후반기 시작 ⚾</Primary>
           )}
@@ -997,7 +1010,7 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
       const opts = secondLifeOptions(ctx);
       return (
         <Wrap
-          eyebrow="Second Life"
+          eyebrow="After Baseball"
           title="유니폼을 벗고"
           desc={`${p.name} 선수의 현역 생활이 끝났습니다. 이제 무엇을 하며 살아갈지 고릅니다.`}>
           <div className="flex flex-col gap-2">
