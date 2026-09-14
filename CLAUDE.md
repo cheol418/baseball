@@ -89,7 +89,14 @@ npx tsx scripts/debut.ts       # 1군 데뷔·주전 정착 나이
 
 ### 5. UI 스케일 · 한 열 레이아웃
 
-화면 폭은 `ui.tsx`의 `APP_W`(460px) 하나로 잡는다. **PC에서도 모바일과 같은 한 열**이다.
+화면 폭은 `globals.css`의 `.app-shell`(460px) 하나로 잡는다.
+**PC에서도 모바일 기기 한 대만 가운데 세운다** — 바깥은 무대(`--stage`)다.
+`.app-shell`에 `overflow: hidden`을 쓰면 스크롤 컨테이너가 되어 **sticky 헤더가
+떨어져 나간다.** `overflow: clip`을 쓴다. (실제로 겪음)
+
+야구 느낌은 표면으로 낸다 — `.pinstripe`(유니폼) · `.seam-line`(공 실밥) ·
+`.scoreboard`/`.scoreboard-num`(전광판) · `.scorebook`(기록지) · `.jersey`(등번호).
+
 넓다고 정보를 옆으로 늘어놓으면 기기마다 다른 게임이 되고, 오버레이·중계·카드 연출을
 두 벌로 만들어야 한다. `lg:` 분기를 새로 만들지 않는다.
 

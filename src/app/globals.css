@@ -18,6 +18,39 @@
   --gold: #b0821c;
   --danger: #c8102e;
   --radius: 12px;
+
+  /* 기기 바깥 무대 — PC에서도 손에 쥔 화면 그대로를 본다 */
+  --stage: #0b1626;
+  /* 야구장에서 빌려온 색 */
+  --dirt: #b08258;      /* 내야 흙 */
+  --turf: #2f6b45;      /* 잔디 */
+  --seam: #c8102e;      /* 공 실밥 */
+}
+
+/*
+ * 앱 셸.
+ *
+ * 넓은 화면에서 좌우로 늘어놓지 않고, 가운데 한 대만 세워둔다.
+ * 기기 안쪽이 곧 게임 화면이라 모바일과 PC가 같은 그림이 된다.
+ */
+.app-shell {
+  position: relative;
+  margin: 0 auto;
+  width: 100%;
+  max-width: 460px;
+  min-height: 100dvh;
+  background: var(--bg);
+}
+@media (min-width: 520px) {
+  .app-shell {
+    min-height: calc(100dvh - 32px);
+    margin: 16px auto;
+    border-radius: 22px;
+    /* hidden으로 하면 스크롤 컨테이너가 되어 sticky 헤더가 떨어져 나간다.
+       clip은 잘라내기만 하고 스크롤 컨테이너를 만들지 않는다. */
+    overflow: clip;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, .45), 0 0 0 1px rgba(255, 255, 255, .06);
+  }
 }
 
 @theme inline {
@@ -37,7 +70,7 @@
 * { -webkit-tap-highlight-color: transparent; }
 
 html, body {
-  background: var(--bg);
+  background: var(--stage);
   color: var(--ink);
   font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
     "Segoe UI", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
@@ -105,3 +138,65 @@ body { margin: 0; }
 /* 단계 띠가 다음 묶음으로 갈아끼워질 때 */
 @keyframes swapIn { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
 .swap { animation: swapIn .34s cubic-bezier(.22,.8,.3,1) both; }
+
+/* ------------------------------------------------------------------ */
+/* 야구장에서 빌려온 표면                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 유니폼 핀스트라이프.
+ * 구단 색 위에 얇은 세로줄을 얹으면 그 자체로 유니폼이 된다.
+ */
+.pinstripe {
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 255, .10) 0 1px,
+    transparent 1px 9px
+  );
+}
+
+/**
+ * 공 실밥.
+ * 야구를 한 획으로 알아보게 하는 유일한 형태다 — 구분선 대신 쓴다.
+ */
+.seam-line {
+  height: 10px;
+  background-image:
+    repeating-linear-gradient(74deg, var(--seam) 0 2px, transparent 2px 9px);
+  opacity: .5;
+}
+
+/**
+ * 전광판.
+ * 숫자를 크게, 자간을 넓게, 어두운 판 위에 올린다.
+ */
+.scoreboard {
+  background: linear-gradient(180deg, #12233c, #0a1727);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .07);
+}
+.scoreboard-num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .02em;
+  text-shadow: 0 0 10px rgba(255, 209, 102, .35);
+  color: #ffd166;
+}
+
+/**
+ * 기록지 격자.
+ * 스코어북 위에 적는 느낌 — 표와 카드 뒤에 아주 옅게 깐다.
+ */
+.scorebook {
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 28px 28px;
+  background-position: -1px -1px;
+  opacity: .35;
+}
+
+/** 등번호 — 유니폼 등판처럼 */
+.jersey {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, .22);
+}

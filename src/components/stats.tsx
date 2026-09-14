@@ -27,28 +27,24 @@ export function KeyStats({ line, awards }: { line: StatLine; awards?: string[] }
         { k: relief === "sv" ? "SV" : "HLD", stat: relief!, v: relief === "sv" ? line.sv : line.hld },
         { k: "SO", stat: "so", v: line.so }, { k: "WAR", stat: "war", v: line.war.toFixed(1) },
       ];
+  // 전광판 한 판 — 숫자가 주인공이라 어두운 판 위에 올린다
   return (
-    <div className="grid grid-cols-5 gap-1.5">
+    <div className="scoreboard grid grid-cols-5 gap-px overflow-hidden rounded-xl p-px">
       {cells.map((c) => {
         const title = titleOfStat(awards, c.stat);
         return (
           <div
             key={c.k}
             title={title ?? undefined}
-            className={`flex flex-col items-center rounded-xl px-1 py-2 ${
-              title
-                ? "bg-[var(--gold)]/12 ring-1 ring-[var(--gold)]/40"
-                : "bg-[var(--surface-2)]"
-            }`}
+            className="flex flex-col items-center px-1 py-2.5"
+            style={title ? { background: "rgba(255,209,102,.12)" } : undefined}
           >
-            <span className={`eyebrow ${title ? "text-[var(--gold)]" : ""}`}>
+            <span className="text-[8.5px] font-black uppercase tracking-[0.16em] text-white/45">
               {title ? "👑 " : ""}{c.k}
             </span>
-            <span className={`tabular text-[15px] font-extrabold ${title ? "text-[var(--gold)]" : ""}`}>
-              {c.v}
-            </span>
+            <span className="scoreboard-num mt-0.5 text-[16px] font-black">{c.v}</span>
             {title && (
-              <span className="mt-0.5 text-[8.5px] font-bold text-[var(--gold)]">{title}</span>
+              <span className="mt-0.5 text-[8px] font-bold text-[#ffd166]">{title}</span>
             )}
           </div>
         );

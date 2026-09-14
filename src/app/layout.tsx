@@ -17,7 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ko">
       <body>
-        <div className="min-h-dvh w-full">{children}</div>
+        <div className="app-shell">{children}</div>
       </body>
     </html>
   );

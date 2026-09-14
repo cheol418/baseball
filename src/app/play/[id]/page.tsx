@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
-import { AbilityBar, AppBar, Column, Container, Empty, Pill, Section, SeasonProgress } from "@/components/ui";
+import { AbilityBar, AppBar, Column, Container, Empty, Fold, Pill, Section, SeasonProgress } from "@/components/ui";
 import { Broadcast, type BroadcastKind } from "@/components/broadcast";
 import { KeyStats, SeasonTable, fmt2, fmt3 } from "@/components/stats";
 import {
@@ -137,10 +137,13 @@ export default function PlayPage() {
         right={<span className="rounded-full bg-white/15 px-2 py-[3px] text-[10px] font-black">{gradeOf(ovr)} {ovr}</span>}
       />
 
-      <div style={{ background: team ? `linear-gradient(135deg, ${team.color}, ${team.color}cc)` : "var(--brand)" }}>
+      <div
+        className="pinstripe relative"
+        style={{ background: team ? `linear-gradient(135deg, ${team.color}, ${team.color}cc)` : "var(--brand)" }}
+      >
         <Container className="px-4 py-4">
         <div className="flex items-center gap-3 text-white">
-          <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-[20px] font-black">
+          <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-[22px] font-black jersey">
             {p.number}
             {team && (
               <span className="absolute -bottom-1 -right-1 rounded-full bg-white p-[2px] shadow">
@@ -186,6 +189,7 @@ export default function PlayPage() {
           )}
         </div>
         </Container>
+        <div className="seam-line" />
       </div>
 
       {!anim && (
@@ -228,10 +232,11 @@ export default function PlayPage() {
                 {(g.phase === "SEASON_END" || g.phase === "PATH_CHOICE" || g.phase === "DRAFT") && <SeasonReview g={g} />}
                 <ActionCard g={g} busy={busy} run={run} />
               </div>
-              <aside className="min-w-0">
-                <Section eyebrow="Recent" title="최근 소식">
-                  <LogList logs={g.logs.slice(0, 5)} />
-                </Section>
+              <aside className="min-w-0 px-4 py-4">
+                {/* 소식은 참고용이라 접어둔다 — 성적이 먼저 보여야 한다 */}
+                <Fold title="최근 소식" count={Math.min(8, g.logs.length)} tone="card">
+                  <LogList logs={g.logs.slice(0, 8)} />
+                </Fold>
               </aside>
             </div>
           )
@@ -269,9 +274,9 @@ function LevelBadge({ level, role }: { level: string; role: string | null }) {
 
 function MiniStat({ label, value, alert }: { label: string; value: string; alert?: boolean }) {
   return (
-    <div className={`rounded-lg px-1.5 py-1.5 text-center ${alert ? "bg-white/30 ring-1 ring-white/50" : "bg-white/12"}`}>
-      <div className="text-[9px] font-bold uppercase tracking-wider opacity-70">{label}</div>
-      <div className="tabular text-[12px] font-extrabold">{value}</div>
+    <div className={`rounded-lg px-1.5 py-1.5 text-center ${alert ? "bg-black/30 ring-1 ring-white/35" : "bg-black/22"}`}>
+      <div className="text-[8.5px] font-black uppercase tracking-[0.14em] opacity-60">{label}</div>
+      <div className="scoreboard-num text-[13px] font-black">{value}</div>
     </div>
   );
 }
@@ -390,7 +395,11 @@ function SeasonReview({ g }: { g: GameState }) {
           </span>
         </div>
 
-        <div className="mt-3 border-t border-[var(--line)] pt-3"><DetailLine line={last.line} awards={last.awards} /></div>
+        <div className="mt-3 border-t border-[var(--line)] pt-1">
+          <Fold title="상세 기록" count={isHitterLine(last.line) ? "타자" : "투수"}>
+            <DetailLine line={last.line} awards={last.awards} />
+          </Fold>
+        </div>
 
         <div className="mt-3 border-t border-[var(--line)] pt-3">
           <div className="eyebrow mb-2">Fan Feed · 팬 반응</div>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ABILITY_LABEL, ABILITY_MAX } from "@/lib/player";
 
 /**
@@ -218,6 +218,43 @@ export function SeasonProgress({ phase, year, extra }: {
           style={{ width: `${pct}%` }}
         />
       </span>
+    </div>
+  );
+}
+
+/**
+ * 접이식 구역.
+ *
+ * 세부 기록·소식처럼 "필요할 때만 보는 것"을 항상 펼쳐두면 화면이 길어지고,
+ * 정작 중요한 성적이 아래로 밀린다. 제목만 남기고 접어둔다.
+ * 기본값은 구역마다 다르다 — 처음 볼 것은 열어두고, 참고용은 닫아둔다.
+ */
+export function Fold({ title, count, children, open = false, tone = "plain" }: {
+  title: string; count?: number | string; children: ReactNode;
+  open?: boolean; tone?: "plain" | "card";
+}) {
+  const [on, setOn] = useState(open);
+  return (
+    <div className={tone === "card" ? "card overflow-hidden" : ""}>
+      <button
+        onClick={() => setOn((v) => !v)}
+        aria-expanded={on}
+        className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left transition hover:bg-[var(--surface-2)]"
+      >
+        <span
+          className="text-[10px] leading-none text-[var(--ink-3)] transition-transform duration-200"
+          style={{ transform: on ? "rotate(90deg)" : "none" }}
+        >
+          ▶
+        </span>
+        <span className="text-[12.5px] font-extrabold">{title}</span>
+        {count !== undefined && (
+          <span className="tabular rounded-full bg-[var(--surface-2)] px-1.5 py-[1px] text-[10px] font-black text-[var(--ink-3)]">
+            {count}
+          </span>
+        )}
+      </button>
+      {on && <div className="rise border-t border-[var(--line)] px-3.5 py-3">{children}</div>}
     </div>
   );
 }
