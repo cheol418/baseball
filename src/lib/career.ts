@@ -95,6 +95,7 @@ export function newGame(player: Player, wishTeamId: string, seed: number, school
     clutchResult: null,
     liveHalf: null,
     retireRefusedYear: null,
+    rookieDeal: null,
     halfLine: null,
     seasonLine: null,
     seasonLevel: null,
@@ -399,6 +400,10 @@ function runDraft(s: GameState, rng: RNG) {
     const team = rng.pick(TEAMS.filter((t) => t.youth >= 55));
     s.draftPick = { round: 0, overall: 0, teamId: team.id };
     s.contract = { teamId: team.id, salary: MIN_SALARY, years: 1, remaining: 1, role: "육성선수" };
+    s.rookieDeal = {
+      teamId: team.id, round: 0, overall: 0,
+      bonus: 0, salary: MIN_SALARY, role: "육성선수", wish: false,
+    };
     return;
   }
 
@@ -410,6 +415,11 @@ function runDraft(s: GameState, rng: RNG) {
 
   s.draftPick = { round, overall: overallPick, teamId: team.id };
   s.contract = { teamId: team.id, salary: MIN_SALARY, years: 1, remaining: 1, role: "신인" };
+  // 계약 조건은 문장으로만 흘려보내지 않고 그대로 보관한다 — 서명 화면에 띄운다
+  s.rookieDeal = {
+    teamId: team.id, round, overall: overallPick,
+    bonus, salary: MIN_SALARY, role: "신인", wish: team.id === wish.id,
+  };
   s.player.fame = clamp(s.player.fame + Math.max(0, 30 - overallPick), 0, 100);
   s.trust = clamp(s.trust + Math.max(0, 18 - overallPick * 0.4), 0, 100);
 
@@ -1398,6 +1408,9 @@ export type Action =
 
 export function advance(prev: GameState, action: Action): GameState {
   const s = clone(prev);
+  // 입단 계약서는 지명 직후 한 번만 보여준다.
+  // UI가 없는 자동 플레이에서도 다음 액션이 오면 자동으로 닫힌다.
+  if (action.type !== "DO_DRAFT") s.rookieDeal = null;
   const rng = new RNG(s.seed);
   const bump = () => { s.seed = rng.int(1, 2 ** 30); };
 

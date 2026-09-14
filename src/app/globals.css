@@ -99,6 +99,11 @@ body { margin: 0; }
   font-weight: 700;
 }
 
+/*
+ * .card는 Tailwind 유틸리티보다 늦게 선언돼 우선한다.
+ * 그래서 `className="card bg-[...]"`로는 배경을 못 바꾼다 —
+ * 어두운 패널이 필요하면 .card를 쓰지 말고 style로 직접 준다. (실제로 겪음)
+ */
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -244,4 +249,15 @@ body { margin: 0; }
   border: 1px solid rgba(255, 255, 255, .07);
   border-radius: 10%;
   pointer-events: none;
+}
+
+/* 서명 — 손으로 쓴 듯 기울여 나타난다 */
+@keyframes signIn {
+  from { opacity: 0; transform: rotate(-6deg) scale(.82); }
+  to   { opacity: 1; transform: rotate(-6deg) scale(1); }
+}
+.sign {
+  display: inline-block;
+  animation: signIn .34s cubic-bezier(.22,.8,.3,1) both;
+  transform: rotate(-6deg);
 }

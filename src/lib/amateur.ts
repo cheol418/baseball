@@ -2,7 +2,7 @@ import { RNG, clamp } from "./rng";
 import { overall } from "./player";
 import { playingShare, type School } from "./school";
 import { isHitterLine, mergeLines, simHitter, simPitcher } from "./sim";
-import type { AmateurTournament, HsRound, LevelTag, Player, StatLine } from "./types";
+import type { AmateurTournament, HsRound, LevelTag, Player, StatLine, PitcherLine } from "./types";
 
 /** 고교 3대 전국대회 */
 export const HS_TOURNAMENTS = [
@@ -92,12 +92,20 @@ export function simAmateurTournament(
     ? simHitter({ ...base, role: "주전" })
     : simPitcher({ ...base, role: player.position === "CP" ? "마무리" : "선발" });
 
-  // 개인상은 결승까지 간 팀에서만 나온다
+  /**
+   * 개인상은 결승까지 간 팀에서만, 그리고 **그 대회에서 실제로 잘했을 때만** 나온다.
+   *
+   * 전에는 홈런 하나만 쳐도 후보가 되어, 타율 .231에 최우수선수상이 붙었다.
+   * 한 방은 잘한 것의 증거가 아니라 잘한 방식 중 하나일 뿐이다 —
+   * 비율(타율·OPS·ERA)을 먼저 보고, 표본이 너무 적으면 주지 않는다.
+   */
   let award: string | null = null;
   if (placeIdx >= 3) {
     const great = isHitterLine(line)
-      ? line.h >= rounds.length * 1.5 || line.hr >= 1
-      : (line.era > 0 && line.era <= 2.5);
+      ? line.ab >= rounds.length * 3
+        && (line.avg >= 0.320 || (line.hr >= 2 && line.ops >= 0.950))
+        && line.ops >= 0.850
+      : line.era > 0 && line.era <= 2.20 && (line as PitcherLine).ip >= rounds.length * 3.5;
     if (great && rng.chance(placeIdx === 4 ? 0.55 : 0.25)) {
       award = placeIdx === 4 ? "최우수선수상" : "우수선수상";
     }

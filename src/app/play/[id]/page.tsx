@@ -131,6 +131,12 @@ export default function PlayPage() {
   return (
     <main className="pb-10">
       {notice && <NoticeOverlay notice={notice} onClose={dismissNotice} />}
+      {!anim && g.phase === "EVENT" && g.pendingEvent && (
+        <EventModal ev={g.pendingEvent} busy={busy} run={run} />
+      )}
+      {!anim && g.rookieDeal && (
+        <SignModal g={g} onSign={() => saveGame({ ...g, rookieDeal: null })} />
+      )}
       <AppBar
         title={`${p.name} · ${g.year}년`}
         back="/"
@@ -689,16 +695,39 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
         <Wrap eyebrow="All-Star Break" title="올스타 브레이크"
           desc={g.allStar ? "올스타전을 마치고 후반기에 들어갑니다." : "짧은 휴식을 마치고 후반기에 들어갑니다."}>
           {g.seasonGoal && <GoalCard g={g} />}
-          {/* 올스타전은 중계가 따로 없으니 이 화면에서 승부처를 받는다 */}
-          {g.allStarGame?.clutchSituation && !g.allStarGame.clutch && (
-            <ClutchCard
-              clutch={g.allStarGame.clutchSituation} busy={busy}
-              onPick={(id) => run({ type: "RESOLVE_CLUTCH", choice: id, where: "AS" })}
-            />
-          )}
-          {g.allStarGame?.clutch && (
-            <div className="card mb-3 bg-[var(--brand)] px-4 py-3.5 text-white">
-              <ClutchReveal r={g.allStarGame.clutch} />
+          {/*
+            올스타전은 중계가 따로 없다. 승부처만 덩그러니 띄우면
+            후반기를 시작하려는 화면에 웬 타석이 하나 박힌 꼴이 된다 —
+            경기 결과와 한 덩어리로 묶어 "그 경기의 한 장면"으로 보여준다.
+          */}
+          {g.allStarGame && (
+            <div
+              className="mb-3 overflow-hidden rounded-xl text-white"
+              style={{ background: "linear-gradient(150deg, var(--brand-2), var(--brand) 60%, #06182c)" }}
+            >
+              <div className="flex items-center gap-2 px-4 pt-3.5">
+                <span className="text-[18px]">{g.allStarGame.mvp ? "🌟" : "🎪"}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[9.5px] font-black uppercase tracking-[0.18em] opacity-55">
+                    All-Star Game
+                  </div>
+                  <div className="text-[13.5px] font-extrabold">
+                    {g.allStarGame.side} {g.allStarGame.won ? "승리" : "패배"}
+                    <span className="num ml-1.5">{g.allStarGame.score}</span>
+                    {g.allStarGame.mvp && <span className="ml-1.5 text-[11px] text-[#ffd166]">· MVP</span>}
+                  </div>
+                </div>
+              </div>
+              <div className="px-4 pb-4 pt-3">
+                {g.allStarGame.clutchSituation && !g.allStarGame.clutch ? (
+                  <ClutchCard
+                    clutch={g.allStarGame.clutchSituation} busy={busy} dark
+                    onPick={(id) => run({ type: "RESOLVE_CLUTCH", choice: id, where: "AS" })}
+                  />
+                ) : g.allStarGame.clutch ? (
+                  <ClutchReveal r={g.allStarGame.clutch} />
+                ) : null}
+              </div>
             </div>
           )}
           {g.halfLine && <Strip label="전반기 성적" line={g.halfLine} where={whereLabel(g)} />}
@@ -740,46 +769,11 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
         </Wrap>
       );
 
-    case "EVENT": {
-      const ev = g.pendingEvent;
-      if (!ev) return null;
-      /**
-       * 갈림길은 화면을 덮는다.
-       * 페이지의 한 조각으로 흘려보내면 "선택했다"는 감각이 남지 않는다 —
-       * 커리어가 꺾이는 지점이니 잠깐 멈춰 세운다.
-       */
-      return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-5 backdrop-blur-[2px]">
-          <div className="pop w-full max-w-[420px] overflow-hidden rounded-2xl bg-[var(--surface)] shadow-2xl">
-            <div className="px-6 pt-6 text-center" style={{ background: "var(--brand)12" }}>
-              <div className="text-[44px] leading-none">{ev.icon}</div>
-              <div className="mt-2 text-[9.5px] font-black uppercase tracking-[0.2em] text-[var(--ink-3)]">
-                Turning Point
-              </div>
-              <div className="text-[19px] font-black">{ev.title}</div>
-            </div>
-            <div className="px-5 py-4">
-              <p className="text-[12.5px] leading-relaxed text-[var(--ink-2)]">{ev.body}</p>
-              <div className="mt-3 flex flex-col gap-2">
-                {ev.options.map((o) => (
-                  <button key={o.id} onClick={() => run({ type: "CHOOSE_EVENT", optionId: o.id })} disabled={busy}
-                    className="card px-4 py-3 text-left transition hover:!border-[var(--brand)] disabled:opacity-50">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-[13.5px] font-extrabold">{o.label}</span>
-                      {o.risky && <Pill tone="danger">위험</Pill>}
-                    </div>
-                    <div className="mt-0.5 text-[11.5px] leading-relaxed text-[var(--ink-3)]">{o.desc}</div>
-                  </button>
-                ))}
-              </div>
-              <p className="mt-3 text-center text-[10.5px] leading-relaxed text-[var(--ink-3)]">
-                이 선택의 결과는 다음 시즌이 끝날 때 드러납니다.
-              </p>
-            </div>
-          </div>
-        </div>
-      );
-    }
+    case "EVENT":
+      // 갈림길은 페이지 최상위에서 화면을 덮는다(EventModal).
+      // 여기서 그리면 .stage의 transform 애니메이션이 만든 stacking context에
+      // fixed가 갇혀, sticky 탭 바보다 아래로 깔린다. (실제로 겪음)
+      return null;
 
     case "SEASON_END":
       return (
@@ -1190,6 +1184,125 @@ function HellToggle({ g, on, onChange }: {
             : <>성공 <b>{odds}%</b>. 되면 크게 늘지만, 실패하면 한 해를 버립니다.</>}
         </p>
       </button>
+    </div>
+  );
+}
+
+/**
+ * 커리어 갈림길.
+ *
+ * 화면을 덮어 잠깐 멈춰 세운다. **페이지 최상위에서 그린다** —
+ * 애니메이션이 걸린 컨테이너 안에서 그리면 fixed가 그 안에 갇힌다.
+ */
+/**
+ * 입단 계약서.
+ *
+ * 지명 결과를 로그 한 줄로 흘려보내면 커리어가 시작된 느낌이 없다.
+ * 어느 팀이, 몇 순위로, 얼마에 데려가는지를 계약서 한 장으로 보여주고
+ * **직접 서명해야** 다음으로 넘어간다.
+ */
+function SignModal({ g, onSign }: { g: GameState; onSign: () => void }) {
+  const d = g.rookieDeal!;
+  const t = teamById(d.teamId);
+  const [signed, setSigned] = useState(false);
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55 px-5 backdrop-blur-[2px]">
+      <div className="pop max-h-[88dvh] w-full max-w-[420px] overflow-y-auto rounded-2xl bg-[var(--surface)] shadow-2xl">
+        <div className="pinstripe px-5 py-4 text-white" style={{ background: t.color }}>
+          <div className="flex items-center gap-2.5">
+            <Emblem teamId={t.id} size={34} />
+            <div className="min-w-0 flex-1">
+              <div className="text-[9.5px] font-black uppercase tracking-[0.2em] opacity-60">
+                Player Contract
+              </div>
+              <div className="truncate text-[16px] font-black">{t.name}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-5 py-4">
+          <div className="flex flex-col gap-px overflow-hidden rounded-xl bg-[var(--line)]">
+            <Row2 k="지명" v={d.overall === 0 ? "미지명 · 육성선수 계약" : `${d.round}라운드 전체 ${d.overall}순위`} />
+            <Row2 k="계약금" v={d.bonus > 0 ? formatMoney(d.bonus) : "없음"} big />
+            <Row2 k="첫해 연봉" v={formatMoney(d.salary)} big />
+            <Row2 k="보직" v={`${d.role}`} />
+            <Row2 k="구단" v={`전력 ${t.power} · ${t.park.name}`} />
+          </div>
+          {d.wish && (
+            <p className="mt-2.5 text-center text-[11.5px] font-extrabold text-[var(--brand-2)]">
+              희망하던 구단의 지명을 받았습니다.
+            </p>
+          )}
+
+          <div className="mt-4">
+            <div className="eyebrow mb-1.5">서명란</div>
+            <button
+              onClick={() => setSigned(true)}
+              disabled={signed}
+              className="relative flex h-[74px] w-full items-center justify-center rounded-xl border-2 border-dashed border-[var(--line)] bg-[var(--surface-2)] transition hover:border-[var(--brand-2)] disabled:border-solid disabled:border-[var(--brand)]"
+            >
+              {signed ? (
+                <span className="sign text-[26px] font-black text-[var(--brand)]">{g.player.name}</span>
+              ) : (
+                <span className="text-[12px] font-bold text-[var(--ink-3)]">여기를 눌러 서명하세요</span>
+              )}
+            </button>
+          </div>
+
+          <button
+            onClick={onSign}
+            disabled={!signed}
+            className="btn btn-primary mt-3 w-full py-3.5 text-[15px]"
+          >
+            {signed ? "계약서 제출 ✍️" : "서명이 필요합니다"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Row2({ k, v, big }: { k: string; v: string; big?: boolean }) {
+  return (
+    <div className="flex items-center gap-3 bg-[var(--surface)] px-3.5 py-2.5">
+      <span className="w-[64px] shrink-0 text-[11px] font-bold text-[var(--ink-3)]">{k}</span>
+      <span className={`num flex-1 text-right font-black ${big ? "text-[16px]" : "text-[12.5px]"}`}>{v}</span>
+    </div>
+  );
+}
+
+function EventModal({ ev, busy, run }: {
+  ev: NonNullable<GameState["pendingEvent"]>; busy: boolean; run: (a: Action) => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 px-5 backdrop-blur-[2px]">
+      <div className="pop max-h-[86dvh] w-full max-w-[420px] overflow-y-auto rounded-2xl bg-[var(--surface)] shadow-2xl">
+        <div className="px-6 pt-6 text-center">
+          <div className="text-[44px] leading-none">{ev.icon}</div>
+          <div className="mt-2 text-[9.5px] font-black uppercase tracking-[0.2em] text-[var(--ink-3)]">
+            Turning Point
+          </div>
+          <div className="text-[19px] font-black">{ev.title}</div>
+        </div>
+        <div className="px-5 py-4">
+          <p className="text-[12.5px] leading-relaxed text-[var(--ink-2)]">{ev.body}</p>
+          <div className="mt-3 flex flex-col gap-2">
+            {ev.options.map((o) => (
+              <button key={o.id} onClick={() => run({ type: "CHOOSE_EVENT", optionId: o.id })} disabled={busy}
+                className="card px-4 py-3 text-left transition hover:!border-[var(--brand)] disabled:opacity-50">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[13.5px] font-extrabold">{o.label}</span>
+                  {o.risky && <Pill tone="danger">위험</Pill>}
+                </div>
+                <div className="mt-0.5 text-[11.5px] leading-relaxed text-[var(--ink-3)]">{o.desc}</div>
+              </button>
+            ))}
+          </div>
+          <p className="mt-3 text-center text-[10.5px] leading-relaxed text-[var(--ink-3)]">
+            이 선택의 결과는 다음 시즌이 끝날 때 드러납니다.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
