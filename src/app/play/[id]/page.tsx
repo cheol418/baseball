@@ -11,6 +11,7 @@ import {
   canVolunteer, careerTotals, computeHof, draftForecast, formatMoney, sangmuOdds,
   seasonsAtLevel,
   retirementHonors, type Action,
+  faGradeOf,
 } from "@/lib/career";
 import { fanFeed, seasonHeadline } from "@/lib/flavor";
 import { HOF_CUT, HOF_WAIT, legacyContext, secondLifeOptions } from "@/lib/legacy";
@@ -965,6 +966,39 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
       return (
         <Wrap eyebrow="Free Agent" title="FA 협상"
           desc="구단 제안을 비교해 다음 행선지를 정합니다. 지금 계약이 마음에 들지 않으면 1년 미룰 수도 있습니다.">
+          {(() => {
+            /* 등급이 높을수록 보상이 무거워 붙는 구단이 줄어든다 */
+            const fa = faGradeOf(g.contract?.salary ?? 0);
+            const tone = fa.grade === "A" ? "var(--gold)" : fa.grade === "B" ? "var(--brand-2)" : "var(--ink-3)";
+            return (
+              <div className="card mb-3 px-4 py-3">
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className="num flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[17px] font-black text-white"
+                    style={{ background: tone }}
+                  >
+                    {fa.grade}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[9.5px] font-black uppercase tracking-[0.18em] text-[var(--ink-3)]">
+                      FA 등급
+                    </div>
+                    <div className="text-[12.5px] font-extrabold">
+                      {fa.grade}등급 · 영입 구단 보상 부담 {fa.grade === "A" ? "큼" : fa.grade === "B" ? "보통" : "작음"}
+                    </div>
+                  </div>
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-[var(--ink-3)]">
+                  보상 {fa.compensation}.
+                  {fa.grade === "A"
+                    ? " 대우가 좋았던 만큼 데려가는 쪽 부담이 커서, 붙는 구단이 적습니다."
+                    : fa.grade === "C"
+                      ? " 보상 부담이 가벼워 여러 구단이 관심을 보입니다."
+                      : " 적당한 보상이라 시장이 크게 좁아지지는 않습니다."}
+                </p>
+              </div>
+            );
+          })()}
           <div className="flex flex-col gap-2">
             {g.pendingOffers?.map((o) => {
               const t = teamById(o.teamId);

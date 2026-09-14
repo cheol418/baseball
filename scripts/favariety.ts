@@ -1,11 +1,11 @@
 /** FA 제안이 구단마다 다른가 — 총액·연수·옵션 비중 */
 import { RNG } from "../src/lib/rng";
 import { rollCandidate } from "../src/lib/player";
-import { newGame, formatMoney } from "../src/lib/career";
+import { newGame, formatMoney, faGradeOf } from "../src/lib/career";
 import { autoPlay } from "./autoplay";
 import type { GameState } from "../src/lib/types";
 
-const sets: { total: number[]; years: number[]; optRate: number[]; styles: string[] }[] = [];
+const sets: { total: number[]; years: number[]; optRate: number[]; styles: string[]; grade: string; prev: number }[] = [];
 const CFG = [["HITTER", "1B", "slugger"], ["PITCHER", "SP", "power_p"]] as const;
 for (const [kind, pos, style] of CFG) {
   for (let i = 0; i < 90; i++) {
@@ -17,6 +17,8 @@ for (const [kind, pos, style] of CFG) {
       const offs = g.pendingOffers;
       if (!offs || g.phase !== "FA") break;
       sets.push({
+        grade: faGradeOf(g.contract?.salary ?? 0).grade,
+        prev: g.contract?.salary ?? 0,
         total: offs.map((o) => o.total),
         years: offs.map((o) => o.years),
         optRate: offs.map((o) => (o.total ? o.incentive / o.total : 0)),
@@ -40,3 +42,13 @@ console.log(`  180억에 붙은 제안 ${cap}개 (${(cap / all.length * 100).toF
 const styleCount: Record<string, number> = {};
 for (const s of sets) for (const st of s.styles) styleCount[st] = (styleCount[st] ?? 0) + 1;
 console.log(`  성향 분포 ${Object.entries(styleCount).map(([k, v]) => `${k} ${Math.round(v / all.length * 100)}%`).join(" · ")}`);
+
+console.log("\n■ FA 등급별 (실제 KBO는 직전 연봉 순위로 A·B·C를 나눈다)");
+for (const gr of ["A", "B", "C"]) {
+  const a = sets.filter((x) => x.grade === gr);
+  if (!a.length) continue;
+  console.log(`  ${gr}등급  n=${String(a.length).padStart(3)}`
+    + ` · 직전 연봉 ${formatMoney(avg(a.map((x) => x.prev))).padStart(8)}`
+    + ` · 붙은 구단 ${avg(a.map((x) => x.total.length)).toFixed(1)}곳`
+    + ` · 최고 제안 ${formatMoney(avg(a.map((x) => Math.max(...x.total))))}`);
+}

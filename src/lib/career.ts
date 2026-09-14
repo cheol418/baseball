@@ -733,6 +733,53 @@ function buildOffer(s: GameState, t: Team, base: number, ageP: number, rng: RNG,
   };
 }
 
+/**
+ * FA 등급.
+ *
+ * 실제 KBO는 **직전 연봉 순위**로 A·B·C를 나누고, 등급마다 영입 구단이
+ * 원소속팀에 줘야 할 보상이 다르다. 보상이 무거울수록 붙는 구단이 줄어든다 —
+ * 최고 대우를 받던 선수가 오히려 시장이 좁아지는 역설이 실제로 일어난다.
+ *
+ * 우리는 다른 선수들의 연봉을 시뮬레이션하지 않으므로 실제 KBO의
+ * 순위 커트라인에 해당하는 금액대로 가른다(전체 30위 ≈ 5억 / 60위 ≈ 2.5억).
+ */
+export type FaGrade = "A" | "B" | "C";
+
+export interface FaGradeInfo {
+  grade: FaGrade;
+  /** 영입 구단이 원소속팀에 줘야 하는 것 */
+  compensation: string;
+  /** 시장에 붙는 구단 수 */
+  suitors: number;
+  /** 보상 부담이 값을 깎는 정도 */
+  discount: number;
+}
+
+export function faGradeOf(salary: number): FaGradeInfo {
+  if (salary >= 50000) {
+    return {
+      grade: "A",
+      compensation: "보호선수 20명 외 1명 + 직전 연봉 200% (또는 연봉 300%)",
+      suitors: 2,
+      discount: 0.88,
+    };
+  }
+  if (salary >= 25000) {
+    return {
+      grade: "B",
+      compensation: "보호선수 25명 외 1명 + 직전 연봉 100% (또는 연봉 200%)",
+      suitors: 3,
+      discount: 0.95,
+    };
+  }
+  return {
+    grade: "C",
+    compensation: "직전 연봉 150% (선수 보상 없음)",
+    suitors: 5,
+    discount: 0.97,
+  };
+}
+
 function makeFaOffers(s: GameState, rng: RNG): Offer[] {
   /**
    * FA 시장은 평시 몸값보다 훨씬 높게 형성된다 — 여러 구단이 동시에 붙기 때문이다.
@@ -752,8 +799,13 @@ function makeFaOffers(s: GameState, rng: RNG): Offer[] {
   const floor = age >= 35 ? prevSalary * 0.85 : prevSalary * 1.15;
   const base = Math.max(marketValue(s) * faPremium, floor);
   const ageP = clamp(1.25 - (s.player.age - 28) * 0.075, 0.35, 1.3);
-  const candidates = rng.shuffle(TEAMS.filter((t) => t.id !== s.contract?.teamId)).slice(0, 4);
-  const offers = candidates.map((t) => buildOffer(s, t, base, ageP, rng, false));
+  /*
+   * 등급이 높을수록 보상이 무거워 붙는 구단이 줄고, 값도 그만큼 눌린다.
+   * 원소속팀은 보상을 낼 일이 없으니 영향받지 않는다.
+   */
+  const fa = faGradeOf(prevSalary);
+  const candidates = rng.shuffle(TEAMS.filter((t) => t.id !== s.contract?.teamId)).slice(0, fa.suitors);
+  const offers = candidates.map((t) => buildOffer(s, t, base * fa.discount, ageP, rng, false));
   if (s.contract) offers.unshift(buildOffer(s, teamById(s.contract.teamId), base, ageP, rng, true));
   return offers;
 }
