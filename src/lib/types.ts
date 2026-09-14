@@ -178,6 +178,9 @@ export interface SeasonRecord {
   allStarGame?: AllStarGame;
   /** 그해 이달의 선수를 받은 달 ("4월", "7월" …) */
   potm?: string[];
+  /** 아마추어 시즌의 승부처 */
+  clutchSituation?: Clutch;
+  clutch?: ClutchResult;
 }
 
 /** 홈구장 — 같은 성적도 어느 구장에서 뛰느냐에 따라 달라진다 */

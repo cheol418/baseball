@@ -15,40 +15,48 @@ type Row = { grp: string; opt: string; outcome: string; success: boolean; fame: 
 /** 선택지 index를 고정해 커리어를 돌린다 */
 function run(which: number) {
   const rows: Row[] = [];
-  let halves = 0, armed = 0, careers = 0;
-  const war: number[] = [];
+  const byStage: Record<string, number> = {};
+  let careers = 0;
   for (const [grp, kind, pos, style] of CFG) {
     for (let i = 0; i < 60; i++) {
       const rng = new RNG(12000 + i * 37);
       const p = rollCandidate({ name: "s", number: 1, kind, position: pos as never, bats: "R", throws: "R", styleId: style, armSlot: kind === "PITCHER" ? "OVER" : undefined }, rng);
       careers++;
       const seen = new Set<string>();
-      const g: GameState = autoPlay(newGame(p, "DAG", i * 61), {
+      const take = (key: string, stage: string, c: { optionLabel: string; outcome: { title: string; fame: number }; success: boolean }) => {
+        if (seen.has(key)) return;
+        seen.add(key);
+        byStage[stage] = (byStage[stage] ?? 0) + 1;
+        rows.push({ grp, opt: c.optionLabel, outcome: c.outcome.title, success: c.success, fame: c.outcome.fame });
+      };
+      autoPlay(newGame(p, "DAG", i * 61), {
         clutchPick: which,
         onStep: (c) => {
-          if (c.phase === "FIRST_HALF" || c.phase === "ALL_STAR") {
-            const k = `${c.year}:${c.phase}`;
-            if (!seen.has(k)) { seen.add(k); halves++; if (c.pendingClutch) armed++; }
-          }
           for (const m of c.monthLines ?? []) {
-            if (!m.clutch) continue;
-            const k = `${c.year}:${m.key}`;
-            if (seen.has(k)) continue;
-            seen.add(k);
-            rows.push({ grp, opt: m.clutch.optionLabel, outcome: m.clutch.outcome.title, success: m.clutch.success, fame: m.clutch.outcome.fame });
+            if (m.clutch) take(`${c.year}:${m.key}`, m.level === "MINOR" ? "2군" : "1군 월별", m.clutch);
+          }
+          for (const s2 of c.seasons) {
+            if (s2.clutch) take(`am:${s2.year}`, s2.level === "COLLEGE" ? "대학" : "고교", s2.clutch);
+            if (s2.allStarGame?.clutch) take(`as:${s2.year}`, "올스타", s2.allStarGame.clutch);
+            if (s2.ps?.clutch) take(`ps:${s2.year}`, "가을야구", s2.ps.clutch);
+          }
+          for (const r of c.intlResults) {
+            if (r.clutch) take(`intl:${r.year}`, "국제대회", r.clutch);
           }
         },
       });
-      war.push(g.seasons.filter((s) => s.level === "KBO").reduce((a, b) => a + b.line.war, 0));
     }
   }
-  return { rows, halves, armed, careers, war };
+  return { rows, careers, byStage };
 }
 
 const avg = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
 const base = run(0);
-console.log(`■ 승부처 발생 — 반기 ${base.halves}번 중 ${base.armed}번 (${Math.round(base.armed / base.halves * 100)}%)`);
-console.log(`  실제로 치른 승부처 ${base.rows.length}회 · 커리어당 ${(base.rows.length / base.careers).toFixed(1)}회\n`);
+console.log(`■ 승부처 발생 (커리어 ${base.careers}개 · 총 ${base.rows.length}회 · 커리어당 ${(base.rows.length / base.careers).toFixed(1)}회)`);
+for (const [k, v] of Object.entries(base.byStage).sort((a, b) => b[1] - a[1])) {
+  console.log(`  ${k.padEnd(8)} ${String(v).padStart(5)}회 · 커리어당 ${(v / base.careers).toFixed(2)}`);
+}
+console.log("");
 
 console.log("■ 선택지별 결과 — 타자/투수를 갈라서 (같은 시드에서 선택만 바꿈)");
 for (const kindGrp of [["거포"], ["교타자"], ["파워투수"], ["제구투수"]]) {

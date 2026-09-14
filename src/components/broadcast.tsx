@@ -19,7 +19,7 @@ export type BroadcastKind = "H1" | "H2" | "PS" | "HS" | "INTL";
 type Step =
   | { kind: "month"; label: string; line: StatLine; cume: StatLine; form: MonthForm; note: string; potm?: boolean }
   /** 승부처 — 중계가 그 달에 닿으면 멈춰서 선택을 받고, 그 자리에서 결과가 열린다 */
-  | { kind: "clutch"; situation: Clutch; r?: ClutchResult; where?: "AS" | "INTL" | "PS" }
+  | { kind: "clutch"; situation: Clutch; r?: ClutchResult; where?: "AS" | "INTL" | "PS" | "AM" }
   | { kind: "card"; icon: string; title: string; body: string; tone: "good" | "bad" | "epic" | "neutral" }
   | { kind: "round"; name: string; opponent: string; win: boolean; score: string }
   | { kind: "hs"; t: AmateurTournament }
@@ -105,6 +105,10 @@ function buildSteps(g: GameState, kind: BroadcastKind): Step[] {
     const rec = g.lastSeasonIndex !== null ? g.seasons[g.lastSeasonIndex] : null;
     const list = rec?.tournaments ?? [];
     const steps: Step[] = list.map((t) => ({ kind: "hs" as const, t }));
+    // 아마추어 승부처는 대회들을 다 치른 뒤, 총평 직전에 온다
+    if (rec?.clutchSituation) {
+      steps.push({ kind: "clutch", situation: rec.clutchSituation, r: rec.clutch, where: "AM" });
+    }
     const best = list.reduce((a, b) => (RANK[b.placement] > RANK[a.placement] ? b : a), list[0]);
     if (best) {
       const total = list.reduce((a, t) => a + RANK[t.placement], 0);
@@ -218,7 +222,7 @@ function buildSteps(g: GameState, kind: BroadcastKind): Step[] {
 export function Broadcast({ g, kind, onDone, onAction, busy = false }: {
   g: GameState; kind: BroadcastKind; onDone: () => void;
   /** 중계 도중 상태를 바꿔야 할 때 (승부처) */
-  onAction?: (a: { type: "RESOLVE_CLUTCH"; choice: string; where?: "AS" | "INTL" | "PS" }) => void;
+  onAction?: (a: { type: "RESOLVE_CLUTCH"; choice: string; where?: "AS" | "INTL" | "PS" | "AM" }) => void;
   busy?: boolean;
 }) {
   const steps = useMemo(() => buildSteps(g, kind), [g, kind]);

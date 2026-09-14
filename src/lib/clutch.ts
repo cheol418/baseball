@@ -89,6 +89,21 @@ const PIT_SCENES_SP = [
   { eyebrow: "개막전 선발", title: "한 해의 첫 공", body: "만원 관중 앞에서 던지는 올 시즌 첫 이닝입니다." },
 ];
 
+const MINOR_SCENES = [
+  { eyebrow: "퓨처스 9회말 2사", title: "1군이 보고 있다", body: "스카우트와 코칭스태프가 관중석에 앉아 있습니다. 여기서 보여줘야 합니다." },
+  { eyebrow: "콜업을 앞둔 한 경기", title: "마지막 시험대", body: "이 경기 결과로 1군 등록이 갈릴 수 있습니다." },
+];
+
+const HS_SCENES = [
+  { eyebrow: "전국대회 8강 9회말", title: "고교 시절의 한 타석", body: "스탠드에 프로 스카우트들이 앉아 있습니다. 이 한 번이 드래프트를 바꿉니다." },
+  { eyebrow: "결승 연장 승부", title: "3학년의 마지막 여름", body: "지면 여기서 끝입니다. 더 이상 다음이 없습니다." },
+];
+
+const COLLEGE_SCENES = [
+  { eyebrow: "대학 선수권 준결승", title: "다시 증명할 차례", body: "고교 때 받지 못한 평가를 뒤집을 기회입니다." },
+  { eyebrow: "프로 스카우트 앞에서", title: "보고 있는 눈이 많다", body: "이 경기 하나로 지명 순위가 달라집니다." },
+];
+
 const PIT_SCENES_RP = [
   { eyebrow: "9회 1점 차 등판", title: "세이브 상황", body: "선두 타자가 출루하면 동점 주자가 나갑니다." },
   { eyebrow: "8회 무사 만루 승계", title: "불을 꺼야 한다", body: "앞선 투수가 만들어 놓은 위기. 실점 없이 막으면 팀이 이깁니다." },
@@ -244,10 +259,12 @@ const STAGE_SCENES: Record<string, { eyebrow: string; title: string; body: strin
  * 리그 경기보다 인지도가 크게 움직인다 — 보는 눈이 다르다.
  */
 export function rollStageClutch(
-  stage: "AS" | "INTL" | "PS", s: GameState, rng: RNG, label: string,
+  stage: "AS" | "INTL" | "PS" | "HS" | "COLLEGE", s: GameState, rng: RNG, label: string,
 ): Clutch {
   const hitter = s.player.kind === "HITTER";
-  const scene = rng.pick(STAGE_SCENES[stage]);
+  const scene = rng.pick(
+    stage === "HS" ? HS_SCENES : stage === "COLLEGE" ? COLLEGE_SCENES : STAGE_SCENES[stage],
+  );
   return {
     monthIndex: -1,
     monthLabel: label,
@@ -259,15 +276,21 @@ export function rollStageClutch(
   };
 }
 
-/** 이번 반기에 승부처가 생기는가 — 1군에서 뛸 때만 */
+/**
+ * 이번 반기의 승부처.
+ * 2군에도 건다 — 콜업이 걸린 경기는 1군 못지않게 무겁다.
+ * 다만 무대가 작아 인지도는 덜 움직인다(applyStageScale 참고).
+ */
 export function rollClutch(
   s: GameState, rng: RNG, months: readonly { key: string; label: string }[],
 ): Clutch | null {
-  if (s.seasonLevel !== "KBO" || !s.contract) return null;
+  if (!s.contract || (s.seasonLevel !== "KBO" && s.seasonLevel !== "MINOR")) return null;
   const hitter = s.player.kind === "HITTER";
-  const scenes = hitter
-    ? HIT_SCENES
-    : isRotationRole(s.seasonRole ?? "") ? PIT_SCENES_SP : PIT_SCENES_RP;
+  const scenes = s.seasonLevel === "MINOR"
+    ? MINOR_SCENES
+    : hitter
+      ? HIT_SCENES
+      : isRotationRole(s.seasonRole ?? "") ? PIT_SCENES_SP : PIT_SCENES_RP;
   const scene = rng.pick(scenes);
   const mi = rng.int(0, months.length - 1);
   return {

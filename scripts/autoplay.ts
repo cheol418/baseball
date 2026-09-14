@@ -53,9 +53,17 @@ export function autoPlay(start: GameState, opt: AutoOptions = {}): GameState {
     switch (g.phase) {
       case "HS_SEASON":
       case "COLLEGE_SEASON": act({ type: "SIM_AMATEUR" }); break;
-      case "PATH_CHOICE":
+      case "PATH_CHOICE": {
+        // 아마추어 시즌의 승부처를 먼저 처리한다 (규칙 3)
+        const rec = g.seasons[g.lastSeasonIndex ?? -1];
+        if (rec?.clutchSituation && !rec.clutch) {
+          const os = rec.clutchSituation.options;
+          act({ type: "RESOLVE_CLUTCH", choice: os[Math.min(clutchPick, os.length - 1)].id, where: "AM" });
+          break;
+        }
         act({ type: "CHOOSE_PATH", path: college && g.seasons.filter((x) => x.level === "COLLEGE").length < 2 ? "COLLEGE" : "DRAFT" });
         break;
+      }
       case "DRAFT": act({ type: "DO_DRAFT" }); break;
       case "SPRING_CAMP": {
         const opts = g.pendingTraining ?? [];
@@ -92,7 +100,23 @@ export function autoPlay(start: GameState, opt: AutoOptions = {}): GameState {
         break;
       }
       case "POSTSEASON": act({ type: "PLAY_POSTSEASON" }); break;
-      case "SEASON_END": act({ type: "FINISH_SEASON" }); break;
+      case "SEASON_END": {
+        // 가을야구·국제대회 승부처는 중계에서 받으므로 여기서 처리한다 (규칙 3)
+        const ps = g.postseason;
+        if (ps?.clutchSituation && !ps.clutch) {
+          const os = ps.clutchSituation.options;
+          act({ type: "RESOLVE_CLUTCH", choice: os[Math.min(clutchPick, os.length - 1)].id, where: "PS" });
+          break;
+        }
+        const it = g.intlResults.find((x) => x.clutchSituation && !x.clutch);
+        if (it?.clutchSituation) {
+          const os = it.clutchSituation.options;
+          act({ type: "RESOLVE_CLUTCH", choice: os[Math.min(clutchPick, os.length - 1)].id, where: "INTL" });
+          break;
+        }
+        act({ type: "FINISH_SEASON" });
+        break;
+      }
       case "INTERNATIONAL": act({ type: "JOIN_NATIONAL", join: joinNational }); break;
       case "MILITARY_CHOICE":
         act({ type: "ENLIST", option: canVolunteer(g) ? military : "ACTIVE" });

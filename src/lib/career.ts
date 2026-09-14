@@ -6,7 +6,7 @@ import {
   potentialOverall, setAb,
 } from "./player";
 import {
-  emptyLine, HALF_SHARE, isHitterLine, judgeAllStar, judgeAwards, MAJOR_TITLES, mergeLines,
+  emptyLine, HALF_SHARE, isHitterLine, judgeAllStar, judgeAwards, LEVEL_GAMES, MAJOR_TITLES, mergeLines,
   simAllStarGame, simHitter, simPitcher,
 } from "./sim";
 import {
@@ -134,7 +134,14 @@ export function newGame(player: Player, wishTeamId: string, seed: number, school
 /* 부상 / 보직                                                          */
 /* ------------------------------------------------------------------ */
 
-function rollInjury(p: Player, rng: RNG): { availability: number; note: string | null } {
+/**
+ * 부상.
+ *
+ * 결장을 "시즌의 30%"처럼 비율로 쓰면, 옆에 붙는 "1군에서 85%를 보냈다"와
+ * 분모가 달라 모순처럼 읽힌다. 둘 다 **경기 수**로 말한다.
+ * 시즌 경기 수는 레벨마다 다르다(고교 24 · 대학 38 · 2군 110 · 1군 144).
+ */
+function rollInjury(p: Player, rng: RNG, level: LevelTag = "KBO"): { availability: number; note: string | null } {
   let chance = clamp(0.30 - n50(getAb(p.abilities, "durability" as never)) * 0.2, 0.04, 0.55);
   if (p.trait === "glass") chance += 0.14;
   if (p.trait === "ironman") chance -= 0.12;
@@ -149,7 +156,11 @@ function rollInjury(p: Player, rng: RNG): { availability: number; note: string |
   if (severity === "심각") {
     setAb(p.abilities, "durability" as never, clamp(getAb(p.abilities, "durability" as never) - rng.int(2, 6), 10, ABILITY_MAX));
   }
-  return { availability: 1 - miss, note: `${inj}(${severity}) — 시즌의 약 ${Math.round(miss * 100)}%를 결장했습니다.` };
+  const missed = Math.max(1, Math.round(LEVEL_GAMES[level] * miss));
+  return {
+    availability: 1 - miss,
+    note: `${inj}(${severity}) — 약 ${missed}경기를 결장했습니다 (${LEVEL_GAMES[level]}경기 기준).`,
+  };
 }
 
 export function assignRole(
@@ -717,7 +728,7 @@ function openSeason(s: GameState, rng: RNG, campInjury = 0, availCap = 1) {
     s.seasonRole = role;
     s.contract!.role = role;
   }
-  const inj = rollInjury(s.player, rng);
+  const inj = rollInjury(s.player, rng, s.seasonLevel ?? "MINOR");
   const carried = s.nextSeasonAvailability;
   s.seasonAvailability = clamp(
     inj.availability * (1 - campInjury) * carried * availCap, 0.05, 1,
@@ -1044,7 +1055,7 @@ function playHalf(
 
     const entry: MonthLine = { key: m.key, label: m.label, line, level, role, potm };
     // 걸어둔 승부처를 그 달에 심는다 — 2군에서 보낸 달이면 없던 일이 된다
-    if (s.pendingClutch && s.pendingClutch.monthIndex === mi && level === "KBO") {
+    if (s.pendingClutch && s.pendingClutch.monthIndex === mi && (level === "KBO" || level === "MINOR")) {
       entry.clutchSituation = s.pendingClutch;
     }
     // 1군·2군을 오간 시즌은 나중에 따로 보여줘야 하므로 그때그때 갈라 담는다
@@ -1097,11 +1108,14 @@ function playHalf(
 /** 아마추어 시즌은 한 번에 치른다 */
 function runAmateurSeason(s: GameState, rng: RNG, level: LevelTag) {
   const p = s.player;
-  const inj = rollInjury(p, rng);
+  const inj = rollInjury(p, rng, level);
   const role = defaultRole(p);
 
   // 아마추어 야구는 전국대회가 전부다
   const am = simAmateurSeason(p, rng, inj.availability, level, schoolOf(s.schoolName ?? "", level));
+  // 고교·대학에도 승부처를 하나 — 여기서의 한 타석이 드래프트를 바꾼다
+  const amClutch = rollStageClutch(level === "COLLEGE" ? "COLLEGE" : "HS", s, rng,
+    level === "COLLEGE" ? "대학 전국대회" : "고교 전국대회");
   const line: StatLine = am.line;
   const awards = am.awards;
   const tournaments: AmateurTournament[] = am.tournaments;
@@ -1123,6 +1137,7 @@ function runAmateurSeason(s: GameState, rng: RNG, level: LevelTag) {
     position: p.position, role, salary: 0, line, awards,
     note: inj.note ?? undefined,
     tournaments,
+    clutchSituation: amClutch,
   });
   s.lastSeasonIndex = s.seasons.length - 1;
   if (inj.note) log(s, { icon: "🏥", title: "부상", tone: "bad", body: inj.note });
@@ -1156,7 +1171,7 @@ function closeSeason(s: GameState, rng: RNG) {
     note: [
       s.seasonNote ?? "",
       s.kboShare > 0 && s.kboShare < 1
-        ? `시즌의 ${Math.round(s.kboShare * 100)}%를 1군에서 보냈습니다.`
+        ? `1군 ${Math.round(LEVEL_GAMES.KBO * s.kboShare)}경기 · 2군 ${Math.round(LEVEL_GAMES.KBO * (1 - s.kboShare))}경기로 나눠 뛰었습니다.`
         : "",
     ].filter(Boolean).join(" ") || undefined,
     half: s.halfLine ?? undefined,
@@ -1342,7 +1357,7 @@ export type Action =
   | { type: "TRAIN"; optionId: string; hell?: boolean }
   | { type: "PLAY_FIRST_HALF" }
   | { type: "FINISH_HALF" }
-  | { type: "RESOLVE_CLUTCH"; choice: string; where?: "AS" | "INTL" | "PS" }
+  | { type: "RESOLVE_CLUTCH"; choice: string; where?: "AS" | "INTL" | "PS" | "AM" }
   | { type: "PLAY_SECOND_HALF" }
   | { type: "PLAY_POSTSEASON" }
   | { type: "FINISH_SEASON" }
@@ -1711,6 +1726,14 @@ export function advance(prev: GameState, action: Action): GameState {
           if (rec?.ps) rec.ps = ps;
         }, 1.8) ?? s;
       }
+      if (action.where === "AM") {
+        const rec = s.seasons[s.lastSeasonIndex ?? -1];
+        if (!rec?.clutchSituation || rec.clutch) return s;
+        return settle(rec.clutchSituation, (r) => {
+          rec.clutch = r;
+          rec.line = applyClutchToLine(rec.line, r);
+        }, 0.5) ?? s;
+      }
       if (action.where === "INTL") {
         const intl = s.intlResults.find((x) => x.clutchSituation && !x.clutch);
         if (!intl) return s;
@@ -1727,10 +1750,15 @@ export function advance(prev: GameState, action: Action): GameState {
       const r = resolveClutch(m.clutchSituation!, action.choice, s, rng);
       m.line = applyClutchToLine(m.line, r);
       m.clutch = r;
-      s.player.fame = clamp(s.player.fame + r.outcome.fame, 0, 100);
+      // 2군은 보는 눈이 적다 — 같은 활약이어도 이름이 덜 알려진다
+      const fameScale = m.level === "MINOR" ? 0.35 : 1;
+      s.player.fame = clamp(s.player.fame + Math.round(r.outcome.fame * fameScale), 0, 100);
       s.trust = clamp(s.trust + r.outcome.trust, 0, 100);
       s.player.condition = clamp(s.player.condition + r.outcome.condition, 25, 100);
-      if (s.seasonByLevel?.KBO) s.seasonByLevel.KBO = applyClutchToLine(s.seasonByLevel.KBO, r);
+      const bucket = s.seasonByLevel;
+      if (bucket?.[m.level as "KBO" | "MINOR"]) {
+        bucket[m.level as "KBO" | "MINOR"] = applyClutchToLine(bucket[m.level as "KBO" | "MINOR"]!, r);
+      }
       // 승부처가 얹혔으니 합계를 다시 낸다
       if (s.liveHalf === "H1") {
         s.halfLine = mergeLines(lines.map((x) => x.line));

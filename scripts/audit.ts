@@ -42,9 +42,17 @@ function play(seed: number, opt: { college: boolean; military: "SANGMU" | "ACTIV
     try {
       switch (g.phase) {
         case "HS_SEASON": case "COLLEGE_SEASON": act({ type: "SIM_AMATEUR" }); break;
-        case "PATH_CHOICE":
+        case "PATH_CHOICE": {
+          // 아마추어 시즌의 승부처를 먼저 처리한다 (규칙 3)
+          const rec = g.seasons[g.lastSeasonIndex ?? -1];
+          if (rec?.clutchSituation && !rec.clutch) {
+            const os = rec.clutchSituation.options;
+            act({ type: "RESOLVE_CLUTCH", choice: os[rng.int(0, os.length - 1)].id, where: "AM" });
+            break;
+          }
           act({ type: "CHOOSE_PATH", path: opt.college && g.seasons.filter((x) => x.level === "COLLEGE").length < 2 ? "COLLEGE" : "DRAFT" });
           break;
+        }
         case "DRAFT": act({ type: "DO_DRAFT" }); break;
         case "SPRING_CAMP": {
           const o = g.pendingTraining;
@@ -69,7 +77,23 @@ function play(seed: number, opt: { college: boolean; military: "SANGMU" | "ACTIV
         break;
       }
       case "POSTSEASON": act({ type: "PLAY_POSTSEASON" }); break;
-        case "SEASON_END": act({ type: "FINISH_SEASON" }); break;
+        case "SEASON_END": {
+        // 가을야구·국제대회 승부처는 중계에서 받으므로 여기서 처리한다 (규칙 3)
+        const ps = g.postseason;
+        if (ps?.clutchSituation && !ps.clutch) {
+          const os = ps.clutchSituation.options;
+          act({ type: "RESOLVE_CLUTCH", choice: os[rng.int(0, os.length - 1)].id, where: "PS" });
+          break;
+        }
+        const it = g.intlResults.find((x) => x.clutchSituation && !x.clutch);
+        if (it?.clutchSituation) {
+          const os = it.clutchSituation.options;
+          act({ type: "RESOLVE_CLUTCH", choice: os[rng.int(0, os.length - 1)].id, where: "INTL" });
+          break;
+        }
+        act({ type: "FINISH_SEASON" });
+        break;
+      }
         case "INTERNATIONAL": act({ type: "JOIN_NATIONAL", join: opt.joinNat }); break;
         // 상무는 미리 지원해서 붙어야 간다 — 입영 통지 시점엔 대개 현역만 남는다
         case "MILITARY_CHOICE":
@@ -113,7 +137,9 @@ function play(seed: number, opt: { college: boolean; military: "SANGMU" | "ACTIV
     // 같은 단계에 머무는 게 정상인 곳들.
     // HALF_REVIEW는 승부처를 고른 뒤(RESOLVE_CLUTCH) 판정(FINISH_HALF)으로 넘어가므로
     // 한 단계에서 액션이 두 번 필요하다.
-    const STAY_OK = ["STOVE", "ALL_STAR", "HALF_REVIEW"];
+    // PATH_CHOICE·ALL_STAR·HALF_REVIEW는 승부처를 고른 뒤 본 액션이 오므로
+    // 한 단계에서 액션이 두 번 필요하다.
+    const STAY_OK = ["STOVE", "ALL_STAR", "HALF_REVIEW", "PATH_CHOICE", "SEASON_END"];
     if (`${g.phase}:${g.year}:${g.player.age}` === before && !STAY_OK.includes(g.phase)) {
       stuck++; add("무한루프", before); return g;
     }
