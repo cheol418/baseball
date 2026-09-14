@@ -88,7 +88,7 @@ docs/           이 문서와 개발 이력
 | 파일 | 줄 | 역할 |
 |---|---:|---|
 | `broadcast.tsx` | 487 | 월별 중계 연출. 경기·통보·국제대회를 카드로 순서대로 재생 |
-| `ui.tsx` | 174 | `Container`·`Section`·`Pill`·`AbilityBar`·`SeasonProgress` |
+| `ui.tsx` | 215 | `Container`·`Section`·`Pill`·`AbilityBar`·`SeasonProgress`·`Fold`(접이식) |
 | `stats.tsx` | 115 | 기록 표·숫자 포맷 |
 | `emblem.tsx` | 175 | 구단 크레스트 10종 (직접 그린 SVG — 실제 KBO 로고는 상표라 쓰지 않는다) |
 | `clutch.tsx` | 165 | 승부처 선택 카드 · 결과 뽑기 공개(DRAW COMPLETE) |

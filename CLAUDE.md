@@ -95,7 +95,11 @@ npx tsx scripts/debut.ts       # 1군 데뷔·주전 정착 나이
 떨어져 나간다.** `overflow: clip`을 쓴다. (실제로 겪음)
 
 야구 느낌은 표면으로 낸다 — `.pinstripe`(유니폼) · `.seam-line`(공 실밥) ·
-`.scoreboard`/`.scoreboard-num`(전광판) · `.scorebook`(기록지) · `.jersey`(등번호).
+`.scoreboard`/`.scoreboard-num`(전광판) · `.scorebook`(기록지 격자) ·
+`.jersey`(등번호) · `.ballpark`(구장 실루엣 — 중계 배경).
+탭 바는 더그아웃(어두운 구단색), 기록 표는 스코어북 격자 위에 올린다.
+
+참고용 구역은 `<Fold>`로 접는다 — 상세 기록 · 최근 소식 · 아마추어/2군 표.
 
 넓다고 정보를 옆으로 늘어놓으면 기기마다 다른 게임이 되고, 오버레이·중계·카드 연출을
 두 벌로 만들어야 한다. `lg:` 분기를 새로 만들지 않는다.

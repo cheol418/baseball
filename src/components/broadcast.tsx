@@ -442,10 +442,10 @@ export function Broadcast({ g, kind, onDone, onAction, busy = false }: {
 
   return (
     <div className="flex min-h-[62vh] flex-col justify-center px-4 py-6">
-      <div className="overflow-hidden rounded-2xl text-white shadow-lg"
+      <div className="ballpark relative overflow-hidden rounded-2xl text-white shadow-lg"
         style={{ background: `linear-gradient(150deg, ${accent}, ${accent}dd 60%, #06182c)` }}>
         {/* 헤더 */}
-        <div className="flex items-center justify-between px-4 pt-4">
+        <div className="relative flex items-center justify-between px-4 pt-4">
           <div className="min-w-0">
             <div className="text-[9.5px] font-black uppercase tracking-[0.18em] opacity-60">Live</div>
             <div className="flex items-center gap-1.5">
@@ -480,7 +480,7 @@ export function Broadcast({ g, kind, onDone, onAction, busy = false }: {
           ))}
         </div>
 
-        <div className="px-4 pb-5 pt-4">
+        <div className="relative px-4 pb-5 pt-4">
           {/* 국제대회는 대회 현황을 계속 띄워둔다 — 어디까지 왔는지가 보여야 한다 */}
           {!warmup && kind === "INTL" && intlOfYear && (
             <TourneyBoard

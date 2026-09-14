@@ -200,3 +200,36 @@ body { margin: 0; }
   letter-spacing: -.02em;
   text-shadow: 0 2px 0 rgba(0, 0, 0, .22);
 }
+
+/**
+ * 구장 실루엣.
+ *
+ * 중계 화면 뒤에 내야 다이아몬드와 조명 불빛을 아주 옅게 깐다.
+ * 읽는 데 방해가 되면 안 되므로 형태만 남기고 거의 지운다.
+ */
+.ballpark::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    /* 조명탑 불빛 */
+    radial-gradient(60% 40% at 18% -8%, rgba(255, 255, 255, .10), transparent 70%),
+    radial-gradient(60% 40% at 82% -8%, rgba(255, 255, 255, .08), transparent 70%),
+    /* 외야 잔디 */
+    radial-gradient(120% 70% at 50% 118%, rgba(47, 107, 69, .34), transparent 62%);
+}
+
+/** 내야 다이아몬드 — 마름모 한 개로 충분하다 */
+.ballpark::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -18%;
+  width: 78%;
+  aspect-ratio: 1;
+  transform: translateX(-50%) rotate(45deg);
+  border: 1px solid rgba(255, 255, 255, .07);
+  border-radius: 10%;
+  pointer-events: none;
+}

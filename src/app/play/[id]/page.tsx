@@ -192,13 +192,16 @@ export default function PlayPage() {
         <div className="seam-line" />
       </div>
 
+      {/* 탭 바는 더그아웃 — 앉아서 그라운드를 보는 자리라 어둡다 */}
       {!anim && (
-      <nav className="sticky top-[49px] z-20 border-b border-[var(--line)] bg-[var(--surface)]">
+      <nav className="sticky top-[49px] z-20 bg-[var(--brand)]">
         <Container className="flex px-2">
           {([["season", "시즌"], ["career", "커리어"], ["player", "선수"], ["log", "기록"]] as [Tab, string][]).map(([k, label]) => (
             <button key={k} onClick={() => setTab(k)}
-              className={`flex-1 border-b-2 py-2.5 text-[13px] font-bold transition ${
-                tab === k ? "border-[var(--danger)] text-[var(--brand)]" : "border-transparent text-[var(--ink-3)] hover:text-[var(--ink-2)]"
+              className={`flex-1 border-b-[3px] py-2.5 text-[13px] font-extrabold transition ${
+                tab === k
+                  ? "border-[var(--danger)] text-white"
+                  : "border-transparent text-white/45 hover:text-white/75"
               }`}>{label}</button>
           ))}
         </Container>
@@ -1554,9 +1557,12 @@ function CareerTab({ g }: { g: GameState }) {
       )}
 
       {other.length > 0 && (
-        <Section eyebrow="Amateur / Minor / Army" title="아마추어 · 2군 · 군 복무">
-          <SeasonTable seasons={other} kind={g.player.kind} />
-        </Section>
+        <div className="px-4 py-4">
+          {/* 1군 기록이 먼저다 — 그 아래 기록은 찾아볼 때만 편다 */}
+          <Fold title="아마추어 · 2군 · 군 복무" count={`${other.length}시즌`} tone="card">
+            <SeasonTable seasons={other} kind={g.player.kind} />
+          </Fold>
+        </div>
       )}
     </div>
   );
