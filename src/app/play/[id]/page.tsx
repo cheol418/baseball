@@ -27,7 +27,7 @@ import { saveGame, useGame } from "@/lib/storage";
 import { isFranchiseRole } from "@/lib/roles";
 import { teamById } from "@/lib/teams";
 import { Emblem } from "@/components/emblem";
-import { ClutchCard } from "@/components/clutch";
+import { ClutchCard, ClutchReveal } from "@/components/clutch";
 import {
   MILITARY_LABEL, type GameState, type HitterLine, type HofVote, type IntlResult,
   type Notice, type PitcherLine,
@@ -53,7 +53,10 @@ export default function PlayPage() {
    * 같은 진행 바에 넣으면 남은 칸 수가 예선 탈락인지 결승인지를 미리 알려준다.
    */
   const [animQueue, setAnimQueue] = useState<BroadcastKind[]>([]);
-  const anim = animQueue[0] ?? null;
+  // 중계 도중 새로고침하면 animQueue가 비지만 phase는 HALF_REVIEW로 남는다 —
+  // 그 경우 중계를 다시 틀어 판정까지 이어지게 한다
+  const anim: BroadcastKind | null = animQueue[0]
+    ?? (g?.phase === "HALF_REVIEW" ? (g.liveHalf === "H2" ? "H2" : "H1") : null);
 
   const run = (action: Action) => {
     if (busy || !g) return;
@@ -200,7 +203,15 @@ export default function PlayPage() {
         )}
         {tab === "season" && (
           anim ? (
-            <Broadcast key={anim} g={g} kind={anim} onDone={() => setAnimQueue((q) => q.slice(1))} />
+            <Broadcast
+              key={anim} g={g} kind={anim} busy={busy}
+              onAction={(a) => run(a)}
+              onDone={() => {
+                setAnimQueue((q) => q.slice(1));
+                // 중계가 끝나야 반기 판정을 한다 — 승부처까지 반영된 기록으로
+                if (animQueue.length <= 1 && g.phase === "HALF_REVIEW") run({ type: "FINISH_HALF" });
+              }}
+            />
           ) : (
             <div key={g.phase} className="stage">
               <div className="min-w-0">
@@ -647,14 +658,7 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
         <Wrap eyebrow="First Half" title={`${g.year} 전반기`}
           desc={`${team?.name ?? ""} · ${g.seasonLevel === "KBO" ? "1군" : "2군"} ${g.seasonRole}(으)로 시즌을 시작합니다.`}>
           {g.seasonGoal && <GoalCard g={g} />}
-          {g.pendingClutch ? (
-            <ClutchCard
-              clutch={g.pendingClutch} busy={busy}
-              onPick={(id) => run({ type: "PLAY_FIRST_HALF", clutch: id })}
-            />
-          ) : (
-            <Primary onClick={() => run({ type: "PLAY_FIRST_HALF" })} busy={busy} label="전반기 진행 중…">전반기 시작 ⚾</Primary>
-          )}
+          <Primary onClick={() => run({ type: "PLAY_FIRST_HALF" })} busy={busy} label="전반기 진행 중…">전반기 시작 ⚾</Primary>
         </Wrap>
       );
 
@@ -663,6 +667,18 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
         <Wrap eyebrow="All-Star Break" title="올스타 브레이크"
           desc={g.allStar ? "올스타전을 마치고 후반기에 들어갑니다." : "짧은 휴식을 마치고 후반기에 들어갑니다."}>
           {g.seasonGoal && <GoalCard g={g} />}
+          {/* 올스타전은 중계가 따로 없으니 이 화면에서 승부처를 받는다 */}
+          {g.allStarGame?.clutchSituation && !g.allStarGame.clutch && (
+            <ClutchCard
+              clutch={g.allStarGame.clutchSituation} busy={busy}
+              onPick={(id) => run({ type: "RESOLVE_CLUTCH", choice: id, where: "AS" })}
+            />
+          )}
+          {g.allStarGame?.clutch && (
+            <div className="card mb-3 bg-[var(--brand)] px-4 py-3.5 text-white">
+              <ClutchReveal r={g.allStarGame.clutch} />
+            </div>
+          )}
           {g.halfLine && <Strip label="전반기 성적" line={g.halfLine} where={whereLabel(g)} />}
           {g.pendingTrade ? (
             <div className="card mb-3 px-4 py-3.5">
@@ -687,11 +703,6 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
                   className="btn btn-ghost flex-1 py-2.5 text-[13px]">팀에 남는다</button>
               </div>
             </div>
-          ) : g.pendingClutch ? (
-            <ClutchCard
-              clutch={g.pendingClutch} busy={busy}
-              onPick={(id) => run({ type: "PLAY_SECOND_HALF", clutch: id })}
-            />
           ) : (
             <Primary onClick={() => run({ type: "PLAY_SECOND_HALF" })} busy={busy} label="후반기 진행 중…">후반기 시작 ⚾</Primary>
           )}

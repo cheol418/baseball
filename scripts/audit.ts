@@ -52,12 +52,23 @@ function play(seed: number, opt: { college: boolean; military: "SANGMU" | "ACTIV
           act({ type: "TRAIN", optionId: o[rng.int(0, o.length - 1)].id, hell: rng.chance(0.4) });
           break;
         }
-        case "FIRST_HALF": act({ type: "PLAY_FIRST_HALF", clutch: pickClutch(g) }); break;
+        case "FIRST_HALF": act({ type: "PLAY_FIRST_HALF" }); break;
         case "ALL_STAR":
           if (g.pendingTrade) act({ type: "TRADE_DECIDE", accept: rng.chance(0.5) });
-          else act({ type: "PLAY_SECOND_HALF", clutch: pickClutch(g) });
+          else act({ type: "PLAY_SECOND_HALF" });
           break;
-        case "POSTSEASON": act({ type: "PLAY_POSTSEASON" }); break;
+        /**
+       * 반기 계산이 끝난 뒤 중계를 보는 단계.
+       * 심어둔 승부처를 고르고 나서야 반기 판정(올스타·순위)이 돈다.
+       * 여기를 안 가르치면 default: RETIRE로 빠져 측정값이 전부 거짓이 된다. (규칙 3)
+       */
+      case "HALF_REVIEW": {
+        const c = pickClutch(g, 0);
+        if (c) act({ type: "RESOLVE_CLUTCH", choice: c });
+        else act({ type: "FINISH_HALF" });
+        break;
+      }
+      case "POSTSEASON": act({ type: "PLAY_POSTSEASON" }); break;
         case "SEASON_END": act({ type: "FINISH_SEASON" }); break;
         case "INTERNATIONAL": act({ type: "JOIN_NATIONAL", join: opt.joinNat }); break;
         // 상무는 미리 지원해서 붙어야 간다 — 입영 통지 시점엔 대개 현역만 남는다
@@ -99,8 +110,11 @@ function play(seed: number, opt: { college: boolean; military: "SANGMU" | "ACTIV
         default: add("알 수 없는 단계", g.phase); act({ type: "RETIRE" });
       }
     } catch (e) { crashes++; add("예외", `${before} → ${(e as Error).message}`); return g; }
-    // 이적 신청은 같은 단계에 머무는 게 정상이다
-    if (`${g.phase}:${g.year}:${g.player.age}` === before && g.phase !== "STOVE" && g.phase !== "ALL_STAR") {
+    // 같은 단계에 머무는 게 정상인 곳들.
+    // HALF_REVIEW는 승부처를 고른 뒤(RESOLVE_CLUTCH) 판정(FINISH_HALF)으로 넘어가므로
+    // 한 단계에서 액션이 두 번 필요하다.
+    const STAY_OK = ["STOVE", "ALL_STAR", "HALF_REVIEW"];
+    if (`${g.phase}:${g.year}:${g.player.age}` === before && !STAY_OK.includes(g.phase)) {
       stuck++; add("무한루프", before); return g;
     }
   }
@@ -165,12 +179,13 @@ const allPhases = ["EVENT","HS_SEASON","PATH_CHOICE","COLLEGE_SEASON","DRAFT","S
  * 자동 플레이가 실제 플레이보다 심심한 기록을 남긴다. (규칙 3)
  */
 function pickClutch(g: GameState, which = 0): string | undefined {
-  const c = g.pendingClutch;
-  if (!c) return undefined;
-  return c.options[Math.min(which, c.options.length - 1)].id;
+  const m = g.monthLines?.find((x) => x.clutchSituation && !x.clutch);
+  if (!m?.clutchSituation) return undefined;
+  const os = m.clutchSituation.options;
+  return os[Math.min(which, os.length - 1)].id;
 }
 
-const allActions = ["TRADE_DECIDE","CHOOSE_EVENT","SIM_AMATEUR","CHOOSE_PATH","DO_DRAFT","TRAIN","PLAY_FIRST_HALF","PLAY_SECOND_HALF","PLAY_POSTSEASON","FINISH_SEASON","JOIN_NATIONAL","ENLIST","SERVE","NEGOTIATE","REQUEST_TRANSFER","APPLY_SANGMU","SKIP_STOVE","ACCEPT_OFFER","DEFER_FA","RETIRE","KEEP_PLAYING","CHOOSE_SECOND_LIFE","HOF_BALLOT"];
+const allActions = ["TRADE_DECIDE","CHOOSE_EVENT","SIM_AMATEUR","CHOOSE_PATH","DO_DRAFT","TRAIN","PLAY_FIRST_HALF","PLAY_SECOND_HALF","FINISH_HALF","RESOLVE_CLUTCH","PLAY_POSTSEASON","FINISH_SEASON","JOIN_NATIONAL","ENLIST","SERVE","NEGOTIATE","REQUEST_TRANSFER","APPLY_SANGMU","SKIP_STOVE","ACCEPT_OFFER","DEFER_FA","RETIRE","KEEP_PLAYING","CHOOSE_SECOND_LIFE","HOF_BALLOT"];
 
 console.log(`■ 스트레스 테스트 — 커리어 ${finals.length}개, 예외 ${crashes}, 정지 ${stuck}\n`);
 console.log(`  거치지 않은 단계: ${allPhases.filter((p) => !phaseSeen.has(p) && p !== "RETIRED").join(", ") || "없음"}`);

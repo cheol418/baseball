@@ -223,6 +223,42 @@ const PIT_POOL: Record<string, ClutchOutcome[]> = {
 
 /* ------------------------------------------------------------------ */
 
+/** 큰 무대의 승부처 — 무대마다 장면이 다르다 */
+const STAGE_SCENES: Record<string, { eyebrow: string; title: string; body: string }[]> = {
+  AS: [
+    { eyebrow: "올스타전 8회", title: "별들 사이에서", body: "만원 관중과 전국 중계. 이 한 타석이 하이라이트에 남습니다." },
+    { eyebrow: "올스타전 9회 2사", title: "마지막 순간", body: "한 점 차. 오늘의 MVP가 여기서 갈립니다." },
+  ],
+  INTL: [
+    { eyebrow: "국제대회 결승 8회", title: "태극마크의 무게", body: "온 나라가 지켜보고 있습니다. 여기서 물러설 수 없습니다." },
+    { eyebrow: "숙적과의 맞대결", title: "질 수 없는 경기", body: "상대는 늘 우리를 괴롭혀 온 팀입니다." },
+  ],
+  PS: [
+    { eyebrow: "한국시리즈 9회말", title: "가을의 주인공", body: "이 한 타석으로 시리즈의 흐름이 정해집니다." },
+    { eyebrow: "가을야구 연장 10회", title: "끝내지 못하면 끝난다", body: "더그아웃의 모두가 일어서 있습니다." },
+  ],
+};
+
+/**
+ * 큰 무대에 걸리는 승부처.
+ * 리그 경기보다 인지도가 크게 움직인다 — 보는 눈이 다르다.
+ */
+export function rollStageClutch(
+  stage: "AS" | "INTL" | "PS", s: GameState, rng: RNG, label: string,
+): Clutch {
+  const hitter = s.player.kind === "HITTER";
+  const scene = rng.pick(STAGE_SCENES[stage]);
+  return {
+    monthIndex: -1,
+    monthLabel: label,
+    eyebrow: scene.eyebrow,
+    title: scene.title,
+    body: scene.body,
+    opponent: stage === "INTL" ? rng.pick(["일본", "대만", "미국", "도미니카", "쿠바"]) : "",
+    options: hitter ? hitterOptions(s) : pitcherOptions(s),
+  };
+}
+
 /** 이번 반기에 승부처가 생기는가 — 1군에서 뛸 때만 */
 export function rollClutch(
   s: GameState, rng: RNG, months: readonly { key: string; label: string }[],

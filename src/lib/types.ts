@@ -136,6 +136,8 @@ export interface MonthLine {
   move?: { type: "UP" | "DOWN" | "ROLE"; role: string; salary?: number };
   /** 그 달 이달의 선수(월간 MVP)로 뽑혔는가 */
   potm?: boolean;
+  /** 그 달에 걸린 승부처 상황 (아직 안 골랐으면 결과가 없다) */
+  clutchSituation?: Clutch;
   /** 그 달에 치른 승부처 결과 */
   clutch?: ClutchResult;
 }
@@ -213,6 +215,12 @@ export type Phase =
   | "SPRING_CAMP"
   /** 전반기 진행 */
   | "FIRST_HALF"
+  /**
+   * 반기 계산이 끝나고 중계를 보는 중.
+   * 올스타·순위 판정은 중계가 끝난 뒤(FINISH_HALF)에 한다 —
+   * 중계 도중 승부처로 기록이 한 번 더 바뀌기 때문이다.
+   */
+  | "HALF_REVIEW"
   /** 올스타 브레이크 — 전반기 성적·올스타 선정 확인 후 후반기로 */
   | "ALL_STAR"
   /** 가을야구 */
@@ -379,8 +387,10 @@ export interface GameState {
   /* --- 시즌 진행 --- */
   /** 직전에 치른 반기의 월별 성적 (중계 재생용) */
   monthLines: MonthLine[] | null;
-  /** 이번 반기의 승부처 — 반기를 시작할 때 고른다 */
+  /** 이번 반기에 걸어둔 승부처 — 해당 월 중계에서 선택을 받는다 */
   pendingClutch: Clutch | null;
+  /** 중계 중인 반기 */
+  liveHalf: "H1" | "H2" | null;
   /** 고른 결과 — 중계가 그 달에 닿으면 공개된다 */
   clutchResult: ClutchResult | null;
   /** 그해 이달의 선수를 받은 달 — 시즌이 끝나면 SeasonRecord로 옮겨진다 */
@@ -549,6 +559,9 @@ export interface AllStarGame {
   score: string;
   line: StatLine;
   mvp: boolean;
+  /** 큰 무대의 승부처 */
+  clutchSituation?: Clutch;
+  clutch?: ClutchResult;
 }
 
 export interface IntlResult {
@@ -562,6 +575,9 @@ export interface IntlResult {
   games: IntlGame[];
   exempted: boolean;
   note: string;
+  /** 큰 무대의 승부처 */
+  clutchSituation?: Clutch;
+  clutch?: ClutchResult;
 }
 
 /* ------------------------------------------------------------------ */
@@ -629,4 +645,7 @@ export interface PostseasonResult {
   rounds: PostseasonRound[];
   champion: boolean;
   line: StatLine;
+  /** 큰 무대의 승부처 */
+  clutchSituation?: Clutch;
+  clutch?: ClutchResult;
 }

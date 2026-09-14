@@ -6,8 +6,8 @@ import { isHitterLine, mergeLines } from "@/lib/sim";
 import { TOURNAMENTS } from "@/lib/national";
 import { formatMoney } from "@/lib/career";
 import { roleTier } from "@/lib/roles";
-import type { ClutchResult } from "@/lib/clutch";
-import { ClutchReveal } from "@/components/clutch";
+import type { Clutch, ClutchResult } from "@/lib/clutch";
+import { ClutchCard, ClutchReveal } from "@/components/clutch";
 import { FORM_STYLE, formNote, judgeMonthForm, type MonthForm } from "@/lib/form";
 import { teamById } from "@/lib/teams";
 import type {
@@ -18,8 +18,8 @@ export type BroadcastKind = "H1" | "H2" | "PS" | "HS" | "INTL";
 
 type Step =
   | { kind: "month"; label: string; line: StatLine; cume: StatLine; form: MonthForm; note: string; potm?: boolean }
-  /** 반기 시작 때 고른 승부처의 결과 — 중계가 그 달에 닿으면 펼친다 */
-  | { kind: "clutch"; r: ClutchResult }
+  /** 승부처 — 중계가 그 달에 닿으면 멈춰서 선택을 받고, 그 자리에서 결과가 열린다 */
+  | { kind: "clutch"; situation: Clutch; r?: ClutchResult; where?: "AS" | "INTL" | "PS" }
   | { kind: "card"; icon: string; title: string; body: string; tone: "good" | "bad" | "epic" | "neutral" }
   | { kind: "round"; name: string; opponent: string; win: boolean; score: string }
   | { kind: "hs"; t: AmateurTournament }
@@ -69,6 +69,12 @@ function intlSteps(g: GameState, slot: TournamentSlot): Step[] {
     opponent: gm.opponent, won: gm.won, score: gm.score, line: gm.line,
     appeared: gm.appeared,
   }));
+  // 대회의 승부처는 마지막 경기 직전에 온다 — 가장 무거운 순간이다
+  if (intl.clutchSituation) {
+    steps.splice(Math.max(0, steps.length - 1), 0, {
+      kind: "clutch", situation: intl.clutchSituation, r: intl.clutch, where: "INTL",
+    });
+  }
   steps.push({
     kind: "card",
     icon: intl.medal === "금" ? "🥇" : intl.medal === "은" ? "🥈" : intl.medal === "동" ? "🥉" : t.icon,
@@ -124,6 +130,11 @@ function buildSteps(g: GameState, kind: BroadcastKind): Step[] {
     steps.push(...ps.rounds.map((r) => ({
       kind: "round" as const, name: r.name, opponent: r.opponent, win: r.win, score: r.score,
     })));
+    if (ps.clutchSituation) {
+      steps.splice(Math.max(1, steps.length - 1), 0, {
+        kind: "clutch", situation: ps.clutchSituation, r: ps.clutch, where: "PS",
+      });
+    }
     steps.push(ps.champion
       ? { kind: "card", icon: "🏆", title: "한국시리즈 우승", body: `${teamById(g.contract?.teamId ?? "").name}가 정상에 올랐습니다!`, tone: "epic" }
       : { kind: "card", icon: "🍁", title: "가을야구 종료", body: "다음을 기약합니다.", tone: "neutral" });
@@ -147,8 +158,8 @@ function buildSteps(g: GameState, kind: BroadcastKind): Step[] {
   for (let i = 0; i < months.length; i++) {
     const m = months[i];
     const form = judgeMonthForm(m.line, m.level);
-    // 승부처는 그 달 기록을 만든 사건이므로 월 카드보다 먼저 보여준다
-    if (m.clutch) steps.push({ kind: "clutch", r: m.clutch });
+    // 승부처는 그 달 기록을 만든 사건이므로 월 카드보다 먼저 온다
+    if (m.clutchSituation) steps.push({ kind: "clutch", situation: m.clutchSituation, r: m.clutch });
     steps.push({
       kind: "month",
       label: m.label,
@@ -204,8 +215,11 @@ function buildSteps(g: GameState, kind: BroadcastKind): Step[] {
 
 /* ------------------------------------------------------------------ */
 
-export function Broadcast({ g, kind, onDone }: {
+export function Broadcast({ g, kind, onDone, onAction, busy = false }: {
   g: GameState; kind: BroadcastKind; onDone: () => void;
+  /** 중계 도중 상태를 바꿔야 할 때 (승부처) */
+  onAction?: (a: { type: "RESOLVE_CLUTCH"; choice: string; where?: "AS" | "INTL" | "PS" }) => void;
+  busy?: boolean;
 }) {
   const steps = useMemo(() => buildSteps(g, kind), [g, kind]);
   const [i, setI] = useState(0);
@@ -286,12 +300,23 @@ export function Broadcast({ g, kind, onDone }: {
           {step.kind === "game" && <GamePanel key={`g${i}`} step={step} />}
           {step.kind === "clutch" && (
             <div key={`k${i}`}>
-              <ClutchReveal r={step.r} />
-              <button
-                onClick={() => setI((v) => v + 1)}
-                className="mt-4 w-full rounded-xl bg-white/90 py-2.5 text-[13px] font-extrabold text-[#0e2a4d] transition hover:bg-white">
-                확인
-              </button>
+              {step.r ? (
+                <>
+                  <ClutchReveal r={step.r} />
+                  <button
+                    onClick={() => setI((v) => v + 1)}
+                    className="mt-4 w-full rounded-xl bg-white/90 py-2.5 text-[13px] font-extrabold text-[#0e2a4d] transition hover:bg-white">
+                    확인
+                  </button>
+                </>
+              ) : (
+                <ClutchCard
+                  clutch={step.situation}
+                  busy={busy}
+                  dark
+                  onPick={(id) => onAction?.({ type: "RESOLVE_CLUTCH", choice: id, where: step.where })}
+                />
+              )}
             </div>
           )}
           {step.kind === "move" && (

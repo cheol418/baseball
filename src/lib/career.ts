@@ -12,7 +12,8 @@ import {
 import {
   HOF_CUT, advanceHofVote, legacyContext, newHofVote, resolveSecondLife,
 } from "./legacy";
-import { applyClutchToLine, resolveClutch, rollClutch } from "./clutch";
+import type { Clutch, ClutchResult } from "./clutch";
+import { applyClutchToLine, resolveClutch, rollClutch, rollStageClutch } from "./clutch";
 import { judgeMonthForm, potmOdds } from "./form";
 import { PS_CUT, simPostseason } from "./postseason";
 import {
@@ -92,6 +93,7 @@ export function newGame(player: Player, wishTeamId: string, seed: number, school
     monthLines: null,
     pendingClutch: null,
     clutchResult: null,
+    liveHalf: null,
     halfLine: null,
     seasonLine: null,
     seasonLevel: null,
@@ -669,6 +671,7 @@ function runTournament(s: GameState, rng: RNG, slot: TournamentSlot) {
   if (t.slot !== slot) return;
 
   const res = simTournament(s, t, rng);
+  res.clutchSituation = rollStageClutch("INTL", s, rng, t.name);
   s.intlResults.push(res);
   s.player.fame = clamp(s.player.fame + (res.medal ? 12 : 5), 0, 100);
   if (res.exempted && s.military === "PENDING") {
@@ -1000,31 +1003,6 @@ function reviewRoster(
 
 
 /**
- * 고른 승부처를 실제 기록으로 만든다.
- * 결과는 그 달의 기록에 그대로 더해진다 — 연출만 하는 장식이 아니다.
- */
-function settleClutch(s: GameState, rng: RNG, lines: MonthLine[], choice?: string) {
-  const c = s.pendingClutch;
-  s.pendingClutch = null;
-  s.clutchResult = null;
-  if (!c || !choice) return;
-  const r = resolveClutch(c, choice, s, rng);
-  const mi = clamp(r.monthIndex, 0, lines.length - 1);
-  const m = lines[mi];
-  // 그 달을 2군에서 보냈다면 1군 승부처는 없던 일이 된다
-  if (m.level !== "KBO") return;
-  m.line = applyClutchToLine(m.line, r);
-  m.clutch = r;
-  s.clutchResult = r;
-  s.player.fame = clamp(s.player.fame + r.outcome.fame, 0, 100);
-  s.trust = clamp(s.trust + r.outcome.trust, 0, 100);
-  s.player.condition = clamp(s.player.condition + r.outcome.condition, 25, 100);
-  // 1군·2군으로 갈라 담아둔 몫도 함께 맞춘다
-  const bucket = s.seasonByLevel;
-  if (bucket?.KBO) bucket.KBO = applyClutchToLine(bucket.KBO, r);
-}
-
-/**
  * 반기를 시작하기 전에 승부처를 하나 걸어둔다.
  * 고르는 것은 지금, 결과가 드러나는 것은 중계가 그 달에 닿았을 때다.
  */
@@ -1065,6 +1043,10 @@ function playHalf(
     if (potm) s.potmMonths = [...(s.potmMonths ?? []), m.label];
 
     const entry: MonthLine = { key: m.key, label: m.label, line, level, role, potm };
+    // 걸어둔 승부처를 그 달에 심는다 — 2군에서 보낸 달이면 없던 일이 된다
+    if (s.pendingClutch && s.pendingClutch.monthIndex === mi && level === "KBO") {
+      entry.clutchSituation = s.pendingClutch;
+    }
     // 1군·2군을 오간 시즌은 나중에 따로 보여줘야 하므로 그때그때 갈라 담는다
     if (level === "KBO" || level === "MINOR") {
       const bucket = s.seasonByLevel ?? { KBO: null, MINOR: null };
@@ -1358,8 +1340,10 @@ export type Action =
   | { type: "CHOOSE_PATH"; path: "DRAFT" | "COLLEGE" }
   | { type: "DO_DRAFT" }
   | { type: "TRAIN"; optionId: string; hell?: boolean }
-  | { type: "PLAY_FIRST_HALF"; clutch?: string }
-  | { type: "PLAY_SECOND_HALF"; clutch?: string }
+  | { type: "PLAY_FIRST_HALF" }
+  | { type: "FINISH_HALF" }
+  | { type: "RESOLVE_CLUTCH"; choice: string; where?: "AS" | "INTL" | "PS" }
+  | { type: "PLAY_SECOND_HALF" }
   | { type: "PLAY_POSTSEASON" }
   | { type: "FINISH_SEASON" }
   | { type: "JOIN_NATIONAL"; join: boolean }
@@ -1566,67 +1550,19 @@ export function advance(prev: GameState, action: Action): GameState {
     }
 
     /* ---- 전반기 ---- */
+    /**
+     * 반기는 **계산까지만** 한다.
+     * 올스타 선정·트레이드 제안은 전반기 성적을 보고 판정하는데, 그 사이에
+     * 중계에서 승부처를 치르면 기록이 한 번 더 바뀐다. 판정을 여기서 해버리면
+     * 6월에 친 끝내기 홈런이 올스타 선정에 반영되지 않는다.
+     * 그래서 판정은 중계가 끝난 뒤 FINISH_HALF로 미룬다.
+     */
     case "PLAY_FIRST_HALF": {
       runTournament(s, rng, "PRE");
       s.monthLines = playHalf(s, rng, H1_MONTHS);
-      settleClutch(s, rng, s.monthLines, action.clutch);
       s.halfLine = mergeLines(s.monthLines.map((m) => m.line));
-
-      runTournament(s, rng, "MID");
-
-      // 트레이드 데드라인 — 하위권 팀의 좋은 선수에게 우승 도전팀이 손을 내민다
-      s.pendingTrade = null;
-      if (s.seasonLevel === "KBO" && s.contract && (s.contract.remaining ?? 0) > 0) {
-        const home = teamById(s.contract.teamId);
-        const value = s.halfLine.war;
-        const weak = home.power <= 66;
-        const chance = clamp((weak ? 0.18 : 0.05) + value * 0.07, 0, 0.45);
-        if (rng.chance(chance)) {
-          const contenders = TEAMS.filter((t) => t.id !== home.id && t.power >= 70);
-          if (contenders.length) {
-            const to = rng.pick(contenders);
-            const proYears = s.seasons.filter((r) => r.level === "KBO" || r.level === "MINOR").length;
-            const { role } = assignRole(s.player, to, s.serviceYears, 55, rng, proYears);
-            s.pendingTrade = {
-              teamId: to.id, role,
-              note: `${to.name}가 우승에 도전하기 위해 ${s.player.name} 선수를 원합니다.`,
-            };
-            log(s, {
-              icon: "📞", title: "트레이드 제안", tone: "neutral",
-              body: `${home.name} → ${to.name}. 후반기를 우승 도전팀에서 보낼 수 있습니다.`,
-            });
-          }
-        }
-      }
-
-      s.allStar = judgeAllStar(s.halfLine, s.seasonLevel ?? "MINOR", s.player.fame, rng, s.seasonRole);
-      s.allStarGame = null;
-      if (s.allStar && s.contract) {
-        // 2군에서 뽑히면 퓨처스 올스타다 — 무대가 작은 만큼 인지도도 덜 오른다
-        const futures = s.seasonLevel === "MINOR";
-        const label = futures ? "퓨처스 올스타" : "올스타";
-        s.player.fame = clamp(s.player.fame + (futures ? rng.int(1, 3) : rng.int(3, 7)), 0, 100);
-        log(s, {
-          icon: "⭐", title: `${label} 선정`, tone: futures ? "good" : "epic",
-          body: futures
-            ? "퓨처스리그 전반기 활약을 인정받아 퓨처스 올스타에 선정되었습니다."
-            : "전반기 활약을 인정받아 올스타에 선정되었습니다.",
-        });
-        s.allStarGame = simAllStarGame(s.player, s.contract.teamId, rng, futures ? "MINOR" : "KBO");
-        const ag = s.allStarGame;
-        if (ag.mvp) {
-          s.player.fame = clamp(s.player.fame + 10, 0, 100);
-          log(s, { icon: "🌟", title: "올스타전 MVP", tone: "epic", body: `${ag.side}의 ${ag.score} 승리를 이끌며 올스타전 MVP에 선정되었습니다.` });
-        } else {
-          log(s, {
-            icon: "🎪", title: `올스타전 ${ag.won ? "승리" : "패배"}`, tone: "neutral",
-            body: `${ag.side} 소속으로 ${ag.opponent}와 맞붙어 ${ag.score}로 ${ag.won ? "이겼습니다" : "졌습니다"}.`,
-          });
-        }
-      }
-      if (s.seasonNote) log(s, { icon: "🏥", title: "부상", tone: "bad", body: s.seasonNote });
-      armClutch(s, rng, H2_MONTHS);
-      s.phase = "ALL_STAR";
+      s.liveHalf = "H1";
+      s.phase = "HALF_REVIEW";
       bump();
       return s;
     }
@@ -1634,12 +1570,88 @@ export function advance(prev: GameState, action: Action): GameState {
     /* ---- 후반기 ---- */
     case "PLAY_SECOND_HALF": {
       s.monthLines = playHalf(s, rng, H2_MONTHS, true);
-      settleClutch(s, rng, s.monthLines, action.clutch);
       s.seasonLine = mergeLines([s.halfLine, ...s.monthLines.map((m) => m.line)]);
-      runTournament(s, rng, "LATE");
+      s.liveHalf = "H2";
+      s.phase = "HALF_REVIEW";
+      bump();
+      return s;
+    }
 
+    /**
+     * 중계가 끝났다. 이제 전반기 성적을 보고 판정한다.
+     * 승부처까지 반영된 최종 기록으로 올스타·트레이드·순위가 정해진다.
+     */
+    case "FINISH_HALF": {
+      if (s.phase !== "HALF_REVIEW") return s;
+      const which = s.liveHalf;
+      s.liveHalf = null;
+      s.pendingClutch = null;
+
+      if (which === "H1") {
+        runTournament(s, rng, "MID");
+
+        // 트레이드 데드라인 — 하위권 팀의 좋은 선수에게 우승 도전팀이 손을 내민다
+        s.pendingTrade = null;
+        if (s.seasonLevel === "KBO" && s.contract && (s.contract.remaining ?? 0) > 0) {
+          const home = teamById(s.contract.teamId);
+          const value = s.halfLine?.war ?? 0;
+          const weak = home.power <= 66;
+          const chance = clamp((weak ? 0.18 : 0.05) + value * 0.07, 0, 0.45);
+          if (rng.chance(chance)) {
+            const contenders = TEAMS.filter((t) => t.id !== home.id && t.power >= 70);
+            if (contenders.length) {
+              const to = rng.pick(contenders);
+              const proYears = s.seasons.filter((r) => r.level === "KBO" || r.level === "MINOR").length;
+              const { role } = assignRole(s.player, to, s.serviceYears, 55, rng, proYears);
+              s.pendingTrade = {
+                teamId: to.id, role,
+                note: `${to.name}가 우승에 도전하기 위해 ${s.player.name} 선수를 원합니다.`,
+              };
+              log(s, {
+                icon: "📞", title: "트레이드 제안", tone: "neutral",
+                body: `${home.name} → ${to.name}. 후반기를 우승 도전팀에서 보낼 수 있습니다.`,
+              });
+            }
+          }
+        }
+
+        s.allStar = judgeAllStar(s.halfLine!, s.seasonLevel ?? "MINOR", s.player.fame, rng, s.seasonRole);
+        s.allStarGame = null;
+        if (s.allStar && s.contract) {
+          // 2군에서 뽑히면 퓨처스 올스타다 — 무대가 작은 만큼 인지도도 덜 오른다
+          const futures = s.seasonLevel === "MINOR";
+          const label = futures ? "퓨처스 올스타" : "올스타";
+          s.player.fame = clamp(s.player.fame + (futures ? rng.int(1, 3) : rng.int(3, 7)), 0, 100);
+          log(s, {
+            icon: "⭐", title: `${label} 선정`, tone: futures ? "good" : "epic",
+            body: futures
+              ? "퓨처스리그 전반기 활약을 인정받아 퓨처스 올스타에 선정되었습니다."
+              : "전반기 활약을 인정받아 올스타에 선정되었습니다.",
+          });
+          s.allStarGame = simAllStarGame(s.player, s.contract.teamId, rng, futures ? "MINOR" : "KBO");
+          // 큰 무대에도 승부처를 하나씩 — 보는 눈이 다른 만큼 인지도가 크게 움직인다
+          if (!futures) s.allStarGame.clutchSituation = rollStageClutch("AS", s, rng, "올스타전");
+          const ag = s.allStarGame;
+          if (ag.mvp) {
+            s.player.fame = clamp(s.player.fame + 10, 0, 100);
+            log(s, { icon: "🌟", title: "올스타전 MVP", tone: "epic", body: `${ag.side}의 ${ag.score} 승리를 이끌며 올스타전 MVP에 선정되었습니다.` });
+          } else {
+            log(s, {
+              icon: "🎪", title: `올스타전 ${ag.won ? "승리" : "패배"}`, tone: "neutral",
+              body: `${ag.side} 소속으로 ${ag.opponent}와 맞붙어 ${ag.score}로 ${ag.won ? "이겼습니다" : "졌습니다"}.`,
+            });
+          }
+        }
+        if (s.seasonNote) log(s, { icon: "🏥", title: "부상", tone: "bad", body: s.seasonNote });
+        armClutch(s, rng, H2_MONTHS);
+        s.phase = "ALL_STAR";
+        bump();
+        return s;
+      }
+
+      runTournament(s, rng, "LATE");
       const team = s.contract ? teamById(s.contract.teamId) : null;
-      if (s.seasonLevel === "KBO" && team) {
+      if (s.seasonLevel === "KBO" && team && s.seasonLine) {
         const strength = team.power + s.seasonLine.war * 0.8 + rng.normal() * 8;
         s.teamRank = clamp(Math.round(11 - (strength - 50) * 0.26), 1, 10);
       } else {
@@ -1656,11 +1668,85 @@ export function advance(prev: GameState, action: Action): GameState {
       return s;
     }
 
+    /**
+     * 승부처를 지금 치른다 — 중계가 그 달에 멈춰 선택을 기다린다.
+     * 결과는 그 달 기록에 더해지고, 반기·시즌 합계를 다시 맞춘다.
+     */
+    case "RESOLVE_CLUTCH": {
+      /** 무대 하나를 처리한다 — 기록에 타석을 얹고 인지도·신뢰를 움직인다 */
+      const settle = (
+        situation: Clutch | undefined,
+        put: (r: ClutchResult, line: StatLine) => void,
+        /** 큰 무대는 보는 눈이 달라 인지도가 더 크게 움직인다 */
+        fameScale = 1,
+      ): GameState | null => {
+        if (!situation) return null;
+        const r = resolveClutch(situation, action.choice, s, rng);
+        put(r, applyClutchToLine(emptyLine(s.player.kind), r));
+        s.player.fame = clamp(s.player.fame + Math.round(r.outcome.fame * fameScale), 0, 100);
+        s.trust = clamp(s.trust + r.outcome.trust, 0, 100);
+        s.player.condition = clamp(s.player.condition + r.outcome.condition, 25, 100);
+        bump();
+        return s;
+      };
+
+      if (action.where === "AS" && s.allStarGame?.clutchSituation && !s.allStarGame.clutch) {
+        const ag = s.allStarGame;
+        return settle(ag.clutchSituation, (r) => {
+          ag.clutch = r;
+          ag.line = applyClutchToLine(ag.line, r);
+        }, 1.6) ?? s;
+      }
+      if (action.where === "PS" && s.postseason?.clutchSituation && !s.postseason.clutch) {
+        const ps = s.postseason;
+        return settle(ps.clutchSituation, (r) => {
+          ps.clutch = r;
+          ps.line = applyClutchToLine(ps.line, r);
+          /**
+           * 가을야구는 시즌을 닫은 뒤(중계 중)에 승부처를 치른다.
+           * clone()이 JSON 왕복이라 SeasonRecord.ps와 s.postseason은 이미
+           * 서로 다른 객체다 — 둘 다 손대지 않으면 기록에 남지 않는다.
+           */
+          const rec = s.seasons[s.lastSeasonIndex ?? -1];
+          if (rec?.ps) rec.ps = ps;
+        }, 1.8) ?? s;
+      }
+      if (action.where === "INTL") {
+        const intl = s.intlResults.find((x) => x.clutchSituation && !x.clutch);
+        if (!intl) return s;
+        return settle(intl.clutchSituation, (r) => {
+          intl.clutch = r;
+          intl.line = applyClutchToLine(intl.line, r);
+        }, 2) ?? s;
+      }
+
+      const lines = s.monthLines;
+      const mi = lines?.findIndex((m) => m.clutchSituation && !m.clutch) ?? -1;
+      if (!lines || mi < 0) return s;
+      const m = lines[mi];
+      const r = resolveClutch(m.clutchSituation!, action.choice, s, rng);
+      m.line = applyClutchToLine(m.line, r);
+      m.clutch = r;
+      s.player.fame = clamp(s.player.fame + r.outcome.fame, 0, 100);
+      s.trust = clamp(s.trust + r.outcome.trust, 0, 100);
+      s.player.condition = clamp(s.player.condition + r.outcome.condition, 25, 100);
+      if (s.seasonByLevel?.KBO) s.seasonByLevel.KBO = applyClutchToLine(s.seasonByLevel.KBO, r);
+      // 승부처가 얹혔으니 합계를 다시 낸다
+      if (s.liveHalf === "H1") {
+        s.halfLine = mergeLines(lines.map((x) => x.line));
+      } else {
+        s.seasonLine = mergeLines([s.halfLine, ...lines.map((x) => x.line)]);
+      }
+      bump();
+      return s;
+    }
+
     /* ---- 가을야구 ---- */
     case "PLAY_POSTSEASON": {
       const team = s.contract ? teamById(s.contract.teamId) : null;
       if (team && s.teamRank) {
         s.postseason = simPostseason(s.player, team.id, s.teamRank, s.seasonAvailability, rng);
+        s.postseason.clutchSituation = rollStageClutch("PS", s, rng, "가을야구");
         const last = s.postseason.rounds[s.postseason.rounds.length - 1];
         log(s, {
           icon: s.postseason.champion ? "🏆" : "🍁",

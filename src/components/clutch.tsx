@@ -9,10 +9,56 @@ import type { Clutch, ClutchOutcome, ClutchResult } from "@/lib/clutch";
  * 반기를 시작할 때 고르고, 무엇이 나왔는지는 중계가 그 달에 닿아야 안다.
  * 버튼 하나 누르고 지켜보기만 하던 자리에 판단을 하나 끼워 넣는다.
  */
-export function ClutchCard({ clutch, onPick, busy }: {
+export function ClutchCard({ clutch, onPick, busy, dark = false }: {
   clutch: Clutch; onPick: (id: string) => void; busy: boolean;
+  /** 중계 화면(어두운 배경) 안에서 쓰는가 */
+  dark?: boolean;
 }) {
   const [sel, setSel] = useState<string | null>(null);
+  if (dark) {
+    return (
+      <div className="pop">
+        <div className="text-[10px] font-black uppercase tracking-[0.2em] opacity-60">
+          Clutch · {clutch.monthLabel} · vs {clutch.opponent}
+        </div>
+        <div className="mt-1 text-[12px] font-bold opacity-80">{clutch.eyebrow}</div>
+        <div className="text-[22px] font-black leading-tight">{clutch.title}</div>
+        <p className="mt-1.5 text-[12.5px] leading-relaxed opacity-85">{clutch.body}</p>
+
+        <div className="mt-3 flex flex-col gap-1.5">
+          {clutch.options.map((o) => {
+            const on = sel === o.id;
+            return (
+              <button
+                key={o.id}
+                onClick={() => setSel(o.id)}
+                disabled={busy}
+                className={`rounded-xl px-3 py-2 text-left transition disabled:opacity-50 ${
+                  on ? "bg-white/22 ring-1 ring-white/60" : "bg-white/10 hover:bg-white/16"
+                }`}
+              >
+                <span className="flex items-center gap-1.5">
+                  <span className="text-[12.5px] font-extrabold">{o.label}</span>
+                  <span className="tabular rounded-full bg-black/25 px-1.5 py-[1px] text-[9.5px] font-black opacity-90">
+                    성공 {Math.round(o.odds * 100)}%
+                  </span>
+                  <span className="ml-auto text-[9px] font-bold opacity-60">{o.leans}</span>
+                </span>
+                <span className="mt-0.5 block text-[10.5px] leading-relaxed opacity-70">{o.desc}</span>
+              </button>
+            );
+          })}
+        </div>
+        <button
+          onClick={() => sel && onPick(sel)}
+          disabled={busy || !sel}
+          className="mt-3 w-full rounded-xl bg-white/90 py-2.5 text-[13px] font-extrabold text-[#0e2a4d] transition hover:bg-white disabled:opacity-40"
+        >
+          {sel ? "이대로 승부한다 ⚾" : "승부 방법을 고르세요"}
+        </button>
+      </div>
+    );
+  }
   return (
     <div className="card mb-3 overflow-hidden">
       <div className="bg-[var(--brand)] px-4 py-3 text-white">

@@ -30,9 +30,10 @@ export interface AutoOptions {
  * 자동 플레이가 실제 플레이보다 심심한 기록을 남긴다. (규칙 3)
  */
 function pickClutch(g: GameState, which = 0): string | undefined {
-  const c = g.pendingClutch;
-  if (!c) return undefined;
-  return c.options[Math.min(which, c.options.length - 1)].id;
+  const m = g.monthLines?.find((x) => x.clutchSituation && !x.clutch);
+  if (!m?.clutchSituation) return undefined;
+  const os = m.clutchSituation.options;
+  return os[Math.min(which, os.length - 1)].id;
 }
 
 export function autoPlay(start: GameState, opt: AutoOptions = {}): GameState {
@@ -66,11 +67,30 @@ export function autoPlay(start: GameState, opt: AutoOptions = {}): GameState {
         });
         break;
       }
-      case "FIRST_HALF": act({ type: "PLAY_FIRST_HALF", clutch: pickClutch(g, clutchPick) }); break;
-      case "ALL_STAR":
+      case "FIRST_HALF": act({ type: "PLAY_FIRST_HALF" }); break;
+      case "ALL_STAR": {
+        // 올스타전 승부처는 이 화면에서 받는다
+        const as = g.allStarGame;
+        if (as?.clutchSituation && !as.clutch) {
+          const os = as.clutchSituation.options;
+          act({ type: "RESOLVE_CLUTCH", choice: os[Math.min(clutchPick, os.length - 1)].id, where: "AS" });
+          break;
+        }
         if (g.pendingTrade) act({ type: "TRADE_DECIDE", accept: Math.random() < 0.5 });
-        else act({ type: "PLAY_SECOND_HALF", clutch: pickClutch(g, clutchPick) });
+        else act({ type: "PLAY_SECOND_HALF" });
         break;
+      }
+      /**
+       * 반기 계산이 끝난 뒤 중계를 보는 단계.
+       * 심어둔 승부처를 고르고 나서야 반기 판정(올스타·순위)이 돈다.
+       * 여기를 안 가르치면 default: RETIRE로 빠져 측정값이 전부 거짓이 된다. (규칙 3)
+       */
+      case "HALF_REVIEW": {
+        const c = pickClutch(g, clutchPick);
+        if (c) act({ type: "RESOLVE_CLUTCH", choice: c });
+        else act({ type: "FINISH_HALF" });
+        break;
+      }
       case "POSTSEASON": act({ type: "PLAY_POSTSEASON" }); break;
       case "SEASON_END": act({ type: "FINISH_SEASON" }); break;
       case "INTERNATIONAL": act({ type: "JOIN_NATIONAL", join: joinNational }); break;
