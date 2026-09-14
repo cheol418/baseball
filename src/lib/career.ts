@@ -1147,8 +1147,12 @@ function closeSeason(s: GameState, rng: RNG) {
     p.fame = clamp(p.fame + 8, 0, 100);
   }
 
-  // 1군 등록 기간만 서비스타임으로 쌓인다
-  s.serviceYears += clamp(s.kboShare, 0, 1) * s.seasonAvailability;
+  // 1군 등록 기간만 서비스타임으로 쌓인다.
+  // 실제 KBO는 **등록일수**로 센다 — 부상자 명단에 올라 있어도 일수는 인정된다.
+  // 여기에 가동률을 또 곱하면 이중 차감이 된다(크게 다치면 2군으로 내려가
+  // 이미 kboShare가 줄어든다). 그래서 1군 시즌당 0.83년만 쌓여
+  // 프로 13년차가 FA를 못 가는 일이 있었다.
+  s.serviceYears += clamp(s.kboShare, 0, 1);
 
   if (rec.awards.length) {
     log(s, { icon: "🏆", title: "수상", tone: "epic", body: `${rec.awards.join(", ")} 수상!` });

@@ -22,7 +22,7 @@ import {
   HAND_LABEL, overall, platoonProfile, POSITION_LABEL, scoutedOverall,
   scoutedPotential, traitById,
 } from "@/lib/player";
-import { isHitterLine, subtractLine } from "@/lib/sim";
+import { isHitterLine, subtractLine, titleOfStat } from "@/lib/sim";
 import { saveGame, useGame } from "@/lib/storage";
 import { isFranchiseRole } from "@/lib/roles";
 import { teamById } from "@/lib/teams";
@@ -272,7 +272,7 @@ function SeasonReview({ g }: { g: GameState }) {
           {last.champion && <Pill tone="gold">🏆 한국시리즈 우승</Pill>}
         </div>
 
-        <KeyStats line={last.line} />
+        <KeyStats line={last.line} awards={last.awards} />
 
         {last.awards.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
@@ -357,7 +357,7 @@ function SeasonReview({ g }: { g: GameState }) {
           </span>
         </div>
 
-        <div className="mt-3 border-t border-[var(--line)] pt-3"><DetailLine line={last.line} /></div>
+        <div className="mt-3 border-t border-[var(--line)] pt-3"><DetailLine line={last.line} awards={last.awards} /></div>
 
         <div className="mt-3 border-t border-[var(--line)] pt-3">
           <div className="eyebrow mb-2">Fan Feed · 팬 반응</div>
@@ -1374,22 +1374,29 @@ function RetireLink({ run, busy }: { run: (a: Action) => void; busy: boolean }) 
 
 /* ================================================================== */
 
-function DetailLine({ line }: { line: StatLine }) {
-  const items: [string, string | number][] = isHitterLine(line)
+function DetailLine({ line, awards }: { line: StatLine; awards?: string[] }) {
+  // [표시 이름, 값, 타이틀 대응 키] — 도루왕·세이브왕·홀드왕은 이 표에만 나온다
+  const items: [string, string | number, string?][] = isHitterLine(line)
     ? [["G", line.g], ["PA", line.pa], ["H", line.h], ["2B", line.b2], ["3B", line.b3],
-       ["R", line.r], ["BB", line.bb], ["SO", line.so], ["SB", line.sb],
+       ["R", line.r], ["BB", line.bb], ["SO", line.so], ["SB", line.sb, "sb"],
        ["OBP", fmt3(line.obp)], ["SLG", fmt3(line.slg)]]
     : [["G", line.g], ["GS", (line as PitcherLine).gs], ["IP", (line as PitcherLine).ip.toFixed(1)],
-       ["H", line.h], ["BB", line.bb], ["SO", line.so], ["HR", (line as PitcherLine).hrAllowed],
+       ["SV", (line as PitcherLine).sv, "sv"], ["HLD", (line as PitcherLine).hld, "hld"],
+       ["H", line.h], ["BB", line.bb], ["SO", line.so, "so"], ["HR", (line as PitcherLine).hrAllowed],
        ["WHIP", fmt2((line as PitcherLine).whip)], ["K/9", fmt2((line as PitcherLine).k9)]];
   return (
     <div className="tabular grid grid-cols-4 gap-y-2 text-[11.5px]">
-      {items.map(([k, v]) => (
-        <div key={k} className="flex flex-col">
-          <span className="text-[9.5px] font-bold uppercase tracking-wider text-[var(--ink-3)]">{k}</span>
-          <span className="font-bold">{v}</span>
-        </div>
-      ))}
+      {items.map(([k, v, stat]) => {
+        const title = stat ? titleOfStat(awards, stat) : null;
+        return (
+          <div key={k} className="flex flex-col" title={title ?? undefined}>
+            <span className={`text-[9.5px] font-bold uppercase tracking-wider ${
+              title ? "text-[var(--gold)]" : "text-[var(--ink-3)]"
+            }`}>{title ? "👑 " : ""}{k}</span>
+            <span className={`font-bold ${title ? "text-[var(--gold)]" : ""}`}>{v}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }

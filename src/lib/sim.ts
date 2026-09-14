@@ -313,6 +313,25 @@ export const MAJOR_TITLES = [
   "다승왕", "평균자책점 1위", "탈삼진왕", "세이브왕", "홀드왕",
 ];
 
+/**
+ * 부문 타이틀이 어느 기록에서 나왔는가.
+ *
+ * 화면에서 "39홈런"과 "홈런왕"이 따로 떨어져 있으면 어느 숫자로 받은 상인지
+ * 눈으로 이어 붙여야 한다. 숫자 옆에 바로 표시하려고 대응표를 여기 둔다.
+ * 화면 여러 곳이 참조하므로 **판정과 같은 파일에 두어 어긋나지 않게** 한다.
+ */
+export const TITLE_STAT: Record<string, string> = {
+  홈런왕: "hr", 타격왕: "avg", 타점왕: "rbi", 도루왕: "sb",
+  다승왕: "w", "평균자책점 1위": "era", 탈삼진왕: "so",
+  세이브왕: "sv", 홀드왕: "hld",
+};
+
+/** 그 기록으로 받은 타이틀 이름 (없으면 null) */
+export function titleOfStat(awards: string[] | undefined, stat: string): string | null {
+  if (!awards) return null;
+  return awards.find((a) => TITLE_STAT[a] === stat) ?? null;
+}
+
 /** 시즌 수상 판정 (KBO 레벨만) */
 export function judgeAwards(
   p: Player, line: HitterLine | PitcherLine, level: LevelTag, isRookie: boolean, rng: RNG,

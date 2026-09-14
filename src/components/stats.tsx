@@ -1,6 +1,6 @@
 "use client";
 
-import { isHitterLine } from "@/lib/sim";
+import { isHitterLine, titleOfStat } from "@/lib/sim";
 import type { HitterLine, PitcherLine, SeasonRecord, StatLine } from "@/lib/types";
 
 export const fmt3 = (v: number) => (v === 0 ? ".000" : v.toFixed(3).replace(/^0/, ""));
@@ -8,26 +8,51 @@ export const fmt2 = (v: number) => v.toFixed(2);
 
 const LEVEL_LABEL: Record<string, string> = { HS: "고교", COLLEGE: "대학", MINOR: "2군", KBO: "1군" };
 
-/** 시즌 핵심 지표 4~5개 */
-export function KeyStats({ line }: { line: StatLine }) {
+/**
+ * 시즌 핵심 지표 4~5개.
+ * `awards`를 넘기면 그 기록으로 받은 타이틀을 숫자 위에 얹는다 — 39홈런이
+ * 왜 금색인지 바로 보이게.
+ */
+export function KeyStats({ line, awards }: { line: StatLine; awards?: string[] }) {
+  const relief = isHitterLine(line) ? null : line.sv > line.hld ? "sv" : "hld";
   const cells = isHitterLine(line)
     ? [
-        { k: "AVG", v: fmt3(line.avg) }, { k: "HR", v: line.hr }, { k: "RBI", v: line.rbi },
-        { k: "OPS", v: fmt3(line.ops) }, { k: "WAR", v: line.war.toFixed(1) },
+        { k: "AVG", stat: "avg", v: fmt3(line.avg) }, { k: "HR", stat: "hr", v: line.hr },
+        { k: "RBI", stat: "rbi", v: line.rbi },
+        { k: "OPS", stat: "ops", v: fmt3(line.ops) }, { k: "WAR", stat: "war", v: line.war.toFixed(1) },
       ]
     : [
-        { k: "ERA", v: fmt2(line.era) }, { k: "W-L", v: `${line.w}-${line.l}` },
-        { k: line.sv > line.hld ? "SV" : "HLD", v: line.sv > line.hld ? line.sv : line.hld },
-        { k: "SO", v: line.so }, { k: "WAR", v: line.war.toFixed(1) },
+        { k: "ERA", stat: "era", v: fmt2(line.era) },
+        { k: "W-L", stat: "w", v: `${line.w}-${line.l}` },
+        { k: relief === "sv" ? "SV" : "HLD", stat: relief!, v: relief === "sv" ? line.sv : line.hld },
+        { k: "SO", stat: "so", v: line.so }, { k: "WAR", stat: "war", v: line.war.toFixed(1) },
       ];
   return (
     <div className="grid grid-cols-5 gap-1.5">
-      {cells.map((c) => (
-        <div key={c.k} className="flex flex-col items-center rounded-xl bg-[var(--surface-2)] px-1 py-2">
-          <span className="eyebrow">{c.k}</span>
-          <span className="tabular text-[15px] font-extrabold">{c.v}</span>
-        </div>
-      ))}
+      {cells.map((c) => {
+        const title = titleOfStat(awards, c.stat);
+        return (
+          <div
+            key={c.k}
+            title={title ?? undefined}
+            className={`flex flex-col items-center rounded-xl px-1 py-2 ${
+              title
+                ? "bg-[var(--gold)]/12 ring-1 ring-[var(--gold)]/40"
+                : "bg-[var(--surface-2)]"
+            }`}
+          >
+            <span className={`eyebrow ${title ? "text-[var(--gold)]" : ""}`}>
+              {title ? "👑 " : ""}{c.k}
+            </span>
+            <span className={`tabular text-[15px] font-extrabold ${title ? "text-[var(--gold)]" : ""}`}>
+              {c.v}
+            </span>
+            {title && (
+              <span className="mt-0.5 text-[8.5px] font-bold text-[var(--gold)]">{title}</span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
