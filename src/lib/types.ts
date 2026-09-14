@@ -1,3 +1,4 @@
+import type { Clutch, ClutchResult } from "./clutch";
 // 게임 전역 타입 정의
 
 export type Hand = "R" | "L" | "S"; // 우/좌/양
@@ -135,6 +136,8 @@ export interface MonthLine {
   move?: { type: "UP" | "DOWN" | "ROLE"; role: string; salary?: number };
   /** 그 달 이달의 선수(월간 MVP)로 뽑혔는가 */
   potm?: boolean;
+  /** 그 달에 치른 승부처 결과 */
+  clutch?: ClutchResult;
 }
 
 /** 시즌 1건의 기록 */
@@ -376,6 +379,10 @@ export interface GameState {
   /* --- 시즌 진행 --- */
   /** 직전에 치른 반기의 월별 성적 (중계 재생용) */
   monthLines: MonthLine[] | null;
+  /** 이번 반기의 승부처 — 반기를 시작할 때 고른다 */
+  pendingClutch: Clutch | null;
+  /** 고른 결과 — 중계가 그 달에 닿으면 공개된다 */
+  clutchResult: ClutchResult | null;
   /** 그해 이달의 선수를 받은 달 — 시즌이 끝나면 SeasonRecord로 옮겨진다 */
   potmMonths: string[] | null;
   /** 전반기 성적 (후반기 진행 전까지 보관) */

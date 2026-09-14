@@ -32,6 +32,8 @@ export function migrateSave(raw: unknown): GameState | null {
 
   // 시즌 진행
   def("monthLines", null);
+  def("pendingClutch", null);
+  def("clutchResult", null);
   def("potmMonths", null);
   def("halfLine", null);
   def("seasonLine", null);

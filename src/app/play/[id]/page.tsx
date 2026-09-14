@@ -1556,7 +1556,11 @@ function PlayerTab({ g }: { g: GameState }) {
             <Row k="홈구장" v={<><b>{team.park.name}</b> <span className="text-[var(--ink-3)]">— {team.park.label}</span></>} />
           )}
           {nick2 && <Row k="별명" v={<b>{nick2}</b>} />}
-          <Row k="연봉" v={g.contract ? `${formatMoney(g.contract.salary)} · 계약 ${g.contract.remaining}/${g.contract.years}년` : "—"} />
+          <Row k="연봉" v={g.contract
+            ? `${formatMoney(g.contract.salary)} · ${g.contract.years}년 계약 ${
+              g.contract.remaining <= 0 ? "· 마지막 해" : `· 잔여 ${g.contract.remaining + 1}년`
+            }`
+            : "—"} />
           <Row k="병역" v={
             <span className={g.military === "PENDING" ? "text-[var(--danger)]" : undefined}>
               {MILITARY_LABEL[g.military]}
@@ -1566,7 +1570,14 @@ function PlayerTab({ g }: { g: GameState }) {
           <Row k="드래프트" v={g.draftPick
             ? (g.draftPick.overall === 0 ? "미지명 (육성선수)" : `${g.draftPick.round}라운드 전체 ${g.draftPick.overall}순위 · ${teamById(g.draftPick.teamId).short}`)
             : "미정"} />
-          <Row k="1군 등록" v={`${g.serviceYears.toFixed(1)}년 (FA까지 ${Math.max(0, FA_SERVICE + g.faUsed * 4 - g.serviceYears).toFixed(1)}년)`} />
+          {/* FA를 막는 조건이 둘이다(등록일수·계약 잔여) — 지금 걸려 있는 쪽을 보여준다 */}
+          <Row k="1군 등록" v={(() => {
+            const need = Math.max(0, FA_SERVICE + g.faUsed * 4 - g.serviceYears);
+            const svc = `${g.serviceYears.toFixed(1)}년`;
+            if (need > 0) return `${svc} · FA까지 ${need.toFixed(1)}년`;
+            if ((g.contract?.remaining ?? 0) > 0) return `${svc} · FA 자격 충족 (계약 ${g.contract!.remaining + 1}년 남음)`;
+            return `${svc} · 이번 시즌 뒤 FA`;
+          })()} />
           <Row k="투/타" v={`${HAND_LABEL[p.throws]}투 ${HAND_LABEL[p.bats]}타`} />
           {g.chains.length > 0 && (
             <Row k="진행 중" v={

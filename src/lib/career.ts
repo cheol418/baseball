@@ -89,6 +89,8 @@ export function newGame(player: Player, wishTeamId: string, seed: number, school
     lastSeasonIndex: null,
 
     monthLines: null,
+    pendingClutch: null,
+    clutchResult: null,
     halfLine: null,
     seasonLine: null,
     seasonLevel: null,
