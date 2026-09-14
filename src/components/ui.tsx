@@ -118,7 +118,15 @@ export function Empty({ children }: { children: ReactNode }) {
 /* 시즌 진행 표시                                                       */
 /* ------------------------------------------------------------------ */
 
-/** 한 시즌 안에서 지금 어느 구간인지 */
+/**
+ * 한 시즌 안에서 지금 어느 구간인지.
+ *
+ * 여덟 칸을 한 줄에 늘어놓으면 460px에 안 들어가 가로 스크롤이 생긴다.
+ * 스크롤바가 생기는 순간 "여기 뭔가 더 있다"는 신호가 되는데, 정작 그 안에는
+ * 아직 오지 않은 단계뿐이라 볼 이유가 없다.
+ * 그래서 **페넌트레이스 / 스토브리그 두 묶음**으로 나누고, 지금 속한 묶음만
+ * 펼쳐 보여준다. 넘어가는 순간 띠 전체가 갈아끼워진다.
+ */
 const SEASON_STAGES = [
   { key: "CAMP", label: "스프링캠프", icon: "🏋️" },
   { key: "H1", label: "전반기", icon: "⚾" },
@@ -127,7 +135,13 @@ const SEASON_STAGES = [
   { key: "PS", label: "가을야구", icon: "🍁" },
   { key: "END", label: "시즌 총평", icon: "📋" },
   { key: "CONTRACT", label: "계약", icon: "✍️" },
-  { key: "STOVE", label: "스토브리그", icon: "❄️" },
+  { key: "STOVE", label: "이적", icon: "❄️" },
+] as const;
+
+/** 묶음 — [시작, 끝] 칸과 접혔을 때 보여줄 이름 */
+const GROUPS = [
+  { key: "SEASON", from: 0, to: 4, label: "시즌", icon: "⚾" },
+  { key: "STOVE", from: 5, to: 7, label: "스토브", icon: "❄️" },
 ] as const;
 
 /** 단계별로 어느 칸에 있는지 — 아마추어·군 복무는 시즌 흐름 밖이다 */
@@ -146,33 +160,64 @@ export function SeasonProgress({ phase, year, extra }: {
 }) {
   const at = STAGE_OF[phase];
   if (at === undefined) return null;
+  const gi = GROUPS.findIndex((g) => at >= g.from && at <= g.to);
+  const group = GROUPS[Math.max(0, gi)];
+  const other = GROUPS[gi === 0 ? 1 : 0];
+  const otherDone = gi === 1;
+  const pct = Math.round(((at + 1) / SEASON_STAGES.length) * 100);
+
+  const chip = (
+    key: string, label: string, icon: string,
+    state: "now" | "done" | "todo",
+  ) => (
+    <span
+      key={key}
+      className={`flex shrink-0 items-center gap-1 rounded-full px-2 py-[3px] text-[10.5px] font-bold transition ${
+        state === "now" ? "bg-[var(--brand)] text-white"
+          : state === "done" ? "text-[var(--ink-3)]"
+            : "text-[var(--ink-3)] opacity-40"
+      }`}
+    >
+      {state === "now" && <span>{icon}</span>}
+      {label}
+    </span>
+  );
+
+  const stages = SEASON_STAGES
+    .map((st, i) => ({ st, i }))
+    .filter(({ i }) => i >= group.from && i <= group.to)
+    .map(({ st, i }) => chip(st.key, st.label, st.icon, i === at ? "now" : i < at ? "done" : "todo"));
+
+  // 접힌 묶음은 한 칸으로 — 지나온 쪽은 앞에, 남은 쪽은 뒤에 붙는다
+  const folded = (
+    <span
+      key={other.key}
+      className="flex shrink-0 items-center gap-1 rounded-full bg-[var(--surface-2)] px-2 py-[3px] text-[10.5px] font-bold text-[var(--ink-3)] opacity-60"
+    >
+      <span>{other.icon}</span>{other.label}
+    </span>
+  );
+
   return (
-    <div className="mb-3 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
-      <Container className="px-0">
-        <div className="flex items-center gap-1.5 overflow-x-auto">
-          <span className="shrink-0 pr-1 text-[10px] font-black text-[var(--ink-3)]">{year}</span>
-          {SEASON_STAGES.map((st, i) => {
-            const done = i < at;
-            const now = i === at;
-            return (
-              <span
-                key={st.key}
-                className={`flex shrink-0 items-center gap-1 rounded-full px-2 py-[3px] text-[10.5px] font-bold transition ${
-                  now ? "bg-[var(--brand)] text-white"
-                    : done ? "text-[var(--ink-3)]" : "text-[var(--ink-3)] opacity-40"
-                }`}>
-                {now && <span>{st.icon}</span>}
-                {st.label}
-              </span>
-            );
-          })}
-          {extra && (
-            <span className="ml-auto shrink-0 rounded-full bg-[var(--gold)]/15 px-2 py-[3px] text-[10.5px] font-black text-[var(--gold)]">
-              {extra}
-            </span>
-          )}
-        </div>
-      </Container>
+    <div className="mb-3 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
+      <div key={group.key} className="swap flex items-center gap-1.5">
+        <span className="shrink-0 pr-0.5 text-[10px] font-black text-[var(--ink-3)]">{year}</span>
+        {otherDone && folded}
+        {stages}
+        {!otherDone && folded}
+        {extra && (
+          <span className="ml-auto shrink-0 rounded-full bg-[var(--gold)]/15 px-2 py-[3px] text-[10.5px] font-black text-[var(--gold)]">
+            {extra}
+          </span>
+        )}
+      </div>
+      {/* 한 시즌을 얼마나 지나왔는가 */}
+      <span className="mt-1.5 block h-[3px] w-full overflow-hidden rounded-full bg-[var(--line)]">
+        <span
+          className="block h-full rounded-full bg-[var(--brand-2)] transition-[width] duration-500 ease-out"
+          style={{ width: `${pct}%` }}
+        />
+      </span>
     </div>
   );
 }
