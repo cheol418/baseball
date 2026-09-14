@@ -274,9 +274,12 @@ function SeasonReview({ g }: { g: GameState }) {
 
         <KeyStats line={last.line} awards={last.awards} />
 
-        {last.awards.length > 0 && (
+        {(last.awards.length > 0 || last.potm?.length) && (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {last.awards.map((a) => <Pill key={a} tone="gold">🏅 {a}</Pill>)}
+            {last.potm?.length ? (
+              <Pill tone="gold">🏆 이달의 선수 {last.potm.length}회 ({last.potm.join(" · ")})</Pill>
+            ) : null}
           </div>
         )}
         {last.goal && (
@@ -1411,6 +1414,9 @@ function CareerTab({ g }: { g: GameState }) {
   const totals = careerTotals(g.seasons, g.player.kind, "KBO");
   const counted = g.seasons.flatMap((s) => s.awards)
     .reduce<Record<string, number>>((a, x) => ({ ...a, [x]: (a[x] ?? 0) + 1 }), {});
+  // 이달의 선수는 시즌 수상 배열이 아니라 달 단위로 쌓이므로 따로 센다
+  const potmTotal = g.seasons.reduce((a, s) => a + (s.potm?.length ?? 0), 0);
+  if (potmTotal) counted["이달의 선수"] = potmTotal;
 
   return (
     <div className="mx-auto w-full max-w-[860px]">

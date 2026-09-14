@@ -12,6 +12,7 @@ import {
 import {
   HOF_CUT, advanceHofVote, legacyContext, newHofVote, resolveSecondLife,
 } from "./legacy";
+import { judgeMonthForm, potmOdds } from "./form";
 import { PS_CUT, simPostseason } from "./postseason";
 import {
   defaultRoleOf, isEverydayRole, isFranchiseRole, isRotationRole, minorRoleOf, roleTier,
@@ -95,6 +96,7 @@ export function newGame(player: Player, wishTeamId: string, seed: number, school
     seasonAvailability: 1,
     allStar: false,
     allStarGame: null,
+    potmMonths: null,
     seasonNote: null,
     ovrAtSeasonStart: overall(player),
     teamRank: null,
@@ -480,14 +482,32 @@ function buildNegotiation(s: GameState, rec: SeasonRecord): Negotiation {
   // 인상률만으로는 연봉이 복리로 불어나 결국 상한에 붙는다.
   // 실제 구단은 "지금 이 선수의 값어치"를 기준으로 다시 계산하므로,
   // 직전 연봉에서 출발한 금액을 적정 몸값 쪽으로 끌어당긴다.
-  const fair = clamp(marketValue(s) * 0.30, MIN_SALARY, cap);
+  /**
+   * 적정 몸값 앵커.
+   *
+   * `marketValue()`는 리그 연봉 상한(30억)으로 잘려 나오므로, 여기에 0.30을
+   * 곱하면 **앵커의 천장이 9억으로 고정된다.** 11억을 받는 선수는 MVP를 받아도
+   * 앵커가 자기 연봉보다 낮아 끌려 내려갔다(대박 시즌의 89%가 삭감 제안).
+   * 몸값 계산에는 연봉 상한을 씌우지 않는다 — 상한은 지급액의 한계이지
+   * 값어치의 한계가 아니다. 최종 제시액에만 상한을 건다.
+   */
+  const fair = clamp(marketValue(s, MAX_SALARY * 3) * 0.30, MIN_SALARY, cap);
   const raised = prev * mult * star;
   // 연차가 쌓일수록 시장가에 가깝게 평가받는다
   const pull = clamp(0.22 + s.serviceYears * 0.035, 0.22, 0.55);
-  const offer = clamp(
+  let offer = clamp(
     Math.round((raised * (1 - pull) + fair * pull) / 100) * 100,
     MIN_SALARY, cap,
   );
+
+  /**
+   * 구단은 잘한 선수의 연봉을 깎지 않는다.
+   * 실제 KBO에서 삭감은 성적이 나빴거나 거의 못 뛴 선수에게만 일어난다.
+   * 계산이 어떻게 나오든 이 선은 지킨다.
+   */
+  const earnedRaise = rec.level === "KBO"
+    && (war >= 2.5 || awardWeight >= 0.10 || rec.awards.some((x) => x.includes("MVP")));
+  if (earnedRaise) offer = Math.max(offer, Math.min(prev, cap));
 
   // 성적이 좋을수록 재협상 성공 확률이 높다
   const leverage = clamp(
@@ -529,7 +549,7 @@ function buildNegotiation(s: GameState, rec: SeasonRecord): Negotiation {
 /* FA / 이적 신청                                                       */
 /* ------------------------------------------------------------------ */
 
-function marketValue(s: GameState): number {
+function marketValue(s: GameState, ceiling = MAX_SALARY): number {
   const recent = s.seasons.filter((x) => x.level === "KBO").slice(-3);
   const recentWar = recent.reduce((a, b) => a + b.line.war, 0) / Math.max(1, recent.length);
   const ovr = overall(s.player);
@@ -565,7 +585,7 @@ function marketValue(s: GameState): number {
   return clamp(
     (recentWar * 9000 + (ovr - 72) * 1200 + s.player.fame * 185 + counting + titles * 4200)
       * ageP * milFactor * intlFactor,
-    4000, MAX_SALARY,
+    4000, ceiling,
   );
 }
 
@@ -997,7 +1017,15 @@ function playHalf(
     const line = simPart(s, rng, from, cume);
     if (level === "KBO") s.kboShare += m.share;
 
-    const entry: MonthLine = { key: m.key, label: m.label, line, level, role };
+    /**
+     * 이달의 선수(월간 MVP).
+     * 실제 KBO는 한 달에 리그 전체에서 한 명이라, 압도적인 달이어도 늘 받지는 않는다.
+     */
+    const form = judgeMonthForm(line, level);
+    const potm = rng.chance(potmOdds(line, form, level, s.potmMonths?.length ?? 0));
+    if (potm) s.potmMonths = [...(s.potmMonths ?? []), m.label];
+
+    const entry: MonthLine = { key: m.key, label: m.label, line, level, role, potm };
     // 1군·2군을 오간 시즌은 나중에 따로 보여줘야 하므로 그때그때 갈라 담는다
     if (level === "KBO" || level === "MINOR") {
       const bucket = s.seasonByLevel ?? { KBO: null, MINOR: null };
@@ -1114,6 +1142,7 @@ function closeSeason(s: GameState, rng: RNG) {
     ps: s.postseason ?? undefined,
     allStar: s.allStar,
     allStarGame: s.allStarGame ?? undefined,
+    potm: s.potmMonths?.length ? s.potmMonths : undefined,
   };
   // 그해의 대기록
   rec.feats = rollFeats(regular, level, rng);
@@ -1254,6 +1283,7 @@ function startNextYear(s: GameState, rng: RNG) {
   s.pendingTransfers = null;
   s.transferRequested = false;
   s.monthLines = null;
+  s.potmMonths = null;
   s.halfLine = null;
   s.seasonLine = null;
   s.postseason = null;

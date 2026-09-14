@@ -6,6 +6,7 @@ import { isHitterLine, mergeLines } from "@/lib/sim";
 import { TOURNAMENTS } from "@/lib/national";
 import { formatMoney } from "@/lib/career";
 import { roleTier } from "@/lib/roles";
+import { FORM_STYLE, formNote, judgeMonthForm, type MonthForm } from "@/lib/form";
 import { teamById } from "@/lib/teams";
 import type {
   AmateurTournament, GameState, HitterLine, MonthLine, PitcherLine, StatLine, TournamentSlot,
@@ -14,7 +15,7 @@ import type {
 export type BroadcastKind = "H1" | "H2" | "PS" | "HS" | "INTL";
 
 type Step =
-  | { kind: "month"; label: string; line: StatLine; cume: StatLine; mood: Mood; note: string }
+  | { kind: "month"; label: string; line: StatLine; cume: StatLine; form: MonthForm; note: string; potm?: boolean }
   | { kind: "card"; icon: string; title: string; body: string; tone: "good" | "bad" | "epic" | "neutral" }
   | { kind: "round"; name: string; opponent: string; win: boolean; score: string }
   | { kind: "hs"; t: AmateurTournament }
@@ -26,52 +27,12 @@ type Step =
   /** 올스타전 · 국제대회 한 경기 */
   | { kind: "game"; tag: string; round: string; opponent: string; won: boolean; score: string; line: StatLine; mvp?: boolean; appeared?: boolean };
 
-type Mood = "hot" | "cold" | "normal" | "out";
+
 
 const MONTH_MS = 1500;
 const CARD_MS = 2000;
 
 /* ------------------------------------------------------------------ */
-
-/**
- * 한 달(약 24경기) 성적의 체감.
- * 리그 평균 OPS는 .730 안팎 — 타율만 보면 거포의 한 달을 과소평가하게 된다.
- * 그래서 장타(홈런·타점)와 투수의 탈삼진도 함께 본다.
- */
-function moodOf(line: StatLine): Mood {
-  if (isHitterLine(line)) {
-    const h = line;
-    if (h.pa < 8) return "out";
-    // 월 6홈런이면 30홈런 페이스 — 타율이 낮아도 상승세다
-    if (h.ops >= 0.850 || h.hr >= 6 || (h.hr >= 4 && h.slg >= 0.520) || h.rbi >= 24) return "hot";
-    if (h.ops <= 0.660 && h.hr <= 2) return "cold";
-    return "normal";
-  }
-  const p = line as PitcherLine;
-  if (p.ip < 3) return "out";
-  if (p.era <= 2.90 || (p.era <= 3.60 && p.k9 >= 10)) return "hot";
-  if (p.era >= 5.50) return "cold";
-  return "normal";
-}
-
-const HOT_H = ["미친 타격감", "이 달의 선수급", "손대는 족족 안타", "타선을 이끌었다"];
-/** 타율은 평범해도 담장을 넘긴 달 */
-const HOT_POWER = ["담장을 계속 넘겼다", "한 방이 터진 달", "중심타선의 위력", "아치를 그려냈다"];
-const COLD_H = ["방망이가 식었다", "타격 슬럼프", "잔루만 쌓였다", "배트에 공이 안 맞는다"];
-const NORM_H = ["제 몫은 했다", "꾸준했던 한 달", "기복 속에 버텼다"];
-const HOT_P = ["압도적인 구위", "무실점 행진", "마운드를 지배했다", "이 달의 투수급"];
-const COLD_P = ["난타당한 한 달", "제구가 흔들렸다", "조기 강판이 잦았다", "실점이 쌓였다"];
-const NORM_P = ["제 몫은 했다", "꾸준히 로테이션을 지켰다", "기복 속에 버텼다"];
-
-function noteOf(line: StatLine, mood: Mood, seed: number): string {
-  if (mood === "out") return "부상·2군 — 출장 없음";
-  const hitter = isHitterLine(line);
-  const power = hitter && (line as HitterLine).hr >= 4 && (line as HitterLine).avg < 0.285;
-  const pool = mood === "hot" ? (hitter ? (power ? HOT_POWER : HOT_H) : HOT_P)
-    : mood === "cold" ? (hitter ? COLD_H : COLD_P)
-    : (hitter ? NORM_H : NORM_P);
-  return pool[seed % pool.length];
-}
 
 /** 한 달 성적을 3칸으로 요약 */
 function cells(line: StatLine): { k: string; v: string }[] {
@@ -181,14 +142,15 @@ function buildSteps(g: GameState, kind: BroadcastKind): Step[] {
   });
   for (let i = 0; i < months.length; i++) {
     const m = months[i];
-    const mood = moodOf(m.line);
+    const form = judgeMonthForm(m.line, m.level);
     steps.push({
       kind: "month",
       label: m.label,
       line: m.line,
       cume: mergeLines([...base, ...months.slice(0, i + 1).map((x) => x.line)]),
-      mood,
-      note: noteOf(m.line, mood, g.seed + i),
+      form,
+      note: formNote(m.line, form, g.seed + i),
+      potm: m.potm,
     });
     // 그 달이 끝나고 엔트리가 바뀌었다면 바로 이어서 통보한다
     if (m.move) {
@@ -335,13 +297,6 @@ export function Broadcast({ g, kind, onDone }: {
   );
 }
 
-const MOOD_STYLE: Record<Mood, { badge: string; color: string }> = {
-  hot: { badge: "🔥 상승세", color: "#ffd166" },
-  cold: { badge: "🧊 부진", color: "#9fc7ff" },
-  normal: { badge: "— 평범", color: "rgba(255,255,255,0.75)" },
-  out: { badge: "🏥 결장", color: "#ffb4a2" },
-};
-
 /** 1군 콜업 · 2군 말소 통보 */
 function MovePanel({ step }: { step: Extract<Step, { kind: "move" }> }) {
   const t = step.move.type;
@@ -380,7 +335,7 @@ function MovePanel({ step }: { step: Extract<Step, { kind: "move" }> }) {
 }
 
 function MonthPanel({ step }: { step: Extract<Step, { kind: "month" }> }) {
-  const m = MOOD_STYLE[step.mood];
+  const m = FORM_STYLE[step.form];
   return (
     <div className="pop">
       <div className="flex items-baseline gap-2">
@@ -388,6 +343,24 @@ function MonthPanel({ step }: { step: Extract<Step, { kind: "month" }> }) {
         <span className="text-[11px] font-bold" style={{ color: m.color }}>{m.badge}</span>
       </div>
       <div className="mt-1 text-[12px] opacity-80">{step.note}</div>
+
+      {/* 이달의 선수는 그 달의 하이라이트다 — 배지보다 크게 보여준다 */}
+      {step.potm && (
+        <div
+          className="mt-2.5 flex items-center gap-2 rounded-xl px-3 py-2"
+          style={{ background: "rgba(255,194,51,0.18)", boxShadow: "inset 0 0 0 1px rgba(255,194,51,0.45)" }}
+        >
+          <span className="text-[20px] leading-none">🏆</span>
+          <div>
+            <div className="text-[9px] font-black uppercase tracking-[0.18em]" style={{ color: "#ffc233" }}>
+              Player of the Month
+            </div>
+            <div className="text-[13px] font-black" style={{ color: "#ffc233" }}>
+              {step.label} 이달의 선수 선정
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mt-3 grid grid-cols-4 gap-1.5">
         {cells(step.line).map((c) => (

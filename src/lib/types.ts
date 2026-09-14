@@ -133,6 +133,8 @@ export interface MonthLine {
   role: string;
   /** 그 달이 끝난 뒤 일어난 엔트리 이동 (ROLE = 같은 레벨 안에서 자리만 바뀜) */
   move?: { type: "UP" | "DOWN" | "ROLE"; role: string; salary?: number };
+  /** 그 달 이달의 선수(월간 MVP)로 뽑혔는가 */
+  potm?: boolean;
 }
 
 /** 시즌 1건의 기록 */
@@ -169,6 +171,8 @@ export interface SeasonRecord {
   goal?: { label: string; met: boolean; reason?: string };
   allStar?: boolean;
   allStarGame?: AllStarGame;
+  /** 그해 이달의 선수를 받은 달 ("4월", "7월" …) */
+  potm?: string[];
 }
 
 /** 홈구장 — 같은 성적도 어느 구장에서 뛰느냐에 따라 달라진다 */
@@ -372,6 +376,8 @@ export interface GameState {
   /* --- 시즌 진행 --- */
   /** 직전에 치른 반기의 월별 성적 (중계 재생용) */
   monthLines: MonthLine[] | null;
+  /** 그해 이달의 선수를 받은 달 — 시즌이 끝나면 SeasonRecord로 옮겨진다 */
+  potmMonths: string[] | null;
   /** 전반기 성적 (후반기 진행 전까지 보관) */
   halfLine: StatLine | null;
   /** 정규시즌 누적 성적 (후반기 종료 후) */

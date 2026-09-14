@@ -69,6 +69,7 @@ docs/           이 문서와 개발 이력
 | `storage.ts` | 75 | `localStorage` + `useSyncExternalStore` |
 | `postseason.ts` | 75 | 가을야구 (시리즈별 개인 기록 포함) |
 | `roles.ts` | 69 | **1군 입지 티어** — 보직 판정의 단일 소스 |
+| `form.ts` | 130 | **월별 컨디션 7단계** — 배지·문구·이달의 선수 |
 | `rng.ts` | 64 | 시드 난수 + `LEAGUE_AVG_ABILITY` |
 
 ### `src/app/` — 화면
