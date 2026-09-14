@@ -110,6 +110,10 @@ stacking context를 만들어, 그 안에서 그린 `fixed`는 sticky 탭 바보
 `.card`는 Tailwind 유틸리티보다 늦게 선언돼 우선하므로
 `className="card bg-[...]"`로는 배경을 못 바꾼다 — `style`로 준다.
 
+**브라우저 저장소를 렌더에 쓰면 hydration이 깨진다.** 초기 state에서 읽으면
+서버(항상 기본값)와 값이 달라지고, effect에서 setState하면 연쇄 렌더가 된다.
+`useSyncExternalStore(구독, 클라이언트값, 서버값)`로 마운트 여부를 받는다.
+
 넓다고 정보를 옆으로 늘어놓으면 기기마다 다른 게임이 되고, 오버레이·중계·카드 연출을
 두 벌로 만들어야 한다. `lg:` 분기를 새로 만들지 않는다.
 

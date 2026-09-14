@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { Intro } from "@/components/intro";
 import { AbilityBar, AppBar, Column, Pill, Section } from "@/components/ui";
 import { newGame } from "@/lib/career";
@@ -22,14 +22,27 @@ const HANDS: Hand[] = ["R", "L", "S"];
 export default function CreatePage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
-  // 도입 연출은 한 번만 — 세션 안에서 다시 만들 때는 건너뛴다
-  const [intro, setIntro] = useState(() => {
-    if (typeof window === "undefined") return true;
-    return sessionStorage.getItem("slb:intro") !== "done";
-  });
+  /**
+   * 도입 연출은 한 번만 — 세션 안에서 다시 만들 때는 건너뛴다.
+   *
+   * sessionStorage를 초기 state에서 읽으면 서버(항상 true)와 클라이언트가
+   * 달라져 hydration이 깨진다. 마운트 뒤에 켠다.
+   */
+  /**
+   * 마운트 여부.
+   * effect 안에서 setState하면 연쇄 렌더가 되고, 초기 state에서
+   * sessionStorage를 읽으면 서버와 값이 달라 hydration이 깨진다.
+   * 서버 스냅샷이 따로 있는 useSyncExternalStore가 둘 다 피한다.
+   */
+  const mounted = useSyncExternalStore(() => () => {}, () => true, () => false);
+  const [skipped, setSkipped] = useState(false);
+  const seen = mounted && (() => {
+    try { return sessionStorage.getItem("slb:intro") === "done"; } catch { return false; }
+  })();
+  const intro = mounted && !seen && !skipped;
   const closeIntro = () => {
     try { sessionStorage.setItem("slb:intro", "done"); } catch { /* 저장 못 해도 진행 */ }
-    setIntro(false);
+    setSkipped(true);
   };
   const [name, setName] = useState("");
   const [school, setSchool] = useState("");
@@ -256,48 +269,40 @@ export default function CreatePage() {
               className="btn btn-ghost px-3 py-1.5 text-[12px]">🎲 다시 뽑기</button>
           }>
           {opened.length < candidates.length && (
-            <div className="mb-3">
-              <div className="grid grid-cols-3 gap-2">
-                {candidates.map((c, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setOpened((v) => (v.includes(i) ? v : [...v, i]))}
-                    disabled={opened.includes(i)}
-                    className={`flex aspect-[3/4] flex-col items-center justify-center rounded-xl border-2 transition ${
-                      opened.includes(i)
-                        ? "border-[var(--brand)] bg-[var(--brand)]/6"
-                        : "border-dashed border-[var(--line)] bg-[var(--surface-2)] hover:border-[var(--brand-2)]"
-                    }`}
-                  >
-                    <span className="text-[10px] font-black tracking-widest text-[var(--ink-3)]">
-                      0{i + 1}
-                    </span>
-                    <span className="mt-1 text-[28px] font-black text-[var(--ink-3)]">
-                      {opened.includes(i) ? "⚾" : "?"}
-                    </span>
-                    {opened.includes(i) && (
-                      <span className="mt-1 text-[10.5px] font-extrabold text-[var(--brand)]">
-                        {c.kind.name}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
+            <div className="mb-3 flex items-center gap-2">
+              <p className="flex-1 text-[11.5px] text-[var(--ink-3)]">
+                카드를 눌러 확인하세요. 세 장 중 하나가 당신의 야구 인생이 됩니다.
+              </p>
               <button
                 onClick={() => setOpened(candidates.map((_, i) => i))}
-                className="btn btn-ghost mt-2 w-full py-2.5 text-[12.5px]"
+                className="btn btn-ghost shrink-0 px-3 py-1.5 text-[12px]"
               >
-                카드를 모두 열기
+                모두 열기
               </button>
-              <p className="mt-2 text-center text-[11px] text-[var(--ink-3)]">
-                세 장 중 하나가 당신의 야구 인생이 됩니다.
-              </p>
             </div>
           )}
 
           <div className="flex flex-col gap-3">
             {candidates.map((c, i) => {
-              if (!opened.includes(i)) return null;
+              /*
+               * 덮인 카드도 열린 카드와 **같은 자리·같은 높이**로 둔다.
+               * 열 때마다 배치가 바뀌면 무엇이 어디 있었는지 놓친다.
+               */
+              if (!opened.includes(i)) {
+                return (
+                  <button
+                    key={i}
+                    onClick={() => setOpened((v) => [...v, i])}
+                    className="card flex min-h-[232px] flex-col items-center justify-center gap-1.5 border-dashed transition hover:!border-[var(--brand-2)]"
+                  >
+                    <span className="text-[10px] font-black tracking-[0.2em] text-[var(--ink-3)]">
+                      0{i + 1}
+                    </span>
+                    <span className="text-[40px] font-black leading-none text-[var(--ink-3)]/45">?</span>
+                    <span className="text-[11.5px] font-bold text-[var(--ink-3)]">눌러서 확인</span>
+                  </button>
+                );
+              }
               const ovr = overall(c.player);
               const scout = scoutedOverall(c.player, 0, c.seed);
               const trait = traitById(c.player.trait);
