@@ -66,19 +66,28 @@ export function AbilityBar({ k, value, potential, potentialHi, known = true }: {
   const pct = Math.min(100, (value / ABILITY_MAX) * 100);
   const loPct = Math.min(100, (potential / ABILITY_MAX) * 100);
   const hiPct = Math.min(100, ((potentialHi ?? potential) / ABILITY_MAX) * 100);
-  const tone = value >= 100 ? "var(--gold)" : value >= 84 ? "var(--brand-2)" : value >= 66 ? "#5b7d9b" : "#a6b0bb";
+  // 전광판 눈금처럼 — 상위 구간일수록 밝게
+  const tone = value >= 100 ? "#ffd166" : value >= 84 ? "#5fa8e8" : value >= 66 ? "#7f93a8" : "#5b6675";
   return (
     <div className="flex items-center gap-2.5">
-      <span className="w-[52px] shrink-0 text-[11px] font-bold text-[var(--ink-2)]">{ABILITY_LABEL[k] ?? k}</span>
-      <div className="relative h-[7px] flex-1 overflow-hidden rounded-full bg-[var(--line)]">
+      <span className="w-[42px] shrink-0 text-[11px] font-bold text-[var(--ink-2)]">{ABILITY_LABEL[k] ?? k}</span>
+      <div className="relative h-[10px] min-w-[46px] flex-1 overflow-hidden rounded-[3px] bg-[#0d1c30]">
         {/* 스카우트가 보는 잠재력 구간 */}
-        <div className="absolute inset-y-0 rounded-full bg-[var(--ink-3)]/25"
+        <div className="absolute inset-y-0 bg-white/12"
           style={{ left: `${loPct}%`, width: `${Math.max(0, hiPct - loPct)}%` }} />
-        <div className="absolute inset-y-0 left-0 rounded-full bg-[var(--ink-3)]/35" style={{ width: `${loPct}%` }} />
-        <div className="absolute inset-y-0 left-0 rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: tone }} />
+        <div className="absolute inset-y-0 left-0 bg-white/8" style={{ width: `${loPct}%` }} />
+        <div className="absolute inset-y-0 left-0 transition-all duration-500"
+          style={{ width: `${pct}%`, background: tone, boxShadow: `0 0 8px ${tone}66` }} />
+        {/* 눈금 — 전광판처럼 칸이 나뉘어 보이게 */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            backgroundImage: "repeating-linear-gradient(90deg, transparent 0 3px, rgba(0,0,0,.5) 3px 4px)",
+          }}
+        />
       </div>
-      <span className="tabular w-[28px] shrink-0 text-right text-[12px] font-extrabold">{value}</span>
-      <span className="tabular w-[52px] shrink-0 text-right text-[10px] font-bold text-[var(--ink-3)]">
+      <span className="num w-[26px] shrink-0 text-right text-[13.5px] font-bold">{value}</span>
+      <span className="num w-[44px] shrink-0 text-right text-[10.5px] font-bold text-[var(--ink-3)]">
         {known || potentialHi === undefined || potentialHi === potential
           ? potential
           : `${potential}~${potentialHi}`}
@@ -91,7 +100,7 @@ export function Stat({ label, value, sub, big }: { label: string; value: ReactNo
   return (
     <div className="flex flex-col items-center justify-center rounded-xl bg-[var(--surface-2)] px-2 py-2.5">
       <span className="eyebrow">{label}</span>
-      <span className={`tabular font-extrabold ${big ? "text-[20px]" : "text-[15px]"}`}>{value}</span>
+      <span className={`num font-bold ${big ? "text-[21px]" : "text-[16px]"}`}>{value}</span>
       {sub && <span className="text-[10px] text-[var(--ink-3)]">{sub}</span>}
     </div>
   );

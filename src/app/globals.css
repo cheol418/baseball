@@ -81,6 +81,16 @@ body { margin: 0; }
 
 .tabular { font-variant-numeric: tabular-nums; }
 
+/**
+ * 전광판 숫자.
+ * 한글은 글리프가 없어 본문 서체로 떨어진다 — 그게 의도다.
+ */
+.num {
+  font-family: var(--font-scoreboard), "Pretendard", system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .01em;
+}
+
 .eyebrow {
   font-size: 10px;
   letter-spacing: 0.16em;
@@ -175,6 +185,7 @@ body { margin: 0; }
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .07);
 }
 .scoreboard-num {
+  font-family: var(--font-scoreboard), "Pretendard", system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
   letter-spacing: .02em;
   text-shadow: 0 0 10px rgba(255, 209, 102, .35);
@@ -196,6 +207,7 @@ body { margin: 0; }
 
 /** 등번호 — 유니폼 등판처럼 */
 .jersey {
+  font-family: var(--font-scoreboard), system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
   letter-spacing: -.02em;
   text-shadow: 0 2px 0 rgba(0, 0, 0, .22);

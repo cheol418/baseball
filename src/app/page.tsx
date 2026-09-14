@@ -34,21 +34,38 @@ export default function Home() {
     <main className="pb-16">
       <AppBar title="야구는 9회말 2아웃부터" />
 
-      <div className="bg-[var(--surface)] px-4 pb-6 pt-7">
+      {/* 첫 화면은 조명이 켜진 밤 경기장이다 */}
+      <div className="ballpark pinstripe relative px-4 pb-7 pt-8 text-white"
+        style={{ background: "linear-gradient(160deg, #123258, #0e2a4d 55%, #071528)" }}>
         <Column>
-        <div className="eyebrow">Bottom of the 9th · 2 Outs</div>
-        <h2 className="mt-1 text-[26px] font-black leading-tight tracking-tight">
-          아직 한 타석 남았습니다
-        </h2>
-        <p className="mt-2 text-[13px] leading-relaxed text-[var(--ink-2)]">
-          고교 3학년부터 드래프트, 프로 시즌, FA와 은퇴까지.
-          <br />9회말 2아웃에서도 커리어는 뒤집힙니다.
-        </p>
-        <Link href="/create" className="btn btn-primary mt-5 w-full px-5 py-3.5 text-[15px]">
-          ⚾ 새로운 인생 시작 <span aria-hidden>→</span>
-        </Link>
+        <div className="relative">
+          <div className="text-[10px] font-black uppercase tracking-[0.28em] text-white/40">
+            Bottom of the 9th · 2 Outs
+          </div>
+          {/* 카운트 표시 — 구장 전광판에서 늘 보던 그것 */}
+          <div className="mt-3 flex items-center gap-3">
+            <span className="text-[9px] font-black uppercase tracking-[0.18em] text-white/40">Out</span>
+            <span className="flex gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-[var(--danger)]" />
+              <span className="h-2.5 w-2.5 rounded-full bg-[var(--danger)]" />
+              <span className="h-2.5 w-2.5 rounded-full ring-1 ring-inset ring-white/30" />
+            </span>
+          </div>
+          <h2 className="mt-3 text-[27px] font-black leading-tight tracking-tight">
+            아직 한 타석 남았습니다
+          </h2>
+          <p className="mt-2 text-[13px] leading-relaxed text-white/70">
+            고교 3학년부터 드래프트, 프로 시즌, FA와 은퇴까지.
+            <br />9회말 2아웃에서도 커리어는 뒤집힙니다.
+          </p>
+          <Link href="/create"
+            className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-white px-5 py-3.5 text-[15px] font-extrabold text-[var(--brand)] transition hover:bg-white/90">
+            ⚾ 새로운 인생 시작 <span aria-hidden>→</span>
+          </Link>
+        </div>
         </Column>
       </div>
+      <div className="seam-line" />
       <Column>
 
       <Section eyebrow="My Lives" title="나의 선수단">

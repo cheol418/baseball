@@ -83,7 +83,7 @@ export function SeasonTable({ seasons, kind, totals }: {
     /* 스코어북 위에 적는 느낌 — 격자는 아주 옅게 깐다 */
     <div className="scroll-x card relative">
       <div className="scorebook pointer-events-none absolute inset-0" aria-hidden />
-      <table className="tabular relative w-full min-w-max text-[11.5px]">
+      <table className="num relative w-full min-w-max text-[11.5px]">
         <thead>
           <tr className="border-b border-[var(--line)] text-[10px] text-[var(--ink-3)]">
             <th className="sticky left-0 z-10 bg-[var(--surface)] px-2.5 py-2 text-left font-bold">연도</th>
