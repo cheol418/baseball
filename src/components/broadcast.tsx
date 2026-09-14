@@ -219,6 +219,94 @@ function buildSteps(g: GameState, kind: BroadcastKind): Step[] {
 
 /* ------------------------------------------------------------------ */
 
+/**
+ * 중계 시작 전 로딩 화면.
+ *
+ * 계산은 즉시 끝나지만, 결과가 툭 튀어나오면 한 해가 없었던 일처럼 느껴진다.
+ * 그 자리에 일정표를 채워 넣어 **기다림 자체를 콘텐츠로** 만든다.
+ */
+function LoadingPanel({ title, subtitle, rows, tail }: {
+  title: string; subtitle: string; rows: { when: string; what: string }[]; tail: string;
+}) {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (n >= rows.length) return;
+    const t = setTimeout(() => setN((v) => v + 1), 260);
+    return () => clearTimeout(t);
+  }, [n, rows.length]);
+  return (
+    <div className="pop text-center">
+      <div className="text-[10px] font-black uppercase tracking-[0.24em] opacity-55">{subtitle}</div>
+      <div className="mt-1 text-[22px] font-black">{title}</div>
+      <div className="mt-4 flex flex-col gap-1.5 text-left">
+        {rows.map((r, i) => (
+          <div
+            key={r.when + r.what}
+            className={`flex items-center gap-2.5 rounded-xl px-3 py-2 transition-opacity duration-300 ${
+              i < n ? "bg-white/12 opacity-100" : "bg-white/5 opacity-30"
+            }`}
+          >
+            <span className="w-10 shrink-0 text-[10.5px] font-black opacity-60">{r.when}</span>
+            <span className="text-[12.5px] font-extrabold">{r.what}</span>
+            {i < n && <span className="ml-auto text-[11px] opacity-70">✓</span>}
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 h-[3px] w-full overflow-hidden rounded-full bg-white/15">
+        <div
+          className="h-full rounded-full bg-white/70 transition-[width] duration-300 ease-out"
+          style={{ width: `${(n / Math.max(1, rows.length)) * 100}%` }}
+        />
+      </div>
+      <p className="mt-3 text-[11.5px] opacity-70">{tail}</p>
+    </div>
+  );
+}
+
+/** 중계 종류별 로딩 화면 내용 */
+function loadingOf(g: GameState, kind: BroadcastKind): { title: string; subtitle: string; rows: { when: string; what: string }[]; tail: string } | null {
+  if (kind === "H1") {
+    return {
+      subtitle: `${g.year} · 정규시즌`,
+      title: "전반기 일정을 짭니다",
+      rows: [
+        { when: "4월", what: "개막 시리즈" }, { when: "5월", what: "홈 10연전" },
+        { when: "6월", what: "장마철 원정" }, { when: "7월", what: "올스타 브레이크 직전" },
+      ],
+      tail: "경기 일정과 선수 기록을 계산하고 있습니다.",
+    };
+  }
+  if (kind === "H2") {
+    return {
+      subtitle: `${g.year} · 순위 싸움`,
+      title: "후반기가 시작됩니다",
+      rows: [
+        { when: "8월", what: "폭염 속 연전" }, { when: "9월", what: "순위 싸움" },
+        { when: "10월", what: "시즌 마지막 경기" },
+      ],
+      tail: "가을야구가 걸린 두 달입니다.",
+    };
+  }
+  if (kind === "PS") {
+    return {
+      subtitle: `${g.year} · 포스트시즌`,
+      title: "가을야구가 열립니다",
+      rows: (g.postseason?.rounds ?? []).map((r) => ({ when: "", what: `${r.name} vs ${r.opponent}` })),
+      tail: "한 경기에 한 해가 걸려 있습니다.",
+    };
+  }
+  if (kind === "HS") {
+    const rec = g.lastSeasonIndex !== null ? g.seasons[g.lastSeasonIndex] : null;
+    return {
+      subtitle: `${g.year} · ${rec?.level === "COLLEGE" ? "대학" : "고교"}`,
+      title: "전국대회가 시작됩니다",
+      rows: (rec?.tournaments ?? []).map((t) => ({ when: "", what: t.name })),
+      tail: "스탠드에 프로 스카우트들이 앉아 있습니다.",
+    };
+  }
+  return null;
+}
+
 export function Broadcast({ g, kind, onDone, onAction, busy = false }: {
   g: GameState; kind: BroadcastKind; onDone: () => void;
   /** 중계 도중 상태를 바꿔야 할 때 (승부처) */
@@ -227,10 +315,19 @@ export function Broadcast({ g, kind, onDone, onAction, busy = false }: {
 }) {
   const steps = useMemo(() => buildSteps(g, kind), [g, kind]);
   const [i, setI] = useState(0);
+  const loading = useMemo(() => loadingOf(g, kind), [g, kind]);
+  // 로딩 화면을 먼저 보여주고 중계로 넘어간다
+  const [warmup, setWarmup] = useState(() => !!loading);
+  useEffect(() => {
+    if (!warmup) return;
+    const t = setTimeout(() => setWarmup(false), 1500);
+    return () => clearTimeout(t);
+  }, [warmup]);
   const team = g.contract ? teamById(g.contract.teamId) : null;
   const accent = team?.color ?? "#0e2a4d";
 
   useEffect(() => {
+    if (warmup) return;
     if (i >= steps.length) {
       const t = setTimeout(onDone, 450);
       return () => clearTimeout(t);
@@ -242,7 +339,7 @@ export function Broadcast({ g, kind, onDone, onAction, busy = false }: {
     const dur = steps[i].kind === "month" ? MONTH_MS : CARD_MS;
     const t = setTimeout(() => setI((v) => v + 1), dur);
     return () => clearTimeout(t);
-  }, [i, steps, onDone]);
+  }, [i, steps, onDone, warmup]);
 
   const amateurLabel = (g.lastSeasonIndex !== null && g.seasons[g.lastSeasonIndex]?.level === "COLLEGE") ? "대학" : "고교";
   const intlOfYear = g.intlResults.find((r) => r.year === g.year);
@@ -297,12 +394,13 @@ export function Broadcast({ g, kind, onDone, onAction, busy = false }: {
         </div>
 
         <div className="px-4 pb-5 pt-4">
-          {step.kind === "month" && <MonthPanel key={`m${i}`} step={step} />}
-          {step.kind === "card" && <CardPanel key={`c${i}`} step={step} />}
-          {step.kind === "round" && <RoundPanel key={`r${i}`} step={step} />}
-          {step.kind === "hs" && <HsPanel key={`h${i}`} step={step} />}
-          {step.kind === "game" && <GamePanel key={`g${i}`} step={step} />}
-          {step.kind === "clutch" && (
+          {warmup && loading && <LoadingPanel key="warm" {...loading} />}
+          {!warmup && step.kind === "month" && <MonthPanel key={`m${i}`} step={step} />}
+          {!warmup && step.kind === "card" && <CardPanel key={`c${i}`} step={step} />}
+          {!warmup && step.kind === "round" && <RoundPanel key={`r${i}`} step={step} />}
+          {!warmup && step.kind === "hs" && <HsPanel key={`h${i}`} step={step} />}
+          {!warmup && step.kind === "game" && <GamePanel key={`g${i}`} step={step} />}
+          {!warmup && step.kind === "clutch" && (
             <div key={`k${i}`}>
               {step.r ? (
                 <>
@@ -323,7 +421,7 @@ export function Broadcast({ g, kind, onDone, onAction, busy = false }: {
               )}
             </div>
           )}
-          {step.kind === "move" && (
+          {!warmup && step.kind === "move" && (
             <div key={`v${i}`}>
               <MovePanel step={step} />
               <button

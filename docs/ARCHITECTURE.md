@@ -91,6 +91,8 @@ docs/           이 문서와 개발 이력
 | `ui.tsx` | 174 | `Container`·`Section`·`Pill`·`AbilityBar`·`SeasonProgress` |
 | `stats.tsx` | 115 | 기록 표·숫자 포맷 |
 | `emblem.tsx` | 175 | 구단 크레스트 10종 (직접 그린 SVG — 실제 KBO 로고는 상표라 쓰지 않는다) |
+| `clutch.tsx` | 165 | 승부처 선택 카드 · 결과 뽑기 공개(DRAW COMPLETE) |
+| `intro.tsx` | 80 | 도입 연출 — 세 줄 타이핑, 언제든 건너뛰기 |
 
 ---
 

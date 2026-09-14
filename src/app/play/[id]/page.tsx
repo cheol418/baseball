@@ -731,24 +731,41 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
     case "EVENT": {
       const ev = g.pendingEvent;
       if (!ev) return null;
+      /**
+       * 갈림길은 화면을 덮는다.
+       * 페이지의 한 조각으로 흘려보내면 "선택했다"는 감각이 남지 않는다 —
+       * 커리어가 꺾이는 지점이니 잠깐 멈춰 세운다.
+       */
       return (
-        <Wrap eyebrow="Turning Point" title={`${ev.icon} ${ev.title}`} desc={ev.body}>
-          <div className="flex flex-col gap-2">
-            {ev.options.map((o) => (
-              <button key={o.id} onClick={() => run({ type: "CHOOSE_EVENT", optionId: o.id })} disabled={busy}
-                className="card px-4 py-3.5 text-left transition hover:!border-[var(--brand)] disabled:opacity-50">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-[14px] font-extrabold">{o.label}</span>
-                  {o.risky && <Pill tone="danger">위험</Pill>}
-                </div>
-                <div className="mt-0.5 text-[12px] leading-relaxed text-[var(--ink-3)]">{o.desc}</div>
-              </button>
-            ))}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-5 backdrop-blur-[2px]">
+          <div className="pop w-full max-w-[420px] overflow-hidden rounded-2xl bg-[var(--surface)] shadow-2xl">
+            <div className="px-6 pt-6 text-center" style={{ background: "var(--brand)12" }}>
+              <div className="text-[44px] leading-none">{ev.icon}</div>
+              <div className="mt-2 text-[9.5px] font-black uppercase tracking-[0.2em] text-[var(--ink-3)]">
+                Turning Point
+              </div>
+              <div className="text-[19px] font-black">{ev.title}</div>
+            </div>
+            <div className="px-5 py-4">
+              <p className="text-[12.5px] leading-relaxed text-[var(--ink-2)]">{ev.body}</p>
+              <div className="mt-3 flex flex-col gap-2">
+                {ev.options.map((o) => (
+                  <button key={o.id} onClick={() => run({ type: "CHOOSE_EVENT", optionId: o.id })} disabled={busy}
+                    className="card px-4 py-3 text-left transition hover:!border-[var(--brand)] disabled:opacity-50">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[13.5px] font-extrabold">{o.label}</span>
+                      {o.risky && <Pill tone="danger">위험</Pill>}
+                    </div>
+                    <div className="mt-0.5 text-[11.5px] leading-relaxed text-[var(--ink-3)]">{o.desc}</div>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-3 text-center text-[10.5px] leading-relaxed text-[var(--ink-3)]">
+                이 선택의 결과는 다음 시즌이 끝날 때 드러납니다.
+              </p>
+            </div>
           </div>
-          <p className="mt-3 text-[11px] leading-relaxed text-[var(--ink-3)]">
-            이 선택의 결과는 다음 시즌이 끝날 때 드러납니다.
-          </p>
-        </Wrap>
+        </div>
       );
     }
 

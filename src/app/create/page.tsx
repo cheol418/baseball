@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { Intro } from "@/components/intro";
 import { AbilityBar, AppBar, Column, Pill, Section } from "@/components/ui";
 import { newGame } from "@/lib/career";
 import {
@@ -21,6 +22,15 @@ const HANDS: Hand[] = ["R", "L", "S"];
 export default function CreatePage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
+  // 도입 연출은 한 번만 — 세션 안에서 다시 만들 때는 건너뛴다
+  const [intro, setIntro] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return sessionStorage.getItem("slb:intro") !== "done";
+  });
+  const closeIntro = () => {
+    try { sessionStorage.setItem("slb:intro", "done"); } catch { /* 저장 못 해도 진행 */ }
+    setIntro(false);
+  };
   const [name, setName] = useState("");
   const [school, setSchool] = useState("");
   const schoolInfo = useMemo(() => schoolOf(school), [school]);
@@ -34,6 +44,12 @@ export default function CreatePage() {
   const [wishTeam, setWishTeam] = useState(TEAMS[0].id);
   const [baseSeed, setBaseSeed] = useState(() => Math.floor(Math.random() * 1e9));
   const [picked, setPicked] = useState<number | null>(null);
+  /**
+   * 후보 카드를 덮어둔다.
+   * 세 명을 펼쳐놓고 고르게 하면 표를 비교하는 일이 되지만,
+   * 뒤집어서 하나씩 여는 순간 "무엇이 나올까"가 된다.
+   */
+  const [opened, setOpened] = useState<number[]>([]);
 
   const styles = STYLES.filter((s) => s.kind === kind);
   const positions = kind === "HITTER" ? HITTER_POSITIONS : PITCHER_POSITIONS;
@@ -70,6 +86,7 @@ export default function CreatePage() {
 
   return (
     <main className="pb-28">
+      {intro && <Intro onDone={closeIntro} />}
       <AppBar title="선수 생성" back="/" right={<span className="text-[11px] opacity-70">{step + 1}/4</span>} />
 
       <div className="h-1 w-full bg-[var(--line)]">
@@ -238,8 +255,49 @@ export default function CreatePage() {
             <button onClick={() => { setBaseSeed(Math.floor(Math.random() * 1e9)); setPicked(null); }}
               className="btn btn-ghost px-3 py-1.5 text-[12px]">🎲 다시 뽑기</button>
           }>
+          {opened.length < candidates.length && (
+            <div className="mb-3">
+              <div className="grid grid-cols-3 gap-2">
+                {candidates.map((c, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setOpened((v) => (v.includes(i) ? v : [...v, i]))}
+                    disabled={opened.includes(i)}
+                    className={`flex aspect-[3/4] flex-col items-center justify-center rounded-xl border-2 transition ${
+                      opened.includes(i)
+                        ? "border-[var(--brand)] bg-[var(--brand)]/6"
+                        : "border-dashed border-[var(--line)] bg-[var(--surface-2)] hover:border-[var(--brand-2)]"
+                    }`}
+                  >
+                    <span className="text-[10px] font-black tracking-widest text-[var(--ink-3)]">
+                      0{i + 1}
+                    </span>
+                    <span className="mt-1 text-[28px] font-black text-[var(--ink-3)]">
+                      {opened.includes(i) ? "⚾" : "?"}
+                    </span>
+                    {opened.includes(i) && (
+                      <span className="mt-1 text-[10.5px] font-extrabold text-[var(--brand)]">
+                        {c.kind.name}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setOpened(candidates.map((_, i) => i))}
+                className="btn btn-ghost mt-2 w-full py-2.5 text-[12.5px]"
+              >
+                카드를 모두 열기
+              </button>
+              <p className="mt-2 text-center text-[11px] text-[var(--ink-3)]">
+                세 장 중 하나가 당신의 야구 인생이 됩니다.
+              </p>
+            </div>
+          )}
+
           <div className="flex flex-col gap-3">
             {candidates.map((c, i) => {
+              if (!opened.includes(i)) return null;
               const ovr = overall(c.player);
               const scout = scoutedOverall(c.player, 0, c.seed);
               const trait = traitById(c.player.trait);
