@@ -624,31 +624,95 @@ function marketValue(s: GameState, ceiling = MAX_SALARY): number {
   );
 }
 
+/**
+ * 구단마다 계약을 짜는 방식이 다르다.
+ *
+ * 전에는 총액이 한 상한(180억)에 다 같이 붙어 다섯 구단이 똑같은 제안을 냈다.
+ * 금액만 바꿔서는 고를 이유가 안 생긴다 — **모양**이 달라야 한다.
+ *  · 전액 보장   총액은 덜 주지만 옵션이 거의 없다
+ *  · 옵션 승부   총액은 가장 크지만 상당액이 조건부다
+ *  · 장기 안정   길게 묶는 대신 연봉이 낮다
+ *  · 단기 고액   짧게 끊는 대신 연봉이 세다
+ */
+type DealStyle = "GUARANTEED" | "INCENTIVE" | "LONG" | "SHORT";
+
+const STYLE_NOTE: Record<DealStyle, string> = {
+  GUARANTEED: "전액 보장 — 옵션 없이 안겨준다",
+  INCENTIVE: "옵션 승부 — 총액은 크지만 조건부가 많다",
+  LONG: "장기 안정 — 길게 묶는 대신 연봉이 낮다",
+  SHORT: "단기 고액 — 짧게 끊고 연봉을 높인다",
+};
+
+/** 옵션 조건도 구단마다 다르게 건다 */
+function incentiveTerms(kind: "HITTER" | "PITCHER", rng: RNG): string {
+  const hit = [
+    "시즌 400타석 + WAR 2.0 달성 시 연 지급",
+    "시즌 120경기 출장 시 연 지급",
+    "OPS .820 이상 달성 시 연 지급",
+    "규정타석 + 골든글러브 수상 시 지급",
+    "시즌 20홈런 달성 시 연 지급",
+  ];
+  const pit = [
+    "시즌 120이닝(또는 40경기) + WAR 1.5 달성 시 연 지급",
+    "시즌 150이닝 달성 시 연 지급",
+    "평균자책점 3.50 이하 달성 시 연 지급",
+    "시즌 30세이브(또는 20홀드) 달성 시 연 지급",
+    "규정이닝 + 타이틀 수상 시 지급",
+  ];
+  return rng.pick(kind === "HITTER" ? hit : pit);
+}
+
 function buildOffer(s: GameState, t: Team, base: number, ageP: number, rng: RNG, homeTeam: boolean): Offer {
-  const fit = homeTeam ? 1.02 : 0.8 + (t.money / 100) * 0.5 + rng.float(-0.12, 0.18);
-  const years = homeTeam
+  const durability = getAb(s.player.abilities, "durability" as never);
+
+  /**
+   * 성향은 구단 성격에서 나온다 — 돈 많은 팀은 짧고 굵게,
+   * 쪼들리는 팀은 옵션으로 미루고, 육성팀은 길게 묶는다.
+   * 원소속팀은 그 선수를 겪어봤으니 보장으로 안긴다.
+   */
+  const style: DealStyle = homeTeam
+    ? (rng.chance(0.75) ? "GUARANTEED" : "LONG")
+    : rng.weighted(
+      ["GUARANTEED", "INCENTIVE", "LONG", "SHORT"] as DealStyle[],
+      [
+        t.money >= 78 ? 28 : 10,
+        t.money <= 62 ? 34 : 18,
+        t.youth >= 68 ? 30 : 16,
+        t.money >= 82 ? 28 : 14,
+      ],
+    );
+
+  const fit = (homeTeam ? 1.02 : 0.78 + (t.money / 100) * 0.55 + rng.float(-0.14, 0.22))
+    * (style === "INCENTIVE" ? 1.16 : style === "GUARANTEED" ? 0.9 : style === "SHORT" ? 0.88 : 1.04);
+
+  const baseYears = homeTeam
     ? clamp(Math.round(ageP * 4), 1, 5)
     : clamp(Math.round(ageP * 4 + rng.float(-1, 1.4)), 1, 6);
+  const years = clamp(
+    style === "LONG" ? baseYears + rng.int(1, 2)
+      : style === "SHORT" ? baseYears - rng.int(1, 2)
+        : baseYears,
+    1, 7,
+  );
 
-  const total = clamp(Math.round((base * years * fit) / 500) * 500, MIN_SALARY, MAX_SALARY * 6);
-  /**
-   * 옵션 비중 — 구단이 위험을 얼마나 나눠 지려 하는가.
-   *
-   * 원소속팀은 그 선수를 가장 잘 안다. 몸 상태도, 성실함도 겪어봤으니
-   * 굳이 옵션으로 걸지 않고 보장으로 안긴다 — 실제 잔류 계약이 그렇다.
-   * 반대로 타팀은 검증이 덜 돼 있어 옵션을 크게 건다.
-   * 자금이 넉넉한 구단일수록 보장을 늘리고, 쪼들리는 구단은 옵션으로 미룬다.
-   */
-  const durability = getAb(s.player.abilities, "durability" as never);
+  // 상한은 연수에 따라 늘어난다 — 한 숫자로 묶어두면 모두 거기 붙는다
+  const total = clamp(
+    Math.round((base * years * fit) / 500) * 500,
+    MIN_SALARY, MAX_SALARY * years * 1.5,
+  );
+
   const optionRate = homeTeam
-    ? clamp(0.02 + (s.player.age - 34) * 0.012 + (50 - durability) * 0.002, 0, 0.12)
+    ? clamp(0.015 + (s.player.age - 34) * 0.01 + (50 - durability) * 0.0018, 0, 0.10)
     : clamp(
-      0.14 + (s.player.age - 30) * 0.022 + (55 - durability) * 0.003
-      + (70 - t.money) * 0.0035 + rng.float(-0.02, 0.05),
-      0.05, 0.42,
+      (style === "GUARANTEED" ? 0.03 : style === "INCENTIVE" ? 0.34 : 0.16)
+      + (s.player.age - 30) * 0.018 + (55 - durability) * 0.0028
+      + (70 - t.money) * 0.003 + rng.float(-0.03, 0.06),
+      0.01, 0.52,
     );
   const incentive = Math.round((total * optionRate) / 500) * 500;
-  const signingBonus = Math.round(((total - incentive) * 0.35) / 500) * 500;
+  // 계약금 비중도 성향을 탄다 — 단기 고액은 앞에서 크게 준다
+  const bonusRate = style === "SHORT" ? 0.45 : style === "LONG" ? 0.24 : 0.35;
+  const signingBonus = Math.round(((total - incentive) * bonusRate) / 500) * 500;
   const salary = clamp(
     Math.round((total - incentive - signingBonus) / years / 100) * 100,
     MIN_SALARY, MAX_SALARY,
@@ -662,9 +726,10 @@ function buildOffer(s: GameState, t: Team, base: number, ageP: number, rng: RNG,
     role: homeTeam ? (s.contract?.role ?? defaultRole(s.player)) : defaultRole(s.player),
     note: homeTeam ? "원소속팀 잔류"
       : t.power >= 72 ? "우승 도전권" : t.youth >= 70 ? "팀의 중심으로 기용" : "주전 보장",
-    incentiveNote: s.player.kind === "HITTER"
-      ? "시즌 400타석 + WAR 2.0 달성 시 연 지급"
-      : "시즌 120이닝(또는 40경기) + WAR 1.5 달성 시 연 지급",
+    styleNote: STYLE_NOTE[style],
+    incentiveNote: incentive > 0
+      ? incentiveTerms(s.player.kind, rng)
+      : "옵션 없음 — 전액 보장",
   };
 }
 
@@ -677,7 +742,11 @@ function makeFaOffers(s: GameState, rng: RNG): Offer[] {
    * 그래서 프리미엄을 얹되 나이가 많을수록 깎는다.
    */
   const age = s.player.age;
-  const faPremium = age <= 29 ? 2.6 : age <= 32 ? 2.1 : age <= 34 ? 1.6 : age <= 36 ? 1.1 : 0.8;
+  /*
+   * 전에는 총액에 180억 상한이 걸려 있어 프리미엄이 과해도 티가 나지 않았다.
+   * 상한을 연수에 따라 풀면서 과대평가가 그대로 드러나 배수를 낮춘다.
+   */
+  const faPremium = age <= 29 ? 1.75 : age <= 32 ? 1.45 : age <= 34 ? 1.15 : age <= 36 ? 0.85 : 0.6;
   const prevSalary = s.contract?.salary ?? MIN_SALARY;
   // FA를 얻고도 작년보다 못 받는 제안은 (노장이 아닌 한) 현실적이지 않다
   const floor = age >= 35 ? prevSalary * 0.85 : prevSalary * 1.15;

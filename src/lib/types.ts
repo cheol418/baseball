@@ -500,6 +500,8 @@ export interface Offer {
   total: number;
   /** 옵션 달성 조건 설명 */
   incentiveNote: string;
+  /** 계약 성향 한 줄 — 같은 선수라도 구단마다 제안 모양이 다르다 */
+  styleNote: string;
 }
 
 

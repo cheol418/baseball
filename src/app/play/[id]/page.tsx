@@ -978,20 +978,30 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
                       <span className="block truncate text-[11px] text-[var(--ink-3)]">{o.note} · 전력 {t.power}</span>
                     </span>
                     <span className="shrink-0 text-right">
-                      <span className="tabular block text-[12px] font-bold text-[var(--ink-3)]">{o.years}년</span>
-                      <span className="tabular block text-[15px] font-black">{formatMoney(o.total)}</span>
+                      <span className="num block text-[12px] font-bold text-[var(--ink-3)]">{o.years}년</span>
+                      <span className="num block text-[16px] font-black">{formatMoney(o.total)}</span>
+                    </span>
+                  </div>
+
+                  {/* 같은 총액이라도 어떻게 짜였는지가 다르다 — 그걸 먼저 보여준다 */}
+                  <div className="mt-2 flex items-center gap-1.5">
+                    <Pill tone={o.incentive === 0 ? "brand" : o.incentive / o.total >= 0.3 ? "danger" : "neutral"}>
+                      {o.styleNote.split(" —")[0]}
+                    </Pill>
+                    <span className="num text-[10.5px] font-bold text-[var(--ink-3)]">
+                      보장 {Math.round((o.guaranteed / o.total) * 100)}%
                     </span>
                   </div>
 
                   <div className="mt-2.5 border-t border-[var(--line)] pt-2.5">
-                    <div className="tabular flex items-baseline gap-2 text-[11.5px]">
+                    <div className="num flex items-baseline gap-2 text-[11.5px]">
                       <span className="w-[34px] shrink-0 font-extrabold text-[var(--brand)]">보장</span>
                       <span className="font-extrabold">{formatMoney(o.guaranteed)}</span>
                       <span className="text-[var(--ink-3)]">
                         계약금 {formatMoney(o.signingBonus)} · 연봉 {formatMoney(o.salary)}/년
                       </span>
                     </div>
-                    <div className="tabular mt-1 flex items-baseline gap-2 text-[11.5px]">
+                    <div className="num mt-1 flex items-baseline gap-2 text-[11.5px]">
                       <span className="w-[34px] shrink-0 font-extrabold text-[var(--gold)]">옵션</span>
                       <span className="font-extrabold">{formatMoney(o.incentive)}</span>
                       <span className="truncate text-[var(--ink-3)]">{o.incentiveNote}</span>
