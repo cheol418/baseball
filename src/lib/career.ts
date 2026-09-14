@@ -94,6 +94,7 @@ export function newGame(player: Player, wishTeamId: string, seed: number, school
     pendingClutch: null,
     clutchResult: null,
     liveHalf: null,
+    retireRefusedYear: null,
     halfLine: null,
     seasonLine: null,
     seasonLevel: null,
@@ -473,6 +474,12 @@ function buildNegotiation(s: GameState, rec: SeasonRecord): Negotiation {
   // 인지도는 티켓·굿즈로 이어진다
   const fameWeight = clamp((s.player.fame - 55) * 0.0016, -0.05, 0.08);
 
+  /**
+   * 은퇴를 권했는데 선수가 더 뛰겠다고 한 해.
+   * 구단은 잡을 생각이 없다 — 깎아서 내밀고, 버텨봐야 잘 안 먹힌다.
+   */
+  const refused = s.retireRefusedYear === s.year;
+
   let mult = 0.95 + clamp(war * 0.055, -0.3, 0.45)
     + awardWeight + intlWeight + asWeight + milWeight + roleWeight
     + statWeight + ageWeight + psWeight + healthWeight + fameWeight;
@@ -488,6 +495,7 @@ function buildNegotiation(s: GameState, rec: SeasonRecord): Negotiation {
   else mult = 1 + (mult - 1) * 0.15;
   if (s.player.age >= 34) mult = Math.min(mult, 1.15);
   mult *= 0.94 + (s.trust / 100) * 0.12;
+  if (refused) mult = Math.min(mult * 0.62, 0.85);
   // 이미 고액이면 한 해 인상 폭에 제동이 걸린다
   if (prev >= 100000) mult = Math.min(mult, 1.55);
   else if (prev >= 50000) mult = Math.min(mult, 1.9);
@@ -521,14 +529,15 @@ function buildNegotiation(s: GameState, rec: SeasonRecord): Negotiation {
    * 실제 KBO에서 삭감은 성적이 나빴거나 거의 못 뛴 선수에게만 일어난다.
    * 계산이 어떻게 나오든 이 선은 지킨다.
    */
-  const earnedRaise = rec.level === "KBO"
+  const earnedRaise = !refused && rec.level === "KBO"
     && (war >= 2.5 || awardWeight >= 0.10 || rec.awards.some((x) => x.includes("MVP")));
   if (earnedRaise) offer = Math.max(offer, Math.min(prev, cap));
 
   // 성적이 좋을수록 재협상 성공 확률이 높다
   const leverage = clamp(
-    0.32 + war * 0.07 + (awardWeight + intlWeight + asWeight) * 0.5 + (s.trust - 55) * 0.004,
-    0.1, 0.85,
+    (0.32 + war * 0.07 + (awardWeight + intlWeight + asWeight) * 0.5 + (s.trust - 55) * 0.004)
+      * (refused ? 0.35 : 1),
+    0.05, 0.85,
   );
 
   /** 만원 단위로 다듬고 상·하한을 지킨다 */
@@ -843,7 +852,16 @@ function shouldForceRetire(s: GameState): string | null {
   const minorOnly = recent.length === 2 && recent.every((r) => r.level === "MINOR");
   if (p.age >= 29 && minorOnly) return "두 시즌 연속 1군의 부름을 받지 못하고 방출 통보를 받았습니다.";
 
-  const releaseBar = p.age >= 38 ? 76 : p.age >= 36 ? 71 : p.age >= 34 ? 66 : p.age >= 32 ? 61 : 0;
+  /**
+   * 방출 문턱.
+   *
+   * 낮게 잡았더니 35세까지 99%가 살아남아, 38세 이상 선수가 흔해졌다.
+   * 그 나이대 평균이 전성기보다 좋아 보이던 것은 하락이 약해서가 아니라
+   * **떨어질 선수가 안 떨어져서** 생긴 생존 편향이었다.
+   * 실제 KBO에서 서른아홉까지 주전으로 뛰는 선수는 리그에 한둘이다.
+   */
+  const releaseBar = p.age >= 40 ? 82 : p.age >= 38 ? 79 : p.age >= 36 ? 75
+    : p.age >= 34 ? 71 : p.age >= 32 ? 66 : 0;
   if (releaseBar && ovr < releaseBar) {
     return p.age >= 36 ? "재계약 대상에서 제외되었습니다." : "기량 저하가 뚜렷해져 구단에서 방출되었습니다.";
   }
@@ -1320,6 +1338,7 @@ function startNextYear(s: GameState, rng: RNG) {
   s.transferRequested = false;
   s.monthLines = null;
   s.potmMonths = null;
+  s.retireRefusedYear = null;
   s.halfLine = null;
   s.seasonLine = null;
   s.postseason = null;
@@ -2152,6 +2171,8 @@ export function advance(prev: GameState, action: Action): GameState {
     case "KEEP_PLAYING": {
       s.retireReason = undefined;
       s.retireForced = false;
+      // 나가라고 한 구단이 그해에 연봉을 올려줄 리 없다 — 협상이 이걸 알아야 한다
+      s.retireRefusedYear = s.year;
       // 구단은 달가워하지 않는다 — 신뢰가 깎이고 입지가 좁아진다
       s.trust = clamp(s.trust - rng.int(8, 16), 0, 100);
       s.player.fame = clamp(s.player.fame - rng.int(2, 5), 0, 100);

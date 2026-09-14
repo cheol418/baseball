@@ -66,6 +66,16 @@ export default function PlayPage() {
       const next = advance(current, action);
       saveGame(next);
       setBusy(false);
+      /**
+       * 중계 도중에 일어나는 액션(승부처)은 큐를 건드리면 안 된다.
+       * 새로 계산하면 빈 큐가 되어 보고 있던 중계가 통째로 사라진다 —
+       * 가을야구·국제대회처럼 phase로 되살릴 수 없는 중계는 결과도 못 보고 끝난다.
+       */
+      if (action.type === "RESOLVE_CLUTCH") {
+        window.scrollTo({ top: 0, behavior: "auto" });
+        return;
+      }
+
       const kind: BroadcastKind | null =
         action.type === "PLAY_FIRST_HALF" ? "H1"
         : action.type === "PLAY_SECOND_HALF" ? "H2"

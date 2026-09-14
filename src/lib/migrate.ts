@@ -34,6 +34,7 @@ export function migrateSave(raw: unknown): GameState | null {
   def("monthLines", null);
   def("pendingClutch", null);
   def("liveHalf", null);
+  def("retireRefusedYear", null);
   def("clutchResult", null);
   def("potmMonths", null);
   def("halfLine", null);

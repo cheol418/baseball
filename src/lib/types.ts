@@ -394,6 +394,8 @@ export interface GameState {
   pendingClutch: Clutch | null;
   /** 중계 중인 반기 */
   liveHalf: "H1" | "H2" | null;
+  /** 은퇴 권고를 뿌리친 해 — 그해 협상에서 구단의 태도가 달라진다 */
+  retireRefusedYear: number | null;
   /** 고른 결과 — 중계가 그 달에 닿으면 공개된다 */
   clutchResult: ClutchResult | null;
   /** 그해 이달의 선수를 받은 달 — 시즌이 끝나면 SeasonRecord로 옮겨진다 */
