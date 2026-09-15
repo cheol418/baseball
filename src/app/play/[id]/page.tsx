@@ -26,6 +26,7 @@ import {
 import { isHitterLine, MAJOR_TITLES, subtractLine, titleOfStat } from "@/lib/sim";
 import { RESOLVES } from "@/lib/resolve";
 import { myRankAmong } from "@/lib/rivals";
+import { monthsLeft, serviceOptions } from "@/lib/military";
 import { saveGame, useGame } from "@/lib/storage";
 import { isFranchiseRole } from "@/lib/roles";
 import { teamById } from "@/lib/teams";
@@ -883,21 +884,57 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
         </Wrap>
       );
 
-    case "MILITARY_SEASON":
+    case "MILITARY_SEASON": {
+      const sangmu = g.military === "SANGMU";
+      const left = monthsLeft(g);
       return (
-        <Wrap eyebrow="Service" title={g.military === "SANGMU" ? "상무 복무" : "현역 복무"}
-          desc={g.military === "SANGMU"
-            ? "퓨처스리그에서 경기를 이어갑니다. 남은 복무 시즌을 진행하세요."
-            : "야구를 떠나 있는 기간입니다. 남은 복무 시즌을 진행하세요."}>
-          <div className="card mb-3 flex gap-2 px-4 py-3">
-            <Mini label="복무 형태" value={g.military === "SANGMU" ? "상무" : "현역"} />
-            <Mini label="남은 시즌" value={`${g.militaryLeft}시즌`} />
+        <Wrap eyebrow="Service" title={sangmu ? "상무 복무" : "현역 복무"}
+          desc={sangmu
+            ? "국군체육부대에서 퓨처스리그를 뜁니다. 이 한 해를 어떻게 쓸지 정하세요."
+            : "야구를 떠나 있는 기간입니다. 이 한 해를 어떻게 쓸지 정하세요."}>
+          {/* 전역까지 — 복무는 시즌이 아니라 개월로 센다 */}
+          <div className="mb-3 overflow-hidden rounded-xl text-white"
+            style={{ background: "linear-gradient(150deg, #3f4a36, #2b3327 60%, #161b13)" }}>
+            <div className="flex items-center gap-3 px-4 py-3.5">
+              <span className="text-[22px]">🎖️</span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[9.5px] font-black uppercase tracking-[0.18em] opacity-55">
+                  {sangmu ? "Sangmu" : "Active Duty"}
+                </div>
+                <div className="text-[14px] font-extrabold">
+                  {sangmu ? "국군체육부대 야구단" : "현역 복무 중"}
+                </div>
+              </div>
+              <div className="shrink-0 text-right">
+                <div className="text-[9.5px] font-black uppercase tracking-[0.16em] opacity-55">전역까지</div>
+                <div className="num text-[20px] font-black">D-{left}<span className="ml-0.5 text-[11px] opacity-70">개월</span></div>
+              </div>
+            </div>
+            <span className="block h-[4px] w-full bg-white/15">
+              <span className="block h-full bg-white/70"
+                style={{ width: `${Math.round((1 - left / 18) * 100)}%` }} />
+            </span>
           </div>
-          <Primary onClick={() => run({ type: "SERVE" })} busy={busy} label="복무 중…">
-            {g.year}년 복무 진행
-          </Primary>
+
+          <div className="eyebrow mb-2">복무 방침</div>
+          <p className="mb-2 text-[11px] leading-relaxed text-[var(--ink-3)]">
+            {sangmu
+              ? "경기에 나갈지, 몸을 키울지, 부대에 충실할지 — 전역할 때 다른 선수가 되어 나옵니다."
+              : "야구를 못 하는 기간이지만, 어떻게 보내느냐에 따라 떨어지는 속도가 달라집니다."}
+          </p>
+          <div className="flex flex-col gap-2">
+            {serviceOptions(g.military).map((o) => (
+              <button key={o.id} onClick={() => run({ type: "SERVE", optionId: o.id })} disabled={busy}
+                className="card px-4 py-3 text-left transition hover:!border-[var(--brand)] disabled:opacity-50">
+                <div className="text-[13.5px] font-extrabold">{o.icon} {o.name}</div>
+                <div className="mt-0.5 text-[12px] leading-relaxed text-[var(--ink-3)]">{o.desc}</div>
+                <div className="mt-1 text-[10.5px] font-bold text-[var(--brand-2)]">{o.trade}</div>
+              </button>
+            ))}
+          </div>
         </Wrap>
       );
+    }
 
     case "NEGOTIATION": {
       const n = g.pendingNegotiation;

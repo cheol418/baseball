@@ -7,6 +7,7 @@ import {
 } from "../src/lib/career";
 import { isHitterLine } from "../src/lib/sim";
 import { RESOLVES } from "../src/lib/resolve";
+import { serviceOptions } from "../src/lib/military";
 import type { GameState, Hand, Kind } from "../src/lib/types";
 
 interface Issue { kind: string; detail: string }
@@ -100,7 +101,7 @@ function play(seed: number, opt: { college: boolean; military: "SANGMU" | "ACTIV
         case "MILITARY_CHOICE":
           act({ type: "ENLIST", option: canVolunteer(g) ? opt.military : "ACTIVE" });
           break;
-        case "MILITARY_SEASON": act({ type: "SERVE" }); break;
+        case "MILITARY_SEASON": act({ type: "SERVE", optionId: serviceOptions(g.military)[rng.int(0, 2)]?.id }); break;
         case "EVENT": {
           const o = g.pendingEvent!.options;
           act({ type: "CHOOSE_EVENT", optionId: o[rng.int(0, o.length - 1)].id });

@@ -1,6 +1,7 @@
 /** 테스트용 자동 플레이 — 새 상태 머신 전 구간을 통과시킨다 */
 import { advance, canVolunteer, legacyContext, secondLifeOptions, type Action } from "../src/lib/career";
 import { HELL_LIMIT } from "../src/lib/player";
+import { serviceOptions } from "../src/lib/military";
 import type { GameState } from "../src/lib/types";
 
 export interface AutoOptions {
@@ -23,6 +24,8 @@ export interface AutoOptions {
   clutchPick?: number;
   /** 올해의 각오 (기본: 팀에 맞춘다) */
   resolve?: string;
+  /** 복무 방침 */
+  serviceOption?: string;
 }
 
 
@@ -124,7 +127,7 @@ export function autoPlay(start: GameState, opt: AutoOptions = {}): GameState {
       case "MILITARY_CHOICE":
         act({ type: "ENLIST", option: canVolunteer(g) ? military : "ACTIVE" });
         break;
-      case "MILITARY_SEASON": act({ type: "SERVE" }); break;
+      case "MILITARY_SEASON": act({ type: "SERVE", optionId: opt.serviceOption ?? serviceOptions(g.military)[Math.floor(Math.random() * 3)]?.id }); break;
       case "EVENT": {
         const o = g.pendingEvent?.options ?? [];
         if (o.length) act({ type: "CHOOSE_EVENT", optionId: o[Math.floor(Math.random() * o.length)].id });

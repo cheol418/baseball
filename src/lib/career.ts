@@ -16,6 +16,7 @@ import type { Clutch, ClutchResult } from "./clutch";
 import { applyClutchToLine, resolveClutch, rollClutch, rollStageClutch } from "./clutch";
 import { judgeMonthForm, potmOdds } from "./form";
 import { RESOLVES, resolveEffect } from "./resolve";
+import { rollBarracks, serviceOptionById } from "./military";
 import { advanceRivals, makeRivals, settleTitles } from "./rivals";
 import { PS_CUT, simPostseason } from "./postseason";
 import {
@@ -1763,7 +1764,7 @@ export type Action =
   | { type: "FINISH_SEASON" }
   | { type: "JOIN_NATIONAL"; join: boolean }
   | { type: "ENLIST"; option: "SANGMU" | "ACTIVE" }
-  | { type: "SERVE" }
+  | { type: "SERVE"; optionId?: string }
   | { type: "NEGOTIATE"; optionId: string }
   | { type: "REQUEST_TRANSFER"; teamId: string }
   | { type: "APPLY_SANGMU" }
@@ -2360,23 +2361,56 @@ export function advance(prev: GameState, action: Action): GameState {
       // 병역은 18개월 — 첫 해는 통째로, 둘째 해는 반 시즌만 복무하고 후반기에 복귀한다
       const half = s.militaryLeft <= 1;
       const serveShare = half ? 0.5 : 1;
+      // 복무에도 방침이 있다 — 상무와 현역은 고를 수 있는 것이 다르다
+      const sv = serviceOptionById(s.military, action.optionId);
       let line: StatLine;
       if (s.military === "SANGMU") {
         const inp = {
           player: p, level: "ARMY" as LevelTag, role: defaultRole(p),
           teamPower: 60, availability: 1, rng, share: serveShare,
+          extraAdj: sv.adj,
         };
         line = p.kind === "HITTER" ? simHitter(inp) : simPitcher(inp);
-        grow(p, rng, null, developmentRate("ARMY", "주전", p.age) * serveShare);
+        grow(p, rng, null, developmentRate("ARMY", "주전", p.age) * serveShare * sv.drill);
       } else {
         line = p.kind === "HITTER"
           ? simHitter({ player: p, level: "ARMY", role: defaultRole(p), teamPower: 60, availability: 0, rng })
           : simPitcher({ player: p, level: "ARMY", role: defaultRole(p), teamPower: 60, availability: 0, rng });
         for (const k of keys) {
-          const loss = (k === "mental" ? rng.float(0, 1) : rng.float(1.5, 4.5)) * serveShare;
+          // 방침이 떨어지는 속도를 바꾼다 — 몸을 만든 사람은 덜 빠진다
+          const loss = (k === "mental" ? rng.float(0, 1) : rng.float(1.5, 4.5) * sv.drill) * serveShare;
           setAb(p.abilities, k, clamp(Math.round(getAb(p.abilities, k) - loss), 15, ABILITY_MAX));
         }
       }
+      // 방침이 직접 건드리는 것들
+      if (sv.mental) setAb(p.abilities, "mental" as never, clamp(getAb(p.abilities, "mental" as never) + Math.round(sv.mental * serveShare), 15, ABILITY_MAX));
+      if (sv.durability) setAb(p.abilities, "durability" as never, clamp(getAb(p.abilities, "durability" as never) + Math.round(sv.durability * serveShare), 15, ABILITY_MAX));
+      if (sv.trust) s.trust = clamp(s.trust + Math.round(sv.trust * serveShare), 0, 100);
+      log(s, {
+        icon: sv.icon, title: `복무 방침 — ${sv.name}`, tone: "neutral",
+        body: `${sv.desc} (${sv.trade})`,
+      });
+
+      /**
+       * 부대 소식 — 이 시기를 통째로 비워 두지 않는다.
+       * 야구 밖에서도 몸과 마음이 움직이고, 그게 전역 뒤에 남는다.
+       */
+      const news = rollBarracks(s.military, rng);
+      for (const [k, v] of Object.entries(news.bump ?? {}) as [string, number][]) {
+        setAb(p.abilities, k as never, clamp(getAb(p.abilities, k as never) + (v ?? 0), 15, ABILITY_MAX));
+      }
+      if (news.fame) p.fame = clamp(p.fame + news.fame, 0, 100);
+      if (news.trust) s.trust = clamp(s.trust + news.trust, 0, 100);
+      if (news.condition) p.condition = clamp(p.condition + news.condition, 25, 100);
+      log(s, { icon: news.icon, title: news.title, tone: news.tone, body: news.body });
+      notify(s, {
+        icon: news.icon, eyebrow: s.military === "SANGMU" ? "Sangmu" : "Service",
+        title: news.title, tone: news.tone, body: news.body,
+        change: [
+          { label: "복무 방침", from: "—", to: sv.name },
+          { label: "남은 복무", from: `${Math.round(s.militaryLeft * 12)}개월`, to: `${Math.max(0, Math.round((s.militaryLeft - serveShare) * 12))}개월` },
+        ],
+      });
 
       s.militaryLeft = Math.round((s.militaryLeft - serveShare) * 10) / 10;
       const discharged = s.militaryLeft <= 0;
