@@ -1689,7 +1689,7 @@ function RivalBoard({ g, myWar }: { g: GameState; myWar: number }) {
     })),
     {
       key: "me", name: g.player.name, teamId: g.contract?.teamId ?? "-",
-      pick: g.draftPick ? `${g.draftPick}순위` : "—",
+      pick: g.draftPick ? (g.draftPick.overall === 0 ? "육성" : `${g.draftPick.overall}순위`) : "—",
       pos: g.player.position,
       seasons: seasonsAtLevel(g.seasons, "KBO").length, war: myWar,
       titles: g.seasons.reduce((a, s) => a + s.awards.filter((w) => MAJOR_TITLES.includes(w) && w !== "정규시즌 MVP").length, 0),
@@ -1715,7 +1715,7 @@ function RivalBoard({ g, myWar }: { g: GameState; myWar: number }) {
               {r.name}{r.me && " (나)"}
             </span>
             <span className={`block text-[9.5px] ${r.me ? "opacity-70" : "text-[var(--ink-3)]"}`}>
-              {r.pick} · {r.pos} · {r.seasons}시즌{r.gone ? ` · ${r.gone} 은퇴` : ""}
+              {r.pick} · {r.pos} · {r.seasons > 0 ? `1군 ${r.seasons}시즌` : r.gone ? "1군 기록 없음" : "2군"}{r.gone ? ` · ${r.gone} 은퇴` : ""}
             </span>
           </span>
           <span className="shrink-0 text-right">

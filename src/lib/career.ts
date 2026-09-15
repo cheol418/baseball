@@ -1774,9 +1774,15 @@ export function advance(prev: GameState, action: Action): GameState {
             icon: hellWon ? "🔥" : "💤",
             title: hellWon ? "지옥 훈련 성공" : "지옥 훈련 실패",
             tone: hellWon ? "epic" : "bad",
+            /**
+             * 실패인데 상승폭이 크게 찍히면 화면이 스스로를 부정한다.
+             * 지옥 훈련의 대가는 "안 자라는 것"이 아니라 **덜 자라는 것**이다 —
+             * 어린 선수는 실패해도 나이 덕에 몸이 큰다. 문구가 그걸 말해야 한다.
+             * (실제로 겪음: "한 해를 흘려보냈습니다 · 구속 +8, 변화구 +6…")
+             */
             body: hellWon
               ? `몸이 버텨냈습니다. ${gainText}`
-              : `끝까지 버티지 못하고 한 해를 흘려보냈습니다. ${gainText}`,
+              : `몸이 따라주지 않아 겨울이 어그러졌습니다. 평소대로 했다면 더 늘었을 겁니다. ${gainText}`,
           });
           notify(s, {
             icon: hellWon ? "🔥" : "💤", eyebrow: "Hell Training",
@@ -1784,7 +1790,7 @@ export function advance(prev: GameState, action: Action): GameState {
             tone: hellWon ? "epic" : "bad",
             body: hellWon
               ? `${opt.name} — 몸을 갈아 넣은 겨울이 결실을 맺었습니다.`
-              : `${opt.name} — 몸이 따라주지 않아 훈련이 어그러졌습니다.`,
+              : `${opt.name} — 몸이 따라주지 않았습니다. 늘긴 했지만, 갈아 넣은 값은 못 했습니다.`,
             change: [
               { label: "훈련 결과", from: "—", to: ups.length ? ups.map(([k, v]) => `${ABILITY_LABEL[k] ?? k} +${v}`).join(" · ") : "성장 없음" },
               { label: "남은 기회", from: `${left + 1}회`, to: `${left}회` },
