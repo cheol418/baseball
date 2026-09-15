@@ -46,3 +46,28 @@ for (const [k, a] of Object.entries(by)) {
     console.log(`${" ".repeat(13)}실패가 직전 이상인 ${notBelow.length}건 — 직전 연봉 평균 ${Math.round(avg(notBelow.map((r) => r.prev)))}만원 (최저연봉 바닥)`);
   }
 }
+
+/* 성공률 구간별로 실패했을 때 얼마나 깎이는가 — 근거가 셀수록 덜 깎여야 한다 */
+{
+  const rows: { odds: number; cut: number }[] = [];
+  for (let i = 0; i < 500; i++) {
+    const rng2 = new RNG(8800 + i * 13);
+    const kind2 = i % 2 ? "HITTER" : "PITCHER";
+    const p2 = rollCandidate({ name: "s", number: 1, kind: kind2, position: i % 2 ? "CF" : "SP", bats: "R", throws: "R", styleId: i % 2 ? "gap" : "power_p", armSlot: i % 2 ? undefined : "OVER" }, rng2);
+    autoPlay(newGame(p2, "DAG", i * 17), {
+      stopAt: (g) => {
+        const n = g.pendingNegotiation;
+        const o = n?.options.find((x) => x.id === "push");
+        if (n && o && n.previous > 0) rows.push({ odds: o.odds, cut: (o.onFail - n.offer) / n.offer });
+        return false;
+      },
+    });
+  }
+  console.log("\n■ 재협상 요구 — 성공률 구간별 '결렬 시 '구단 제시액' 대비 손해'");
+  for (const [lo, hi] of [[0, 0.4], [0.4, 0.6], [0.6, 0.75], [0.75, 1]] as [number, number][]) {
+    const a = rows.filter((r) => r.odds >= lo && r.odds < hi);
+    if (!a.length) continue;
+    const avg = a.reduce((x, r) => x + r.cut, 0) / a.length;
+    console.log(`  성공률 ${(lo * 100).toFixed(0)}~${(hi * 100).toFixed(0)}%  n=${String(a.length).padStart(5)}  결렬 시 ${(avg * 100).toFixed(1)}%`);
+  }
+}

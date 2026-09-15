@@ -38,6 +38,8 @@ export function migrateSave(raw: unknown): GameState | null {
   def("resolveHistory", []);
   // 동기 — 구버전 세이브는 동기 없이 이어간다(중간에 만들면 나이가 어긋난다)
   def("rivals", []);
+  // 달별 가동률 — 없으면 전 달 만근으로 본다
+  def("monthAvail", null);
   def("liveHalf", null);
   def("retireRefusedYear", null);
   def("rookieDeal", null);

@@ -25,8 +25,9 @@ for (let i = 0; i < 160; i++) {
   let prevHell = 0;
   let prevSangmu: number | null = null;
   let prevTries = 0;
+  let pendNego: { shown: number; salary: number; year: number } | null = null;
   autoPlay(newGame(p, "DAG", i * 19), {
-    joinNational: true, transferChance: 0.6, military: "SANGMU",
+    joinNational: true, transferChance: 0.6, military: "SANGMU", nego: "push",
     onStep: (g: GameState) => {
       // 승부처 — 표기 성공률 ↔ 실제 성공
       // clone()이 JSON 왕복이라 객체에 표식을 남길 수 없다 — 키로 중복을 막는다
@@ -65,6 +66,18 @@ for (let i = 0; i < 160; i++) {
         prevSangmu = null;
       }
       if (g.phase === "STOVE" && g.military === "PENDING") prevSangmu = sangmuOdds(g, overall(g.player));
+
+      // 연봉 협상 — 화면에 뜬 성공률과 실제 결과
+      if (g.phase === "NEGOTIATION" && g.pendingNegotiation) {
+        const o = g.pendingNegotiation.options.find((x) => x.id === "push");
+        if (o) pendNego = { shown: o.odds, salary: g.contract?.salary ?? 0, year: g.year };
+      } else if (pendNego) {
+        // 협상이 끝난 직후 — 로그로 성패를 읽는다
+        const hit = g.logs.some((l) => l.year === pendNego!.year && l.title.includes("재협상 요구") && !l.title.includes("결렬"));
+        const miss = g.logs.some((l) => l.year === pendNego!.year && l.title.includes("재협상 요구 결렬"));
+        if (hit || miss) add("재협상 요구", pendNego.shown, hit);
+        pendNego = null;
+      }
     },
   });
 }
@@ -80,6 +93,18 @@ for (const [k, b] of Object.entries(B)) {
 }
 
 // 구간별로도 본다 — 평균만 맞고 구간별로 어긋나는 경우가 있다
+console.log("\n■ 재협상 요구 — 표기 구간별 (80% 넘는 구간이 실제로도 80%인가)");
+const g2 = B["재협상 요구"];
+if (g2) {
+  for (const [lo, hi] of [[0, 0.4], [0.4, 0.6], [0.6, 0.75], [0.75, 1]] as [number, number][]) {
+    const idx = g2.shown.map((v, j) => [v, j] as const).filter(([v]) => v >= lo && v < hi).map(([, j]) => j);
+    if (!idx.length) continue;
+    const shown = idx.reduce((a, j) => a + g2.shown[j], 0) / idx.length;
+    const real = idx.reduce((a, j) => a + g2.hit[j], 0) / idx.length;
+    console.log(`  표기 ${(lo * 100).toFixed(0)}~${(hi * 100).toFixed(0)}%  n=${String(idx.length).padStart(4)}  표기 ${(shown * 100).toFixed(1)}% → 실제 ${(real * 100).toFixed(1)}%  (${((real - shown) * 100 >= 0 ? "+" : "") + ((real - shown) * 100).toFixed(1)}%p)`);
+  }
+}
+
 console.log("\n■ 승부처 — 표기 구간별");
 const c = B["승부처"];
 if (c) {

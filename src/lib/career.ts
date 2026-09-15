@@ -576,6 +576,17 @@ function buildNegotiation(s: GameState, rec: SeasonRecord): Negotiation {
   /** 만원 단위로 다듬고 상·하한을 지킨다 */
   const money = (v: number) => clamp(Math.round(v / 100) * 100, MIN_SALARY, cap);
 
+  /**
+   * 결렬 시 내려갈 수 있는 바닥.
+   *
+   * **구단이 인상을 제시한 해에는 작년 금액 아래로 내려가지 않는다.**
+   * 성적이 좋아 2.9억 → 5.5억을 불러 놓고, 요구가 거절됐다고 2.9억으로
+   * 물리는 구단은 없다. 손해는 "작년보다 적어지는 것"이 아니라
+   * **"받을 수 있었던 제시액을 놓치는 것"**이다.
+   * 구단이 삭감을 제시한 해에는 바닥이 없다 — 그해엔 더 깎일 수 있다.
+   */
+  const failFloor = offer > prev ? prev : 0;
+
   const options: NegotiationOption[] = [
     {
       id: "accept", label: "구단 제시액 수용",
@@ -586,18 +597,30 @@ function buildNegotiation(s: GameState, rec: SeasonRecord): Negotiation {
       id: "push", label: "재협상 요구",
       desc: "성적을 근거로 인상을 요구한다. 무리하면 관계가 나빠진다.",
       odds: leverage,
-      onSuccess: money(offer * 1.18),
-      // 판이 깨지면 구단이 칼을 빼 든다 — 직전 연봉보다 깎인다
-      onFail: money(Math.min(offer * 0.97, prev * 0.93)),
-      trustOnSuccess: -2, trustOnFail: -7,
+      onSuccess: money(offer * 1.14),
+      /**
+       * 결렬의 대가는 **구단 제시액 대비**로 잰다. 직전 연봉 대비가 아니다.
+       *
+       * 잘한 시즌에는 구단이 이미 큰 인상을 제시한다(2.9억 → 5.5억).
+       * 여기서 요구가 거절됐다고 작년 금액으로 되돌아가면, 성적이 좋을수록
+       * 도박의 손해가 커지는 거꾸로 된 구조가 된다. 실제 구단도 한 번
+       * 부른 값을 그렇게 물리지는 않는다 — 다만 괘씸죄로 조금 깎는다.
+       * 깎는 폭은 근거의 세기(성공률)를 따라간다.
+       *
+       * 그리고 **구단이 인상을 제시한 해에는 작년 아래로 내려가지 않는다.**
+       * (사용자 지적: "성적이 좋아서 금액이 오를 텐데 작년보다 적어지는 건 이상하다")
+       */
+      onFail: money(Math.max(offer * (0.88 + leverage * 0.08), failFloor)),
+      trustOnSuccess: -2, trustOnFail: -8,
     },
     {
       id: "arbitration", label: "연봉조정 신청",
       desc: "구단과 끝까지 맞선다. 이기면 크게 오르지만 지면 타격이 크다.",
       odds: clamp(leverage * 0.55, 0.05, 0.55),
-      onSuccess: money(offer * 1.62),
-      onFail: money(Math.min(offer * 0.86, prev * 0.80)),
-      trustOnSuccess: -8, trustOnFail: -18,
+      onSuccess: money(offer * 1.40),
+      // 조정은 판을 키운 만큼 지면 더 깎인다 — 바닥은 같다(작년 아래로는 안 간다)
+      onFail: money(Math.max(offer * (0.74 + leverage * 0.08), failFloor)),
+      trustOnSuccess: -8, trustOnFail: -20,
     },
   ];
   return { offer, previous: prev, options };
@@ -878,6 +901,53 @@ const POS_MARKET: Record<string, number> = {
  *
  * `availCap`을 주면 그 비율만큼만 뛸 수 있다 (후반기 합류는 0.45).
  */
+/** 한 시즌의 달 순서 (전반기 4 + 후반기 3) */
+const SEASON_MONTHS = [...H1_MONTHS, ...H2_MONTHS];
+
+/**
+ * 부상을 **달력 위에 놓는다.**
+ *
+ * 가동률(0~1)을 모든 달에 똑같이 곱하면, 113경기를 결장한 선수가
+ * 일곱 달 내내 조금씩 뛴 것으로 찍힌다 — 월별 기록이 6.2이닝씩 고르게
+ * 나오는 게 그 증거다. 실제 부상은 **연속된 몇 달을 통째로 지운다.**
+ * 다친 달은 0에 가깝고, 성한 달은 제 몫을 다 뛴다.
+ *
+ * 반환값은 달마다의 가동률이며, 달 비중으로 가중한 평균이
+ * `seasonAvailability`와 같아지도록 맞춘다 — 시즌 총량은 그대로다.
+ */
+function injuryCalendar(avail: number, rng: RNG): number[] {
+  const n = SEASON_MONTHS.length;
+  if (avail >= 0.985) return Array(n).fill(1);
+
+  const w = SEASON_MONTHS.map((m) => m.share);
+  const totalW = w.reduce((a, b) => a + b, 0);
+  const lost = 1 - avail;                       // 잃어야 할 비중
+  // 결장이 길수록 여러 달에 걸친다. 한 달치는 대략 1/7.
+  const span = clamp(Math.round(lost * n + rng.float(0, 0.9)), 1, n);
+  const start = rng.int(0, n - span);
+
+  const out = Array(n).fill(1);
+  // 다친 구간을 먼저 비우고, 모자라거나 남는 만큼 가장자리 달로 조절한다
+  let blockW = 0;
+  for (let i = start; i < start + span; i++) { out[i] = 0; blockW += w[i]; }
+  const needW = lost * totalW;
+  if (blockW > needW) {
+    // 너무 많이 비웠다 — 구간의 마지막 달을 부분 출장으로 되돌린다
+    const back = (blockW - needW) / w[start + span - 1];
+    out[start + span - 1] = clamp(back, 0, 1);
+  } else if (blockW < needW) {
+    // 덜 비웠다 — 구간 바로 앞뒤 달을 부분 출장으로 깎는다
+    let rest = needW - blockW;
+    for (const i of [start + span, start - 1, start + span + 1, start - 2]) {
+      if (rest <= 0 || i < 0 || i >= n || out[i] < 1) continue;
+      const take = Math.min(rest, w[i]);
+      out[i] = clamp(1 - take / w[i], 0, 1);
+      rest -= take;
+    }
+  }
+  return out;
+}
+
 function openSeason(s: GameState, rng: RNG, campInjury = 0, availCap = 1) {
   const team = s.contract ? teamById(s.contract.teamId) : null;
   if (s.contract?.role === "육성선수") {
@@ -898,6 +968,7 @@ function openSeason(s: GameState, rng: RNG, campInjury = 0, availCap = 1) {
   );
   s.nextSeasonAvailability = 1;
   s.seasonNote = inj.note;
+  s.monthAvail = injuryCalendar(s.seasonAvailability, rng);
 
   // 크게 다치면 1군 엔트리를 비워야 한다 — 실제로도 재활은 2군에서 한다
   if (s.seasonLevel === "KBO" && s.seasonAvailability < 0.6 * availCap) {
@@ -1113,7 +1184,6 @@ function simPart(s: GameState, rng: RNG, from: number, to: number): StatLine {
     park: team?.park,
     // 출장 배수는 **1을 넘지 않는다** — 한 시즌은 144경기가 전부다.
     // 1.05까지 허용했더니 선발이 232이닝을 던졌다. (실제로 겪음)
-    // 배수는 다친 해·자리가 흔들리는 해에만 실제로 작동한다.
     availability: clamp(s.seasonAvailability * R.playing, 0, 1), rng,
     share: to - from,
     cume: [from, to] as const,
@@ -1208,18 +1278,31 @@ function playHalf(
   isFinalHalf = false,
 ): MonthLine[] {
   const out: MonthLine[] = [];
-  // 시즌 시작부터의 누적 비율 — 후반기는 전반기(0.6)에서 이어진다
-  let cume = isFinalHalf ? HALF_SHARE.H1 : 0;
+  /**
+   * 누적 비율은 **달력이 아니라 건강 상태로** 센다.
+   *
+   * `allocate()`가 [from, to]의 차이로 배분하므로, 다친 달을 from==to로
+   * 만들면 그 달은 0경기가 되고 성한 달이 제 몫을 다 뛴다.
+   * 가동률을 모든 달에 똑같이 곱하던 때는 113경기를 결장한 선수가
+   * 일곱 달 내내 6이닝씩 던진 것으로 찍혔다. (실제로 겪음)
+   * 가중 합은 그대로라 시즌 총량은 달라지지 않는다.
+   */
+  const avail = s.monthAvail ?? null;
+  const all = [...H1_MONTHS, ...H2_MONTHS];
+  const eff = all.map((m, i) => m.share * (avail?.[i] ?? 1));
+  const effTotal = eff.reduce((a, b) => a + b, 0) || 1;
+  const offset = isFinalHalf ? H1_MONTHS.length : 0;
+  const cumeAt = (k: number) => eff.slice(0, k).reduce((a, b) => a + b, 0) / effTotal;
+
+  let cume = cumeAt(offset);
   for (let mi = 0; mi < months.length; mi++) {
     const m = months[mi];
     const lastMonth = isFinalHalf && mi === months.length - 1;
     const level = s.seasonLevel ?? "MINOR";
     const role = s.seasonRole ?? defaultRole(s.player);
     const from = cume;
-    // 마지막 달은 반올림 오차 없이 정확히 1.0(또는 0.6)으로 닫는다
-    cume = lastMonth || mi === months.length - 1
-      ? (isFinalHalf ? 1 : HALF_SHARE.H1)
-      : cume + m.share;
+    // 마지막 달은 반올림 오차 없이 정확히 1.0으로 닫는다
+    cume = lastMonth ? 1 : cumeAt(offset + mi + 1);
     const line = simPart(s, rng, from, cume);
     if (level === "KBO") s.kboShare += m.share;
 
@@ -1413,7 +1496,13 @@ function closeSeason(s: GameState, rng: RNG) {
     note: [
       s.seasonNote ?? "",
       s.kboShare > 0 && s.kboShare < 1
-        ? `1군 ${Math.round(LEVEL_GAMES.KBO * s.kboShare)}경기 · 2군 ${Math.round(LEVEL_GAMES.KBO * (1 - s.kboShare))}경기로 나눠 뛰었습니다.`
+        /**
+         * `kboShare`는 **1군에 등록돼 있던 기간**이지 출장 경기 수가 아니다.
+         * "뛰었습니다"라고 쓰면 바로 윗줄의 "113경기 결장"과 정면으로
+         * 부딪힌다 — 113경기를 빠진 선수가 122경기를 뛸 수는 없다.
+         * (실제로 겪음) 무엇을 센 숫자인지 문장에 밝힌다.
+         */
+        ? `시즌을 1군 ${Math.round(LEVEL_GAMES.KBO * s.kboShare)}경기 · 2군 ${Math.round(LEVEL_GAMES.KBO * (1 - s.kboShare))}경기로 나눠 보냈습니다 (엔트리 등록 기간 기준).`
         : "",
     ].filter(Boolean).join(" ") || undefined,
     half: s.halfLine ?? undefined,

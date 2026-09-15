@@ -422,6 +422,8 @@ export interface GameState {
   seasonRole: string | null;
   /** 이번 시즌 출장 가능 비율 (부상 반영) */
   seasonAvailability: number;
+  /** 달마다의 가동률 — 부상은 달력 위의 연속 구간으로 놓인다 */
+  monthAvail?: number[] | null;
   /** 이번 시즌 올스타 선정 여부 */
   allStar: boolean;
   /** 올스타전 경기 결과 */
