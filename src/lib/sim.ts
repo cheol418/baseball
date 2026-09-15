@@ -90,10 +90,16 @@ export function simHitter(inp: SimInput): HitterLine {
   const parkHr = 1 + ((inp.park?.hr ?? 1) - 1) * 0.5;
   const parkHit = 1 + ((inp.park?.hit ?? 1) - 1) * 0.5;
 
-  const bbRate = clamp(0.083 + 0.06 * n50(a("eye")) + 0.008 * n50(a("contact")) + rng.normal() * 0.011, 0.02, 0.23);
+  /**
+   * 리그 평균 능력치(70.5)일 때 **실제 KBO 리그 평균**이 나와야 한다.
+   * 절편이 낮고 기울기가 가파르면, 평균 선수는 프로 같지 않고
+   * 특급만 정상으로 보인다. (실제로 겪음: 평균 타자 OPS .643 — 실제는 .733)
+   * 절편 = 실제 리그 평균 · 기울기 = 최고 선수가 실제 1위 기록에 닿는 값.
+   */
+  const bbRate = clamp(0.092 + 0.046 * n50(a("eye")) + 0.008 * n50(a("contact")) + rng.normal() * 0.011, 0.02, 0.23);
   const kRate = clamp(0.185 - 0.08 * n50(a("contact")) + 0.032 * n50(a("power")) - 0.015 * n50(a("eye")) + rng.normal() * 0.018, 0.04, 0.42);
   const babip = clamp(
-    (0.300 + 0.048 * n50(a("contact")) * cond + 0.030 * n50(a("speed")) + rng.normal() * 0.017) * parkHit,
+    (0.318 + 0.026 * n50(a("contact")) * cond + 0.020 * n50(a("speed")) + rng.normal() * 0.017) * parkHit,
     0.21, 0.42,
   );
   /**
@@ -104,7 +110,7 @@ export function simHitter(inp: SimInput): HitterLine {
    * 컨택도 함께 본다.
    */
   const hrPerBall = clamp(
-    (0.014 + 0.100 * n50(a("power")) * cond + 0.016 * n50(a("contact")) + rng.normal() * 0.006) * parkHr,
+    (0.033 + 0.058 * n50(a("power")) * cond + 0.010 * n50(a("contact")) + rng.normal() * 0.006) * parkHr,
     0.001, 0.22,
   );
 
@@ -148,7 +154,12 @@ export function simHitter(inp: SimInput): HitterLine {
   const slg = tb / ab;
 
   const woba = (0.69 * bb + 0.72 * hbp + 0.89 * singles + 1.27 * b2 + 1.62 * b3 + 2.1 * hr) / pa;
-  const lgWoba = 0.335 + LEVEL_ADJ[level] * 0.0018;
+  /**
+   * WAR의 기준점 — **리그 평균 능력치 선수의 실제 wOBA**여야 한다.
+   * 타자 공식을 건드리면 여기도 같이 옮긴다. 안 옮기면 리그 전체의 WAR이
+   * 통째로 위아래로 밀린다. `scripts/leagueavg.ts`가 이 값을 뽑아준다.
+   */
+  const lgWoba = 0.331 + LEVEL_ADJ[level] * 0.0018;
   const wraa = ((woba - lgWoba) / 1.25) * pa;
   const defW = p.position === "DH" ? 0 : 1;
   // 수비 가치는 글러브(수비)와 어깨(송구)로 나뉜다.
@@ -319,22 +330,22 @@ export type LeagueLeaders = ReturnType<typeof leagueLeaders>;
 export function leagueLeaders(rng: RNG) {
   return {
     // 타자
-    avg: rng.float(0.308, 0.340),
-    h: rng.int(155, 178),
-    hr: rng.int(33, 46),
-    rbi: rng.int(137, 168),
-    r: rng.int(91, 111),
-    sb: rng.int(27, 46),
-    obp: rng.float(0.383, 0.420),
-    slg: rng.float(0.548, 0.640),
+    avg: rng.float(0.312, 0.338),
+    h: rng.int(163, 178),
+    hr: rng.int(32, 41),
+    rbi: rng.int(139, 160),
+    r: rng.int(95, 110),
+    sb: rng.int(24, 40),
+    obp: rng.float(0.394, 0.418),
+    slg: rng.float(0.546, 0.612),
     // 투수
     w: rng.int(16, 20),
-    era: rng.float(2.80, 3.34),
-    so: rng.int(183, 220),
-    sv: rng.int(28, 40),
+    era: rng.float(2.85, 3.38),
+    so: rng.int(185, 218),
+    sv: rng.int(33, 42),
     hld: rng.int(26, 36),
-    ip: rng.int(182, 204),
-    pct: rng.float(0.820, 0.930),
+    ip: rng.int(183, 201),
+    pct: rng.float(0.810, 0.925),
   };
 }
 
@@ -393,8 +404,8 @@ export function judgeAwards(
     if (line.sb >= lead.sb) out.push("도루왕");
     if (line.obp >= lead.obp && qualified) out.push("출루율 1위");
     if (line.slg >= lead.slg && qualified) out.push("장타율 1위");
-    if (line.war >= 3.6 && rng.chance(0.6)) out.push("골든글러브");
-    if (line.war >= 5.4 && rng.chance(0.65)) out.push("정규시즌 MVP");
+    if (line.war >= 4.2 && rng.chance(0.6)) out.push("골든글러브");
+    if (line.war >= 5.5 && rng.chance(0.65)) out.push("정규시즌 MVP");
     if (isRookie && line.war >= 1.8 && rng.chance(0.75)) out.push("신인왕");
   } else {
     if (line.ip < 60 && line.sv + line.hld < 20) return out;
@@ -407,11 +418,19 @@ export function judgeAwards(
     // 승률왕은 실제 KBO도 최소 승수를 둔다 — 3승 1패가 1위가 되면 안 된다
     const dec = line.w + line.l;
     if (line.w >= 12 && dec >= 12 && line.w / dec >= lead.pct) out.push("승률왕");
-    // 투수 WAR는 구조적으로 타자보다 천장이 낮다(상위3% 4.7 vs 5.9).
-    // 같은 문턱을 쓰면 투수가 MVP를 거의 못 받는다 — 자리마다 문턱을 따로 둔다.
-    // 골든글러브는 투수 1자리뿐이다(타자는 포지션별 9자리) — 더 희소하게
-    if (line.war >= 3.7 && rng.chance(0.42)) out.push("골든글러브");
-    if (line.war >= 4.6 && rng.chance(0.65)) out.push("정규시즌 MVP");
+    /**
+     * 투수 WAR는 구조적으로 타자보다 천장이 낮다(상위3% 4.7 vs 5.9).
+     * 같은 문턱을 쓰면 투수가 MVP를 거의 못 받는다 — 자리마다 문턱을 따로 둔다.
+     * 골든글러브는 투수 1자리뿐이다(타자는 포지션별 9자리) — 더 희소하게.
+     *
+     * 불펜은 WAR 천장이 더 낮다(마무리 최대 2.7). 순수 WAR로 재면
+     * **마무리는 골든글러브도 MVP도 영영 못 받는다**(실측 0.00회).
+     * 실제로는 세이브 자체가 표를 부르므로, 상 판정에서만 구원 기록을
+     * 값으로 쳐준다. 기록(WAR)은 건드리지 않는다.
+     */
+    const awardWar = line.war + line.sv * 0.045 + line.hld * 0.03;
+    if (awardWar >= 4.0 && rng.chance(0.42)) out.push("골든글러브");
+    if (awardWar >= 4.8 && rng.chance(0.65)) out.push("정규시즌 MVP");
     if (isRookie && line.war >= 1.8 && rng.chance(0.75)) out.push("신인왕");
   }
   // 중요한 상이 앞에 오도록 정렬
@@ -538,17 +557,19 @@ export function judgeAllStar(
   if (isHitterLine(line)) {
     // 전반기 내내 주전으로 뛰어야 후보가 된다
     if (line.pa < 200) return false;
-    score = (line.ops - 0.80) * 6 + line.hr * 0.05 + line.sb * 0.015 + line.war * 0.45;
+    // 기준점은 **그 시절 주전의 평균**이다. 리그 공격력을 올리면 여기도 옮긴다 —
+    // 안 옮기면 평범한 주전이 전부 올스타가 된다 (실제로 겪음: 17% → 36%)
+    score = (line.ops - 0.915) * 10 + line.hr * 0.055 + line.sb * 0.015 + line.war * 0.52;
   } else {
     const p = line as PitcherLine;
     if (role === "마무리") {
       // 마무리는 세이브로 평가받는다. 전반기 15세이브면 30세이브 페이스
       if (p.g < 18) return false;
-      score = (3.60 - p.era) * 1.25 + p.sv * 0.10 + p.war * 0.55;
+      score = (3.25 - p.era) * 1.5 + p.sv * 0.105 + p.war * 0.6;
     } else if (isRotationRole(role)) {
       // 선발은 이닝과 평균자책
       if (p.ip < 55) return false;
-      score = (4.10 - p.era) * 1.15 + (p.ip - 85) * 0.014 + p.w * 0.09 + p.war * 0.5;
+      score = (3.72 - p.era) * 1.5 + (p.ip - 92) * 0.016 + p.w * 0.10 + p.war * 0.55;
     } else {
       // 불펜은 홀드
       if (p.g < 20) return false;
