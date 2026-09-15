@@ -186,23 +186,20 @@ function buildSteps(g: GameState, kind: BroadcastKind): Step[] {
   }
 
   if (kind === "H1") {
-    // 올스타 브레이크 — 선정 발표가 먼저, 경기는 그 다음이다
-    steps.push(g.allStar
-      ? { kind: "card", icon: "⭐", title: "올스타 선정", body: "전반기 활약을 인정받아 올스타전에 출전합니다.", tone: "epic" }
-      : { kind: "card", icon: "🛋️", title: "올스타 브레이크", body: "올스타 선정은 불발. 짧은 휴식 뒤 후반기를 준비합니다.", tone: "neutral" });
-    if (g.allStarGame) {
-      const ag = g.allStarGame;
-      const futures = g.seasonLevel === "MINOR";
-      steps.push({
-        kind: "card", icon: "🎪",
-        title: `${futures ? "퓨처스 올스타전" : "올스타전"} 개막`, tone: "good",
-        body: `${ag.side} 소속으로 ${ag.opponent}와 맞붙습니다.`,
-      });
-      steps.push({
-        kind: "game", tag: futures ? "퓨처스 올스타전" : "올스타전", round: ag.side, opponent: ag.opponent,
-        won: ag.won, score: ag.score, line: ag.line, mvp: ag.mvp,
-      });
-    }
+    /**
+     * 올스타 선정 발표는 여기서 하지 않는다.
+     *
+     * 이 중계는 `HALF_REVIEW`에서 그려지는데, 올스타 판정은 그 다음 단계인
+     * `FINISH_HALF`에서 난다 — 전반기 승부처 결과까지 반영해서 뽑아야 하기 때문이다.
+     * 여기서 `g.allStar`를 읽으면 **아직 판정 전의 false**를 읽어,
+     * 뽑힌 선수에게도 늘 "불발"이라고 말한 뒤 올스타전으로 내보내게 된다.
+     * (실제로 겪음: 전반기 중계 2000회 전부 "불발" 표시, 그중 15%가 실제 선정)
+     * 선정 발표와 올스타전은 `ALL_STAR` 화면이 맡는다.
+     */
+    steps.push({
+      kind: "card", icon: "🛋️", title: "전반기 종료",
+      body: "전반기가 끝났습니다. 올스타 브레이크로 넘어갑니다.", tone: "neutral",
+    });
   } else {
     const rank = g.teamRank;
     steps.push(rank

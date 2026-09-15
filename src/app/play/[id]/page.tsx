@@ -702,21 +702,34 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
             후반기를 시작하려는 화면에 웬 타석이 하나 박힌 꼴이 된다 —
             경기 결과와 한 덩어리로 묶어 "그 경기의 한 장면"으로 보여준다.
           */}
-          {g.allStarGame && (
+          {g.allStarGame && (() => {
+            const asPending = !!g.allStarGame.clutchSituation && !g.allStarGame.clutch;
+            return (
             <div
               className="mb-3 overflow-hidden rounded-xl text-white"
               style={{ background: "linear-gradient(150deg, var(--brand-2), var(--brand) 60%, #06182c)" }}
             >
+              {/*
+                승부처가 아직 열려 있으면 최종 스코어를 보여주지 않는다.
+                9회 2사 상황을 고르라면서 그 위에 결과가 떠 있으면
+                고를 이유가 사라진다. (실제로 겪음)
+              */}
               <div className="flex items-center gap-2 px-4 pt-3.5">
-                <span className="text-[18px]">{g.allStarGame.mvp ? "🌟" : "🎪"}</span>
+                <span className="text-[18px]">{asPending ? "🎪" : g.allStarGame.mvp ? "🌟" : "🎪"}</span>
                 <div className="min-w-0 flex-1">
                   <div className="text-[9.5px] font-black uppercase tracking-[0.18em] opacity-55">
                     All-Star Game
                   </div>
                   <div className="text-[13.5px] font-extrabold">
-                    {g.allStarGame.side} {g.allStarGame.won ? "승리" : "패배"}
-                    <span className="num ml-1.5">{g.allStarGame.score}</span>
-                    {g.allStarGame.mvp && <span className="ml-1.5 text-[11px] text-[#ffd166]">· MVP</span>}
+                    {asPending ? (
+                      <>{g.allStarGame.side} vs {g.allStarGame.opponent}<span className="ml-1.5 text-[11px] opacity-60">경기 진행 중</span></>
+                    ) : (
+                      <>
+                        {g.allStarGame.side} {g.allStarGame.won ? "승리" : "패배"}
+                        <span className="num ml-1.5">{g.allStarGame.score}</span>
+                        {g.allStarGame.mvp && <span className="ml-1.5 text-[11px] text-[#ffd166]">· MVP</span>}
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -731,7 +744,8 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
                 ) : null}
               </div>
             </div>
-          )}
+            );
+          })()}
           {g.halfLine && <Strip label="전반기 성적" line={g.halfLine} where={whereLabel(g)} />}
           {g.pendingTrade ? (
             <div className="card mb-3 px-4 py-3.5">

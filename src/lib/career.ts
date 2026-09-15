@@ -62,6 +62,23 @@ function log(s: GameState, e: Omit<LogEntry, "year">) {
   if (s.logs.length > 240) s.logs.pop();
 }
 
+/**
+ * 올스타전 결과를 소식에 적는다.
+ *
+ * 승부처가 걸린 경기는 **선택이 끝난 뒤에** 부른다 — 9회 2사를 고르기도 전에
+ * 소식란에 최종 스코어가 떠 있으면 고를 이유가 없어진다.
+ */
+function logAllStarGame(s: GameState, ag: NonNullable<GameState["allStarGame"]>) {
+  if (ag.mvp) {
+    log(s, { icon: "🌟", title: "올스타전 MVP", tone: "epic", body: `${ag.side}의 ${ag.score} 승리를 이끌며 올스타전 MVP에 선정되었습니다.` });
+  } else {
+    log(s, {
+      icon: "🎪", title: `올스타전 ${ag.won ? "승리" : "패배"}`, tone: "neutral",
+      body: `${ag.side} 소속으로 ${ag.opponent}와 맞붙어 ${ag.score}로 ${ag.won ? "이겼습니다" : "졌습니다"}.`,
+    });
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* 새 게임                                                              */
 /* ------------------------------------------------------------------ */
@@ -1751,6 +1768,10 @@ export function advance(prev: GameState, action: Action): GameState {
 
     /* ---- 후반기 ---- */
     case "PLAY_SECOND_HALF": {
+      // 승부처를 고르지 않고 넘어갔다면, 여기서라도 올스타전 결과는 남긴다
+      if (s.allStarGame?.clutchSituation && !s.allStarGame.clutch) {
+        logAllStarGame(s, s.allStarGame);
+      }
       s.monthLines = playHalf(s, rng, H2_MONTHS, true);
       s.seasonLine = mergeLines([s.halfLine, ...s.monthLines.map((m) => m.line)]);
       s.liveHalf = "H2";
@@ -1814,15 +1835,10 @@ export function advance(prev: GameState, action: Action): GameState {
           // 큰 무대에도 승부처를 하나씩 — 보는 눈이 다른 만큼 인지도가 크게 움직인다
           if (!futures) s.allStarGame.clutchSituation = rollStageClutch("AS", s, rng, "올스타전");
           const ag = s.allStarGame;
-          if (ag.mvp) {
-            s.player.fame = clamp(s.player.fame + 10, 0, 100);
-            log(s, { icon: "🌟", title: "올스타전 MVP", tone: "epic", body: `${ag.side}의 ${ag.score} 승리를 이끌며 올스타전 MVP에 선정되었습니다.` });
-          } else {
-            log(s, {
-              icon: "🎪", title: `올스타전 ${ag.won ? "승리" : "패배"}`, tone: "neutral",
-              body: `${ag.side} 소속으로 ${ag.opponent}와 맞붙어 ${ag.score}로 ${ag.won ? "이겼습니다" : "졌습니다"}.`,
-            });
-          }
+          if (ag.mvp) s.player.fame = clamp(s.player.fame + 10, 0, 100);
+          // 승부처가 걸려 있으면 결과를 아직 적지 않는다 —
+          // 9회 2사를 고르기도 전에 소식란에 스코어가 먼저 뜬다. (실제로 겪음)
+          if (!ag.clutchSituation) logAllStarGame(s, ag);
         }
         if (s.seasonNote) log(s, { icon: "🏥", title: "부상", tone: "bad", body: s.seasonNote });
         armClutch(s, rng, H2_MONTHS);
@@ -1877,6 +1893,7 @@ export function advance(prev: GameState, action: Action): GameState {
         return settle(ag.clutchSituation, (r) => {
           ag.clutch = r;
           ag.line = applyClutchToLine(ag.line, r);
+          logAllStarGame(s, ag);
         }, 1.6) ?? s;
       }
       if (action.where === "PS" && s.postseason?.clutchSituation && !s.postseason.clutch) {
