@@ -24,6 +24,7 @@ import {
   scoutedPotential, traitById,
 } from "@/lib/player";
 import { isHitterLine, subtractLine, titleOfStat } from "@/lib/sim";
+import { RESOLVES } from "@/lib/resolve";
 import { saveGame, useGame } from "@/lib/storage";
 import { isFranchiseRole } from "@/lib/roles";
 import { teamById } from "@/lib/teams";
@@ -538,6 +539,8 @@ function Primary({ onClick, busy, children, label }: {
 }
 
 function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Action) => void }) {
+  // 각오는 지난해 것을 그대로 이어가는 게 기본 — 매년 다시 고르게 하면 피로하다
+  const [resolve, setResolve] = useState<string>(g.seasonResolve ?? "team");
   // 지옥 훈련은 방향과 별개로 켜고 끄는 토글이다
   const [hell, setHell] = useState(false);
   const p = g.player;
@@ -653,10 +656,27 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
               </div>
             </div>
           )}
-          <div className="eyebrow mb-2 mt-1">1 · 훈련 강도</div>
+          <div className="eyebrow mb-2 mt-1">1 · 올해의 각오</div>
+          <p className="mb-2 text-[11px] leading-relaxed text-[var(--ink-3)]">
+            한 해를 어떤 마음으로 치를지 정합니다. <b>성적·부상·성장·구단 신뢰에 한 해 내내 걸립니다.</b>
+            {" "}몸을 만든 해의 보상은 <b>다음 겨울</b>에 돌아옵니다.
+          </p>
+          <div className="mb-4 grid grid-cols-2 gap-2">
+            {RESOLVES.map((r) => (
+              <button key={r.id} type="button" onClick={() => setResolve(r.id)}
+                className={`card px-3 py-2.5 text-left transition ${
+                  resolve === r.id ? "!border-[var(--brand)] ring-2 ring-[var(--brand)]/20" : ""}`}>
+                <div className="text-[12.5px] font-extrabold">{r.icon} {r.name}</div>
+                <div className="mt-0.5 text-[10px] leading-relaxed text-[var(--ink-3)]">{r.desc}</div>
+                <div className="mt-1 text-[9.5px] font-bold text-[var(--brand-2)]">{r.trade}</div>
+              </button>
+            ))}
+          </div>
+
+          <div className="eyebrow mb-2 mt-1">2 · 훈련 강도</div>
           <HellToggle g={g} on={hell} onChange={setHell} />
 
-          <div className="eyebrow mb-2 mt-4">2 · 훈련 방향</div>
+          <div className="eyebrow mb-2 mt-4">3 · 훈련 방향</div>
           <p className="mb-2 text-[11px] leading-relaxed text-[var(--ink-3)]">
             어떤 선수가 되고 싶은지 고릅니다. 어떤 능력이 오를지는 코칭스태프가 정합니다.
             {" "}같은 방향을 골라도 <b>겨울이 잘 풀린 해와 헛돈 해</b>가 갈립니다 — 멘탈과 몸 상태가 저울을 기울입니다.
@@ -664,7 +684,7 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
           </p>
           <div className="flex flex-col gap-2">
             {g.pendingTraining?.map((o) => (
-              <button key={o.id} onClick={() => run({ type: "TRAIN", optionId: o.id, hell })} disabled={busy}
+              <button key={o.id} onClick={() => run({ type: "TRAIN", optionId: o.id, hell, resolveId: resolve })} disabled={busy}
                 className="card px-4 py-3 text-left transition hover:!border-[var(--brand)] disabled:opacity-50">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-[14px] font-extrabold">{o.icon} {o.name}</span>

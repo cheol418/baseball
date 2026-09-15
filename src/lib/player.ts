@@ -608,6 +608,13 @@ export function grow(
   p: Player, rng: RNG, focus: TrainingOption | null, devRate = 1,
   /** 집중 훈련분에 곱하는 배수 — 지옥 훈련(성공 2.3 · 실패 0.42)과 훈련 성과 등급이 함께 실린다 */
   hellMul = 1,
+  /**
+   * 올해의 각오에서 오는 보정.
+   *  · `breakMul` 한계 돌파 확률 — 성장률만 올려도 잠재력 천장에 막혀 소용이 없다.
+   *    "몸을 만든다"의 보상이 실제로 돌아오려면 천장 자체가 열려야 한다.
+   *  · `declineGuard` 노쇠 낙폭 배수 — "무리하지 않는다"가 사는 것은 결국 시간이다.
+   */
+  extra: { breakMul?: number; declineGuard?: number } = {},
 ): { deltas: Partial<Record<string, number>> } {
   const keys = abilityKeys(p.kind);
   const effBonus = p.trait === "hardworker" ? 1.2 : 1;
@@ -622,8 +629,8 @@ export function grow(
   const breakable = p.age <= 31;
   const breakOdds = clamp(
     (p.trait === "latebloom" ? 0.26 : p.trait === "genius" ? 0.22 : 0.15)
-    * (0.6 + p.talent * 0.5) * devRate,
-    0.06, 0.8,
+    * (0.6 + p.talent * 0.5) * devRate * (extra.breakMul ?? 1),
+    0.06, 0.9,
   );
 
   for (const k of keys) {
@@ -661,7 +668,7 @@ export function grow(
       // 훈련으로 하락을 방어한다. 서른 전에는 방어를 넘어 아직 끌어올릴 수 있다 —
       // 실제 피크는 26~29세인데, 27세에 성장이 통째로 끊기면 절벽처럼 느껴진다.
       const guard = p.age <= 28 ? 0.95 : p.age <= 30 ? 0.6 : 0.32;
-      d = af * rng.float(0.7, 1.5) * floorScale
+      d = af * rng.float(0.7, 1.5) * floorScale * (extra.declineGuard ?? 1)
         + focused * effBonus * guard * (pot > cur ? 1 : 0.45);
       d += rng.normal() * 0.7;
     }

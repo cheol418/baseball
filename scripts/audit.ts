@@ -6,6 +6,7 @@ import {
   legacyContext, secondLifeOptions, canVolunteer, type Action,
 } from "../src/lib/career";
 import { isHitterLine } from "../src/lib/sim";
+import { RESOLVES } from "../src/lib/resolve";
 import type { GameState, Hand, Kind } from "../src/lib/types";
 
 interface Issue { kind: string; detail: string }
@@ -57,7 +58,7 @@ function play(seed: number, opt: { college: boolean; military: "SANGMU" | "ACTIV
         case "SPRING_CAMP": {
           const o = g.pendingTraining;
           if (!o?.length) { add("훈련 후보 없음", before); act({ type: "RETIRE" }); break; }
-          act({ type: "TRAIN", optionId: o[rng.int(0, o.length - 1)].id, hell: rng.chance(0.4) });
+          act({ type: "TRAIN", optionId: o[rng.int(0, o.length - 1)].id, hell: rng.chance(0.4), resolveId: RESOLVES[rng.int(0, RESOLVES.length - 1)].id });
           break;
         }
         case "FIRST_HALF": act({ type: "PLAY_FIRST_HALF" }); break;

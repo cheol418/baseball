@@ -15,6 +15,7 @@ import {
 import type { Clutch, ClutchResult } from "./clutch";
 import { applyClutchToLine, resolveClutch, rollClutch, rollStageClutch } from "./clutch";
 import { judgeMonthForm, potmOdds } from "./form";
+import { RESOLVES, resolveEffect } from "./resolve";
 import { PS_CUT, simPostseason } from "./postseason";
 import {
   defaultRoleOf, isEverydayRole, isFranchiseRole, isRotationRole, minorRoleOf, roleTier,
@@ -160,11 +161,15 @@ export function newGame(player: Player, wishTeamId: string, seed: number, school
  * 분모가 달라 모순처럼 읽힌다. 둘 다 **경기 수**로 말한다.
  * 시즌 경기 수는 레벨마다 다르다(고교 24 · 대학 38 · 2군 110 · 1군 144).
  */
-function rollInjury(p: Player, rng: RNG, level: LevelTag = "KBO"): { availability: number; note: string | null } {
+function rollInjury(
+  p: Player, rng: RNG, level: LevelTag = "KBO",
+  /** 올해의 각오에서 오는 부상 위험 배수 */
+  riskMul = 1,
+): { availability: number; note: string | null } {
   let chance = clamp(0.30 - n50(getAb(p.abilities, "durability" as never)) * 0.2, 0.04, 0.55);
   if (p.trait === "glass") chance += 0.14;
   if (p.trait === "ironman") chance -= 0.12;
-  chance = clamp(chance + (p.age >= 33 ? 0.08 : 0) + (p.age >= 36 ? 0.07 : 0), 0.03, 0.65);
+  chance = clamp((chance + (p.age >= 33 ? 0.08 : 0) + (p.age >= 36 ? 0.07 : 0)) * riskMul, 0.02, 0.72);
   if (!rng.chance(chance)) return { availability: 1, note: null };
 
   const severity = rng.weighted(["경미", "중간", "심각"], [55, 32, 13]);
@@ -885,7 +890,7 @@ function openSeason(s: GameState, rng: RNG, campInjury = 0, availCap = 1) {
     s.seasonRole = role;
     s.contract!.role = role;
   }
-  const inj = rollInjury(s.player, rng, s.seasonLevel ?? "MINOR");
+  const inj = rollInjury(s.player, rng, s.seasonLevel ?? "MINOR", resolveEffect(s).injury);
   const carried = s.nextSeasonAvailability;
   s.seasonAvailability = clamp(
     inj.availability * (1 - campInjury) * carried * availCap, 0.05, 1,
@@ -1099,13 +1104,16 @@ function simPart(s: GameState, rng: RNG, from: number, to: number): StatLine {
   const team = s.contract ? teamById(s.contract.teamId) : null;
   const level = s.seasonLevel ?? "MINOR";
   const role = s.seasonRole ?? defaultRole(p);
+  // 올해의 각오는 한 해 내내 걸린다 — 성적과 출장 기회 양쪽에
+  const R = resolveEffect(s);
   const inp = {
     player: p, level, role,
     teamPower: team?.power ?? 62,
     park: team?.park,
-    availability: s.seasonAvailability, rng,
+    availability: clamp(s.seasonAvailability * R.playing, 0, 1.05), rng,
     share: to - from,
     cume: [from, to] as const,
+    extraAdj: R.adj,
   };
   return p.kind === "HITTER" ? simHitter(inp) : simPitcher(inp);
 }
@@ -1385,6 +1393,9 @@ function closeSeason(s: GameState, rng: RNG) {
   // 프로 13년차가 FA를 못 가는 일이 있었다.
   s.serviceYears += clamp(s.kboShare, 0, 1);
 
+  // 한 해를 어떤 마음으로 치렀는지는 구단이 본다 — 헌신은 자리로 돌아온다
+  const R = resolveEffect(s);
+  if (R.trust) s.trust = clamp(s.trust + R.trust, 0, 100);
   if (rec.awards.length) {
     log(s, { icon: "🏆", title: "수상", tone: "epic", body: `${rec.awards.join(", ")} 수상!` });
     p.fame = clamp(p.fame + rec.awards.length * 6, 0, 100);
@@ -1521,7 +1532,7 @@ export type Action =
   | { type: "SIM_AMATEUR" }
   | { type: "CHOOSE_PATH"; path: "DRAFT" | "COLLEGE" }
   | { type: "DO_DRAFT" }
-  | { type: "TRAIN"; optionId: string; hell?: boolean }
+  | { type: "TRAIN"; optionId: string; hell?: boolean; resolveId?: string }
   | { type: "PLAY_FIRST_HALF" }
   | { type: "FINISH_HALF" }
   | { type: "RESOLVE_CLUTCH"; choice: string; where?: "AS" | "INTL" | "PS" | "AM" }
@@ -1665,7 +1676,10 @@ export function advance(prev: GameState, action: Action): GameState {
         // 직전 시즌을 어디서 뛰었는지가 성장 폭을 좌우한다
         const prev = s.seasons[s.seasons.length - 1];
         const devRate = developmentRate(prev?.level ?? null, prev?.role ?? null, prev?.age ?? s.player.age);
-        const { deltas } = grow(s.player, rng, opt, devRate, hellMul);
+        // 지난 시즌의 각오가 이 겨울의 성장으로 돌아온다 (몸을 만든 해는 크게 자란다)
+        const RG = resolveEffect(s);
+        const { deltas } = grow(s.player, rng, opt, devRate * RG.growth, hellMul,
+          { breakMul: RG.breakMul, declineGuard: RG.declineGuard });
         const ups = (Object.entries(deltas) as [string, number][]).filter(([, v]) => v > 0);
         const gainText = ups.length
           ? `능력치 상승: ${ups.map(([k, v]) => `${ABILITY_LABEL[k] ?? k} +${v}`).join(", ")}`
@@ -1716,6 +1730,20 @@ export function advance(prev: GameState, action: Action): GameState {
         log(s, {
           icon: "🔀", title: "유형 변화", tone: "good",
           body: `${styleBefore.name} → ${styleAfter.name}. ${styleAfter.desc}`,
+        });
+      }
+      /**
+       * 각오는 **성장 계산이 끝난 뒤에** 갈아 끼운다.
+       * 이 겨울의 성장은 *지난 시즌* 각오의 결과다 — 몸을 만든 해의 보상이
+       * 다음 캠프에서 돌아와야 "올해를 버리고 내년을 산다"가 성립한다.
+       */
+      const nextResolve = RESOLVES.find((r) => r.id === action.resolveId);
+      if (nextResolve) {
+        s.seasonResolve = nextResolve.id;
+        s.resolveHistory = [...(s.resolveHistory ?? []), nextResolve.id];
+        log(s, {
+          icon: nextResolve.icon, title: `올해의 각오 — ${nextResolve.name}`, tone: "neutral",
+          body: `${nextResolve.desc} (${nextResolve.trade})`,
         });
       }
       s.pendingTraining = null;

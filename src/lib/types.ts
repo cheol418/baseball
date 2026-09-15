@@ -386,6 +386,10 @@ export interface GameState {
   /** 커리어에서 지옥 훈련을 쓴 횟수 */
   hellUsed?: number;
   hofScore?: number;
+  /** 올해의 각오 — 한 시즌 내내 성적·부상·성장·신뢰에 걸린다 */
+  seasonResolve?: string | null;
+  /** 지난 각오들 (무엇을 택해 온 선수인가) */
+  resolveHistory?: string[];
 
   /* --- 시즌 진행 --- */
   /** 직전에 치른 반기의 월별 성적 (중계 재생용) */

@@ -21,6 +21,8 @@ export interface AutoOptions {
   onStep?: (g: GameState) => void;
   /** 승부처에서 몇 번째 선택지를 고를 것인가 */
   clutchPick?: number;
+  /** 올해의 각오 (기본: 팀에 맞춘다) */
+  resolve?: string;
 }
 
 
@@ -72,6 +74,7 @@ export function autoPlay(start: GameState, opt: AutoOptions = {}): GameState {
           type: "TRAIN",
           optionId: opts[Math.floor(Math.random() * opts.length)]?.id ?? opts[0].id,
           hell: (g.hellUsed ?? 0) < HELL_LIMIT,
+          resolveId: opt.resolve ?? "team",
         });
         break;
       }

@@ -33,6 +33,9 @@ export function migrateSave(raw: unknown): GameState | null {
   // 시즌 진행
   def("monthLines", null);
   def("pendingClutch", null);
+  // 올해의 각오 — 구버전 세이브는 각오 없이(중립 보정) 이어간다
+  def("seasonResolve", null);
+  def("resolveHistory", []);
   def("liveHalf", null);
   def("retireRefusedYear", null);
   def("rookieDeal", null);
