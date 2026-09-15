@@ -332,7 +332,7 @@ export default function CreatePage() {
                     <Pill>{trait.name}</Pill>
                     <span className="text-[11px] text-[var(--ink-3)]">{trait.desc}</span>
                   </div>
-                  <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5">
+                  <div className="mt-3 grid grid-cols-2 gap-x-2 gap-y-1.5">
                     {abilityKeys(kind).map((k) => {
                       const sc = scoutedPotential(c.player, k, 0, c.seed);
                       return (

@@ -549,7 +549,7 @@ export const DEV_RATE_LABEL = (rate: number) =>
 /** 오프시즌 성장 처리 */
 export function grow(
   p: Player, rng: RNG, focus: TrainingOption | null, devRate = 1,
-  /** 지옥 훈련 배수 — 성공 2.3배 · 실패 0.3배 · 평시 1배 */
+  /** 집중 훈련분에 곱하는 배수 — 지옥 훈련(성공 2.3 · 실패 0.42)과 훈련 성과 등급이 함께 실린다 */
   hellMul = 1,
 ): { deltas: Partial<Record<string, number>> } {
   const keys = abilityKeys(p.kind);
@@ -706,6 +706,63 @@ export const TRAINING_PATHS: TrainingPath[] = [
     main: ["stamina"], sub: ["durability", "velocity"], leadsTo: "이닝이터 · 고무팔",
   },
 ];
+
+/* ------------------------------------------------------------------ */
+/* 훈련 성과 — 같은 메뉴를 골라도 겨울이 늘 같지는 않다                    */
+/* ------------------------------------------------------------------ */
+
+export interface TrainGrade {
+  id: "great" | "good" | "normal" | "poor" | "waste";
+  label: string;
+  icon: string;
+  tone: "epic" | "good" | "neutral" | "bad";
+  /** 집중 훈련분에 곱한다 — 기댓값이 1이 되도록 잡았다 */
+  mul: number;
+  note: string;
+}
+
+const TRAIN_GRADES: TrainGrade[] = [
+  { id: "great", label: "훈련 대성공", icon: "🌟", tone: "epic", mul: 1.7,
+    note: "몸이 가볍고 감이 잡혔습니다. 겨울 내내 원하는 대로 됐습니다." },
+  { id: "good", label: "훈련이 잘 풀렸다", icon: "🔥", tone: "good", mul: 1.3,
+    note: "코치가 잡아준 게 손에 붙었습니다." },
+  { id: "normal", label: "무난한 겨울", icon: "🏋️", tone: "neutral", mul: 1.0,
+    note: "특별할 것 없이, 해야 할 만큼 했습니다." },
+  { id: "poor", label: "잘 안 됐다", icon: "😑", tone: "bad", mul: 0.7,
+    note: "감이 오지 않아 겉돌았습니다." },
+  { id: "waste", label: "헛돈 겨울", icon: "💤", tone: "bad", mul: 0.4,
+    note: "몸도 마음도 따라주지 않았습니다. 다음 겨울을 기약합니다." },
+];
+
+/**
+ * 오프시즌 훈련 성과 추첨.
+ *
+ * 같은 메뉴를 골라도 결과가 갈려야 겨울이 도박이 된다.
+ * 다만 순수한 운은 아니다 — 멘탈·재능·몸 상태·나이가 저울을 기울인다.
+ * **가중 기댓값은 1.0 근처로 맞춰 둔다.** 여기를 건드리면 성장 곡선 전체가
+ * 같이 움직이므로 `scripts/training.ts`·`balance.ts`를 다시 돌린다.
+ */
+export function rollTrainGrade(p: Player, rng: RNG): TrainGrade {
+  const mental = getAb(p.abilities, "mental" as AbilityKey);
+  // −1 ~ +1 남짓. 기울면 확률이 위아래로 옮겨간다
+  const tilt = clamp(
+    (mental - 70) * 0.012
+    + (p.talent - 0.8) * 0.6
+    + (p.condition - 70) * 0.008
+    + (p.trait === "hardworker" ? 0.35 : p.trait === "coldblood" ? 0.2 : p.trait === "glass" ? -0.2 : 0)
+    + (p.age <= 23 ? 0.15 : p.age >= 32 ? -0.25 : 0),
+    -1, 1,
+  );
+  const shift = tilt * 0.10;
+  const w = [0.08 + shift, 0.22 + shift, 0.42, 0.22 - shift, 0.06 - shift];
+  const total = w.reduce((a, b) => a + b, 0);
+  let r = rng.float(0, total);
+  for (let i = 0; i < w.length; i++) {
+    r -= Math.max(0, w[i]);
+    if (r <= 0) return TRAIN_GRADES[i];
+  }
+  return TRAIN_GRADES[2];
+}
 
 /** 커리어에서 지옥 훈련을 쓸 수 있는 횟수 */
 export const HELL_LIMIT = 2;

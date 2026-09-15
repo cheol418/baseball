@@ -69,9 +69,11 @@ export function AbilityBar({ k, value, potential, potentialHi, known = true }: {
   // 전광판 눈금처럼 — 상위 구간일수록 밝게
   const tone = value >= 100 ? "#ffd166" : value >= 84 ? "#5fa8e8" : value >= 66 ? "#7f93a8" : "#5b6675";
   return (
-    <div className="flex items-center gap-2.5">
-      <span className="w-[42px] shrink-0 text-[11px] font-bold text-[var(--ink-2)]">{ABILITY_LABEL[k] ?? k}</span>
-      <div className="relative h-[10px] min-w-[46px] flex-1 overflow-hidden rounded-[3px] bg-[#0d1c30]">
+    // 한 줄 최소폭 = 34+6+40+6+22+6+38 = 152px.
+    // 2열로 깔리는 곳(후보 카드)이 있어 좁은 폰에서 옆 칸을 밀지 않아야 한다.
+    <div className="flex min-w-0 items-center gap-1.5">
+      <span className="w-[34px] shrink-0 text-[10.5px] font-bold text-[var(--ink-2)]">{ABILITY_LABEL[k] ?? k}</span>
+      <div className="relative h-[10px] min-w-[40px] flex-1 overflow-hidden rounded-[3px] bg-[#0d1c30]">
         {/* 스카우트가 보는 잠재력 구간 */}
         <div className="absolute inset-y-0 bg-white/12"
           style={{ left: `${loPct}%`, width: `${Math.max(0, hiPct - loPct)}%` }} />
@@ -86,8 +88,8 @@ export function AbilityBar({ k, value, potential, potentialHi, known = true }: {
           }}
         />
       </div>
-      <span className="num w-[26px] shrink-0 text-right text-[13.5px] font-bold">{value}</span>
-      <span className="num w-[44px] shrink-0 text-right text-[10.5px] font-bold text-[var(--ink-3)]">
+      <span className="num w-[22px] shrink-0 text-right text-[13px] font-bold">{value}</span>
+      <span className="num w-[38px] shrink-0 text-right text-[10px] font-bold text-[var(--ink-3)]">
         {known || potentialHi === undefined || potentialHi === potential
           ? potential
           : `${potential}~${potentialHi}`}

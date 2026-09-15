@@ -659,6 +659,7 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
           <div className="eyebrow mb-2 mt-4">2 · 훈련 방향</div>
           <p className="mb-2 text-[11px] leading-relaxed text-[var(--ink-3)]">
             어떤 선수가 되고 싶은지 고릅니다. 어떤 능력이 오를지는 코칭스태프가 정합니다.
+            {" "}같은 방향을 골라도 <b>겨울이 잘 풀린 해와 헛돈 해</b>가 갈립니다 — 멘탈과 몸 상태가 저울을 기울입니다.
             {hell && <b className="text-[var(--danger)]"> 지옥 훈련이 켜져 있습니다.</b>}
           </p>
           <div className="flex flex-col gap-2">

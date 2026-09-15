@@ -2,7 +2,7 @@ import { RNG, clamp, n50 } from "./rng";
 import { TEAMS, teamById } from "./teams";
 import {
   ABILITY_LABEL, ABILITY_MAX, abilityKeys, deriveStyle, developmentRate, getAb,
-  grow, HELL_LIMIT, hellOdds, injuryRiskMultiplier, makeTrainingOptions, overall,
+  grow, HELL_LIMIT, hellOdds, injuryRiskMultiplier, makeTrainingOptions, overall, rollTrainGrade,
   potentialOverall, setAb,
 } from "./player";
 import {
@@ -1623,6 +1623,10 @@ export function advance(prev: GameState, action: Action): GameState {
         hellWon = rng.chance(hellOdds(s.player));
         hellMul = hellWon ? 2.3 : 0.42;
       }
+      // 평범한 겨울도 늘 같지는 않다 — 같은 메뉴를 골라도 잘 풀린 해와 헛돈 해가 갈린다.
+      // 지옥 훈련은 성공/실패가 이미 드라마이므로 등급을 겹쳐 씌우지 않는다.
+      const grade = hell ? null : rollTrainGrade(s.player, rng);
+      if (grade) hellMul *= grade.mul;
       if (opt) {
         // 부상 위험 자체는 낮다 — 지옥의 위험은 부상이 아니라 "헛수고"다
         const risk = opt.risk * (hell ? 2.2 : 1);
@@ -1672,10 +1676,20 @@ export function advance(prev: GameState, action: Action): GameState {
               { label: "남은 기회", from: `${left + 1}회`, to: `${left}회` },
             ],
           });
-        } else {
+        } else if (grade) {
           log(s, {
-            icon: "🏋️", title: `${opt.name} 완료`, tone: ups.length ? "good" : "neutral",
-            body: gainText,
+            icon: grade.icon, title: `${opt.name} — ${grade.label}`, tone: grade.tone,
+            body: `${grade.note} ${gainText}`,
+          });
+          // 훈련은 선수가 직접 고른 선택이다 — 결과를 로그에만 남기면
+          // 무엇이 달라졌는지 모른 채 시즌으로 넘어간다. 오버레이로 띄운다.
+          notify(s, {
+            icon: grade.icon, eyebrow: "Spring Camp", title: grade.label, tone: grade.tone,
+            body: `${opt.name} — ${grade.note}`,
+            change: [
+              { label: "훈련 방향", from: "—", to: opt.name },
+              { label: "능력치", from: "—", to: ups.length ? ups.map(([k, v]) => `${ABILITY_LABEL[k] ?? k} +${v}`).join(" · ") : "성장 없음" },
+            ],
           });
         }
       }
