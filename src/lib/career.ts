@@ -641,7 +641,7 @@ function marketValue(s: GameState, ceiling = MAX_SALARY): number {
     a + r.awards.filter((x) => x.endsWith("왕") || x.includes("MVP")).length, 0);
 
   return clamp(
-    (recentWar * 9000 + (ovr - 72) * 1200 + s.player.fame * 185 + counting + titles * 4200)
+    (recentWar * 9000 + (ovr - 72) * 1200 + s.player.fame * 250 + counting + titles * 4200)
       * ageP * milFactor * intlFactor,
     4000, ceiling,
   );
@@ -847,7 +847,7 @@ function runTournament(s: GameState, rng: RNG, slot: TournamentSlot) {
   const res = simTournament(s, t, rng);
   res.clutchSituation = rollStageClutch("INTL", s, rng, t.name);
   s.intlResults.push(res);
-  s.player.fame = clamp(s.player.fame + (res.medal ? 12 : 5), 0, 100);
+  s.player.fame = clamp(s.player.fame + (res.medal ? 9 : 4), 0, 100);
   if (res.exempted && s.military === "PENDING") {
     s.military = "EXEMPT";
     log(s, {
@@ -1323,6 +1323,35 @@ function runAmateurSeason(s: GameState, rng: RNG, level: LevelTag) {
 }
 
 /** 시즌 종료 — 기록 확정, 수상, 이벤트 */
+/**
+ * 그 선수가 지금 "받아 마땅한" 인지도.
+ *
+ * 인지도를 순수 누적으로 두면 눈금이 포화된다 — 은퇴 시 중앙값이 98이었다.
+ * 0~100 눈금인데 전원이 꼭대기에 몰리면 정보량이 0이다.
+ * 실제 인기는 **최근에 무엇을 했는가**로 오르내린다. 다만 한번 쌓은 업적은
+ * 바닥을 만든다 — 전성기가 지난 레전드도 잊히지는 않는다.
+ */
+function deservedFame(s: GameState): { target: number; floor: number } {
+  const kbo = s.seasons.filter((r) => r.level === "KBO");
+  const recent = kbo.slice(-3);
+  const recentWar = recent.length ? recent.reduce((a, r) => a + r.line.war, 0) / recent.length : 0;
+  const tier = roleTier(s.seasonRole ?? "");
+  const titles = kbo.reduce((a, r) => a + r.awards.filter((w) => MAJOR_TITLES.includes(w) && w !== "정규시즌 MVP").length, 0);
+  const mvp = kbo.reduce((a, r) => a + r.awards.filter((w) => w === "정규시즌 MVP").length, 0);
+  const allStars = kbo.filter((r) => r.allStar).length;
+  const careerWar = kbo.reduce((a, r) => a + r.line.war, 0);
+
+  // 지금의 인기 — 최근 성적과 자리가 거의 전부다
+  const target = clamp(
+    14 + recentWar * 7.0 + tier * 2.8 + titles * 1.2 + mvp * 3.2 + allStars * 0.6
+    + (s.seasonLevel === "MINOR" ? -14 : 0),
+    4, 97,
+  );
+  // 쌓아 올린 업적이 만드는 바닥 — 여기 아래로는 잊히지 않는다
+  const floor = clamp(careerWar * 0.52 + titles * 1.8 + mvp * 5 + allStars * 0.6, 0, 88);
+  return { target, floor };
+}
+
 function closeSeason(s: GameState, rng: RNG) {
   const p = s.player;
   const team = s.contract ? teamById(s.contract.teamId) : null;
@@ -1418,11 +1447,11 @@ function closeSeason(s: GameState, rng: RNG) {
   rec.milestones = newMilestones(s.seasons, p.kind);
   for (const m of rec.milestones) {
     log(s, { icon: "🗿", title: "대기록", tone: "epic", body: m });
-    p.fame = clamp(p.fame + 6, 0, 100);
+    p.fame = clamp(p.fame + 4, 0, 100);
   }
   for (const f of rec.feats) {
     log(s, { icon: "✨", title: f, tone: "epic", body: `${p.name} 선수가 ${f}을(를) 달성했습니다!` });
-    p.fame = clamp(p.fame + 8, 0, 100);
+    p.fame = clamp(p.fame + 5, 0, 100);
   }
 
   // 1군 등록 기간만 서비스타임으로 쌓인다.
@@ -1432,12 +1461,25 @@ function closeSeason(s: GameState, rng: RNG) {
   // 프로 13년차가 FA를 못 가는 일이 있었다.
   s.serviceYears += clamp(s.kboShare, 0, 1);
 
+  /**
+   * 인지도를 그해 성적 쪽으로 끌어당긴다.
+   *
+   * 한 해 동안 승부처·수상으로 붙은 가산은 그대로 두되, 시즌이 닫힐 때
+   * "지금 받아 마땅한" 값 쪽으로 일부 당긴다. 그래야 잘한 해에 오르고
+   * 못한 해에 내린다 — 눈금이 살아 있다.
+   */
+  {
+    const { target, floor } = deservedFame(s);
+    const pulled = p.fame + (target - p.fame) * 0.42;
+    p.fame = clamp(Math.round(Math.max(pulled, floor)), 0, 100);
+  }
+
   // 한 해를 어떤 마음으로 치렀는지는 구단이 본다 — 헌신은 자리로 돌아온다
   const R = resolveEffect(s);
   if (R.trust) s.trust = clamp(s.trust + R.trust, 0, 100);
   if (rec.awards.length) {
     log(s, { icon: "🏆", title: "수상", tone: "epic", body: `${rec.awards.join(", ")} 수상!` });
-    p.fame = clamp(p.fame + rec.awards.length * 6, 0, 100);
+    p.fame = clamp(p.fame + rec.awards.length * 4, 0, 100);
     s.trust = clamp(s.trust + rec.awards.length * 3, 0, 100);
   }
   if (rec.champion) {
@@ -1904,7 +1946,7 @@ export function advance(prev: GameState, action: Action): GameState {
           // 큰 무대에도 승부처를 하나씩 — 보는 눈이 다른 만큼 인지도가 크게 움직인다
           if (!futures) s.allStarGame.clutchSituation = rollStageClutch("AS", s, rng, "올스타전");
           const ag = s.allStarGame;
-          if (ag.mvp) s.player.fame = clamp(s.player.fame + 10, 0, 100);
+          if (ag.mvp) s.player.fame = clamp(s.player.fame + 7, 0, 100);
           // 승부처가 걸려 있으면 결과를 아직 적지 않는다 —
           // 9회 2사를 고르기도 전에 소식란에 스코어가 먼저 뜬다. (실제로 겪음)
           if (!ag.clutchSituation) logAllStarGame(s, ag);
