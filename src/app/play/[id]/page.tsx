@@ -16,7 +16,7 @@ import {
 import { fanFeed, seasonHeadline } from "@/lib/flavor";
 import { HOF_CUT, HOF_WAIT, legacyContext, secondLifeOptions } from "@/lib/legacy";
 import { allTimeRanks, nickname } from "@/lib/records";
-import { TOURNAMENTS } from "@/lib/national";
+import { isAgeEligible, TOURNAMENTS } from "@/lib/national";
 import {
   abilityKeys, armSlotById, deriveStyle, DEV_RATE_LABEL, developmentRate, gradeOf,
   HELL_LIMIT, hellOdds,
@@ -809,6 +809,14 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
               <span className="text-[var(--ink-3)]">병역 혜택</span>
               <span className="font-bold">{t.exemption ?? "없음"}</span>
             </div>
+            {t.id === "ASIAN_GAMES" && (
+              <div className="mt-2 flex items-center justify-between text-[12.5px]">
+                <span className="text-[var(--ink-3)]">선발 자격</span>
+                <span className="font-bold">
+                  {isAgeEligible(g) ? "만 25세 이하 · 4년차 이하" : "⭐ 와일드카드 (3명)"}
+                </span>
+              </div>
+            )}
             {t.exemption && g.military === "PENDING" && (
               <p className="mt-2 rounded-lg bg-[var(--gold)]/12 px-3 py-2 text-[11.5px] font-semibold text-[var(--gold)]">
                 🪖 아직 병역 미필입니다. 이번이 기회입니다.

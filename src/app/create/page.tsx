@@ -90,27 +90,44 @@ export default function CreatePage() {
   };
 
   /**
-   * 주사위 — 이름부터 유형까지 한 번에 굴리고 후보 선택으로 보낸다.
+   * 주사위 — **지금 보고 있는 단계의 항목만** 굴린다.
    *
-   * 채워 넣기만 하고 1단계에 머물면, 무엇이 바뀌었는지 확인하러
-   * 네 화면을 도로 넘겨야 한다. 굴렸으면 결과를 보러 가는 게 맞다.
-   * 세 후보 중 누구를 고를지는 여전히 플레이어의 몫이다.
+   * 한 번에 4단계까지 밀어버리면 무엇이 정해졌는지 못 보고 넘어간다.
+   * 각 화면에서 굴리고, 마음에 들면 "다음"으로 넘어가게 둔다.
    */
   const shuffle = () => {
     const o = randomCreateOptions(new RNG(Math.floor(Math.random() * 1e9)));
-    setName(o.name);
-    setSchool(o.school);
-    setNumber(o.number);
-    setKind(o.kind);
-    setPosition(o.position);
-    setStyleId(o.styleId);
-    setBats(o.bats);
-    setThrows(o.throws);
-    if (o.armSlot) setArmSlot(o.armSlot);
+    if (step === 0) {
+      setName(o.name);
+      setSchool(o.school);
+      setNumber(o.number);
+      // 구분이 바뀌면 유형·포지션도 함께 옮겨야 앞뒤가 맞는다
+      if (o.kind !== kind) switchKind(o.kind);
+      setBats(o.bats);
+      setThrows(o.throws);
+      if (o.kind === "PITCHER" && o.armSlot) setArmSlot(o.armSlot);
+      return;
+    }
+    if (step === 1) {
+      // 유형은 지금 고른 구분 안에서 뽑는다
+      const pool = styles.filter((x) => x.id !== styleId);
+      const next = (pool.length ? pool : styles)[Math.floor(Math.random() * (pool.length || styles.length))];
+      setStyleId(next.id);
+      // 유형이 바뀌면 추천 포지션도 따라간다
+      const spots = RECOMMENDED_POSITIONS[next.id] ?? [];
+      if (spots.length) setPosition(spots[Math.floor(Math.random() * spots.length)]);
+      return;
+    }
+    if (step === 2) {
+      const spots = RECOMMENDED_POSITIONS[styleId] ?? positions.map((x) => x.id);
+      setPosition(spots[Math.floor(Math.random() * spots.length)]);
+      setWishTeam(TEAMS[Math.floor(Math.random() * TEAMS.length)].id);
+      return;
+    }
+    // 후보 선택 — 세 장을 다시 뽑는다 (누구를 고를지는 여전히 플레이어의 몫)
     setBaseSeed(Math.floor(Math.random() * 1e9));
     setPicked(null);
     setOpened([]);
-    setStep(3);
   };
 
   const start = () => {

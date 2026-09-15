@@ -570,9 +570,13 @@ export function simAllStarGame(
     ? simHitter({ ...base, role: "주전" })
     : simPitcher({ ...base, role: "불펜" });
 
-  const my = rng.int(2, 11);
+  let my = rng.int(2, 11);
   const theirs = rng.int(2, 11);
-  const won = my > theirs || (my === theirs && rng.chance(0.5));
+  // 동점이면 승패를 동전으로 가르되 **점수도 같이 갈라야 한다**.
+  // 플래그만 뒤집으면 "9-9 패배"처럼 읽히는 화면이 나온다. (실제로 겪음)
+  // 올스타전은 연장에서 끝장을 본다 — 이긴 쪽이 한 점을 더 낸다.
+  if (my === theirs) my += rng.chance(0.5) ? 1 : -1;
+  const won = my > theirs;
 
   // MVP — 잘한 데다 팀이 이겨야 한다
   const great = isHitterLine(line)

@@ -108,9 +108,32 @@ export function isCalledUp(s: GameState, t: Tournament, rng: RNG): boolean {
 
   // 아시안게임은 병역 미필 유망주를 대거 뽑는다 (실제 대표팀 구성과 같은 이유)
   if (t.id === "ASIAN_GAMES" && s.military === "PENDING" && p.age <= 27) score += 8;
-  if (t.id === "ASIAN_GAMES" && p.age >= 30) score -= 6;
+
+  /**
+   * 아시안게임 연령 제한.
+   *
+   * 실제 KBO 규정을 그대로 쓴다 — **만 25세 이하 또는 프로 4년차 이하**,
+   * 여기에 나이 제한이 없는 **와일드카드 3명**.
+   * 24명 중 3명이므로 와일드카드는 확실한 간판급에게만 돌아간다.
+   *
+   * 올림픽·프리미어12·WBC에는 연령 제한이 없다 — 야구는 축구와 달리
+   * 올림픽도 최정예로 나간다. 여기에 제한을 넣으면 실제와 어긋난다.
+   */
+  if (t.id === "ASIAN_GAMES" && !isAgeEligible(s)) {
+    // 와일드카드 — 세 자리를 놓고 리그 전체와 겨룬다
+    if (score < 28) return false;
+    return rng.next() < clamp((score - 28) * 0.006, 0.004, 0.08);
+  }
 
   return rng.next() < clamp(0.03 + score * 0.026, 0.01, 0.82);
+}
+
+/** 아시안게임 연령 제한(만 25세 이하 또는 프로 4년차 이하)을 통과하는가 */
+export function isAgeEligible(s: GameState): boolean {
+  if (s.player.age <= 25) return true;
+  // 프로 연차 — 1군·2군을 가리지 않고 입단 이후의 시즌을 센다
+  const proSeasons = s.seasons.filter((x) => x.level === "KBO" || x.level === "MINOR").length;
+  return proSeasons + (s.seasonLevel ? 1 : 0) <= 4;
 }
 
 /** 대회별 일정 — 라운드 이름과 상대 후보 */
