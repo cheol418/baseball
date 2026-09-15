@@ -327,6 +327,63 @@ export interface CreateOptions {
 /** 후보 한 명이 특급 유망주로 나올 확률 — 셋 중 하나라도 나올 확률은 약 20% */
 export const GIFTED_ODDS = 0.07;
 
+/* ------------------------------------------------------------------ */
+/* 랜덤 생성                                                            */
+/* ------------------------------------------------------------------ */
+
+const SURNAMES = [
+  "김", "이", "박", "최", "정", "강", "조", "윤", "장", "임",
+  "한", "오", "서", "신", "권", "황", "안", "송", "류", "홍",
+  "전", "고", "문", "손", "배", "백", "허", "남", "심", "노",
+];
+
+const GIVEN = [
+  "준호", "서준", "도현", "민재", "지훈", "현우", "성민", "재윤", "태양", "우진",
+  "건우", "시우", "주원", "정후", "동현", "승우", "예준", "하준", "규민", "찬혁",
+  "인성", "태경", "상현", "영훈", "종민", "대호", "기현", "형준", "세영", "재원",
+];
+
+/** 학교 이름은 앞말 + 뒷말로 짓는다 — 실제 명문고는 이스터에그로 남겨 둔다 */
+const SCHOOL_HEAD = [
+  "백호", "청룡", "한빛", "대신", "남산", "동광", "서일", "명진", "연성", "태평",
+  "금호", "화랑", "세림", "영광", "성진", "가온", "우석", "덕원",
+];
+
+/**
+ * 선수 생성 화면의 랜덤 조합.
+ *
+ * 유형과 포지션은 따로 뽑지 않는다 — 거포 유격수처럼 어울리지 않는 조합이
+ * 나오면 "랜덤"이 아니라 "엉터리"로 읽힌다. 유형을 먼저 뽑고
+ * `RECOMMENDED_POSITIONS`에서 자리를 고른다.
+ */
+export function randomCreateOptions(rng: RNG): CreateOptions & { school: string } {
+  const kind: Kind = rng.chance(0.62) ? "HITTER" : "PITCHER";
+  const pool = STYLES.filter((x) => x.kind === kind);
+  const style = pool[rng.int(0, pool.length - 1)];
+  const spots = RECOMMENDED_POSITIONS[style.id]
+    ?? (kind === "HITTER" ? HITTER_POSITIONS.map((x) => x.id) : PITCHER_POSITIONS.map((x) => x.id));
+  const position = spots[rng.int(0, spots.length - 1)];
+
+  // 던지는 손은 자리가 정한다 — 좌투 포수·좌투 유격수는 야구에 없다
+  const rightOnly = position === "C" || position === "2B" || position === "3B" || position === "SS";
+  const throws: Hand = rightOnly ? "R" : rng.chance(0.24) ? "L" : "R";
+  // 좌투는 거의 좌타다. 우투는 좌타도 흔하고 스위치도 가끔 있다
+  const bats: Hand = throws === "L"
+    ? (rng.chance(0.85) ? "L" : "R")
+    : rng.chance(0.34) ? "L" : rng.chance(0.06) ? "S" : "R";
+
+  return {
+    name: SURNAMES[rng.int(0, SURNAMES.length - 1)] + GIVEN[rng.int(0, GIVEN.length - 1)],
+    school: SCHOOL_HEAD[rng.int(0, SCHOOL_HEAD.length - 1)] + "고",
+    number: rng.chance(0.5) ? rng.int(1, 30) : rng.int(31, 99),
+    kind, position, bats, throws,
+    styleId: style.id,
+    armSlot: kind === "PITCHER"
+      ? (["OVER", "OVER", "THREE_QUARTER", "THREE_QUARTER", "SIDE", "UNDER"] as ArmSlot[])[rng.int(0, 5)]
+      : undefined,
+  };
+}
+
 export const CANDIDATE_KINDS = [
   { bias: -1, name: "완성형", desc: "지금 당장 쓸 수 있지만 천장이 낮다" },
   { bias: 0, name: "균형형", desc: "무난한 출발과 무난한 성장" },

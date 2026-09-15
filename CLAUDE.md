@@ -104,6 +104,12 @@ npx tsx scripts/debut.ts       # 1군 데뷔·주전 정착 나이
 
 참고용 구역은 `<Fold>`로 접는다 — 상세 기록 · 최근 소식 · 아마추어/2군 표.
 
+**중계 진행 바는 `i`가 아니라 `Math.min(i, steps.length - 1)`로 그린다.**
+`i`는 마지막 단계를 지나 한 칸 더 올라간다(정리하는 중). 그 값을 key에 쓰면
+마지막 카드가 다시 마운트돼 **같은 장면이 두 번 뜬 것처럼 보인다.**
+로딩 화면이 떠 있는 동안에는 칸을 채우지 않는다 — 첫 칸만 로딩 시간까지
+얹혀 혼자 느리게 찬다. (둘 다 실제로 겪음)
+
 **오버레이는 페이지 최상위에서 그린다.** `.stage`의 transform 애니메이션이
 stacking context를 만들어, 그 안에서 그린 `fixed`는 sticky 탭 바보다
 아래로 깔린다. (실제로 겪음)
@@ -180,6 +186,7 @@ UI는 `src/app/page.tsx`(홈) · `create/page.tsx`(4단계 생성) · `play/[id]
 
 | 항목 | 값 |
 |---|---|
+| 랜덤 생성 | 이름·학교·등번호·유형·포지션·타/투를 한 번에 굴려 후보 선택으로 보낸다 — 유형을 먼저 뽑고 `RECOMMENDED_POSITIONS`에서 자리를 고른다(좌투 포수 같은 조합 0건) |
 | 후보 3인 | 완성형 OVR 57·잠재 79 / 균형형 52·84 / 원석형 47·90 (트레이드오프 축) |
 | 특급 유망주 | 후보당 7% — 완성도·성장 여지를 모두 갖춘다 (셋 중 하나 나올 확률 19%) |
 | 1군·2군 기록 | 오간 시즌은 `SeasonRecord.byLevel`로 나뉜다 — 통산은 `seasonsAtLevel()`로 뽑는다 |
@@ -246,7 +253,7 @@ UI는 `src/app/page.tsx`(홈) · `create/page.tsx`(4단계 생성) · `play/[id]
 `rookiestat`(신인 성적·훈련 상승폭), `sangmu`(상무 지원), `notices`(통보 발생),
 `hellcheck`(지옥 훈련 도박 균형), `transferodds`(표기 확률 ↔ 실제 성사율),
 `service`(복무 기간·복귀 시점), `school`(학교 전력 효과),
-`titles`(성적 대비 수상), `titlebar`(부문별 기준선·수상률), `nego`(협상 도박 균형), `traingrade`(훈련 성과 분포), `textcheck`(문구 빈칸),
+`titles`(성적 대비 수상), `titlebar`(부문별 기준선·수상률), `nego`(협상 도박 균형), `traingrade`(훈련 성과 분포), `randomcreate`(랜덤 조합 정합성), `asorder`(올스타 정보 유출), `textcheck`(문구 빈칸),
 `service_fa`(서비스타임 ↔ FA 도달), `titlemark`(타이틀↔기록 대응),
 `monthform`(월별 단계 분포·이달의 선수), `mvppay`(성적 대비 제시액),
 `clutch`(승부처 선택지 균형), `fagate`(FA를 막는 조건),

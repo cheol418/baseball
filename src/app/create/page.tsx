@@ -8,7 +8,7 @@ import { newGame } from "@/lib/career";
 import {
   abilityKeys, ARM_SLOTS, gradeOf, HAND_LABEL, HITTER_POSITIONS, overall,
   CANDIDATE_KINDS, PITCHER_POSITIONS, platoonProfile, RECOMMENDED_POSITIONS, rollCandidate,
-  scoutedOverall, scoutedPotential, STYLES, traitById, type CreateOptions,
+  randomCreateOptions, scoutedOverall, scoutedPotential, STYLES, traitById, type CreateOptions,
 } from "@/lib/player";
 import { RNG } from "@/lib/rng";
 import { schoolOf } from "@/lib/school";
@@ -89,6 +89,30 @@ export default function CreatePage() {
     if (k === "PITCHER") setArmSlot("THREE_QUARTER");
   };
 
+  /**
+   * 주사위 — 이름부터 유형까지 한 번에 굴리고 후보 선택으로 보낸다.
+   *
+   * 채워 넣기만 하고 1단계에 머물면, 무엇이 바뀌었는지 확인하러
+   * 네 화면을 도로 넘겨야 한다. 굴렸으면 결과를 보러 가는 게 맞다.
+   * 세 후보 중 누구를 고를지는 여전히 플레이어의 몫이다.
+   */
+  const shuffle = () => {
+    const o = randomCreateOptions(new RNG(Math.floor(Math.random() * 1e9)));
+    setName(o.name);
+    setSchool(o.school);
+    setNumber(o.number);
+    setKind(o.kind);
+    setPosition(o.position);
+    setStyleId(o.styleId);
+    setBats(o.bats);
+    setThrows(o.throws);
+    if (o.armSlot) setArmSlot(o.armSlot);
+    setBaseSeed(Math.floor(Math.random() * 1e9));
+    setPicked(null);
+    setOpened([]);
+    setStep(3);
+  };
+
   const start = () => {
     if (picked === null) return;
     const c = candidates[picked];
@@ -100,7 +124,15 @@ export default function CreatePage() {
   return (
     <main className="pb-28">
       {intro && <Intro onDone={closeIntro} />}
-      <AppBar title="선수 생성" back="/" right={<span className="text-[11px] opacity-70">{step + 1}/4</span>} />
+      <AppBar title="선수 생성" back="/" right={
+        <div className="flex items-center gap-2">
+          <button
+            onClick={shuffle}
+            className="rounded-lg bg-white/15 px-2.5 py-1 text-[11px] font-extrabold transition hover:bg-white/25"
+          >🎲 랜덤 생성</button>
+          <span className="text-[11px] opacity-70">{step + 1}/4</span>
+        </div>
+      } />
 
       <div className="h-1 w-full bg-[var(--line)]">
         <div className="h-full bg-[var(--danger)] transition-all" style={{ width: `${((step + 1) / 4) * 100}%` }} />

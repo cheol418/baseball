@@ -433,7 +433,16 @@ export function Broadcast({ g, kind, onDone, onAction, busy = false }: {
     : kind === "H1" ? `${g.year} 전반기` : `${g.year} 후반기`;
   const levelText = kind === "INTL" ? "국가대표"
     : g.seasonLevel === "KBO" ? "1군" : g.seasonLevel === "MINOR" ? "2군" : null;
-  const step = steps[Math.min(i, steps.length - 1)];
+  /**
+   * 화면에 그리는 인덱스는 따로 둔다.
+   *
+   * `i`는 마지막 단계를 지나 `steps.length`까지 한 칸 더 올라간다(정리하는 중).
+   * 그 값을 그대로 key에 쓰면 **마지막 카드가 다시 마운트돼 등장 연출을 한 번 더
+   * 재생한다** — 같은 장면이 두 번 뜬 것처럼 보인다. (실제로 겪음)
+   */
+  const cur = Math.min(i, steps.length - 1);
+  const flushing = i >= steps.length;
+  const step = steps[cur];
   if (!step) return null;
   const stepMs = step.kind === "month" ? MONTH_MS : CARD_MS;
 
@@ -461,20 +470,28 @@ export function Broadcast({ g, kind, onDone, onAction, busy = false }: {
 
         {/* 진행 표시 — 국제대회는 남은 경기 수가 결과를 알려주므로 칸을 나누지 않는다 */}
         <div className="mt-3 flex gap-1 px-4">
-          {(kind === "INTL" ? [0] : steps).map((_, idx) => (
-            <span key={idx} className="h-[3px] flex-1 overflow-hidden rounded-full bg-white/20">
-              <span
-                key={`${idx}-${i}`}
-                className="block h-full rounded-full bg-white"
-                style={
-                  idx < i ? { width: "100%", opacity: 0.55 }
-                  : idx === i && step.kind !== "move" ? { animation: `fillBar ${stepMs}ms linear forwards` }
-                  : idx === i ? { width: "100%" }
-                  : { width: 0 }
-                }
-              />
-            </span>
-          ))}
+          {(kind === "INTL" ? [0] : steps).map((_, idx) => {
+            // 로딩 화면이 떠 있는 동안에는 채우지 않는다. 여기서 애니메이션을
+            // 걸어두면 첫 칸만 로딩 시간(1.5초)까지 얹혀 혼자 느리게 찬다.
+            const active = !warmup && idx === cur && !flushing;
+            return (
+              <span key={idx} className="h-[3px] flex-1 overflow-hidden rounded-full bg-white/20">
+                <span
+                  // 그 칸이 차례가 될 때만 다시 마운트한다 — `i`를 섞으면 매 단계마다
+                  // 모든 칸의 애니메이션이 처음부터 다시 돈다
+                  key={`${idx}-${active ? "on" : "off"}`}
+                  className="block h-full rounded-full bg-white"
+                  style={
+                    idx < cur || flushing ? { width: "100%", opacity: 0.55 }
+                    : active && step.kind !== "move" && step.kind !== "clutch"
+                      ? { animation: `fillBar ${stepMs}ms linear forwards` }
+                    : active ? { width: "100%" }
+                    : { width: 0 }
+                  }
+                />
+              </span>
+            );
+          })}
         </div>
 
         <div className="relative px-4 pb-5 pt-4">
@@ -482,17 +499,17 @@ export function Broadcast({ g, kind, onDone, onAction, busy = false }: {
           {!warmup && kind === "INTL" && intlOfYear && (
             <TourneyBoard
               games={intlOfYear.games}
-              upto={Math.max(0, steps.slice(0, i + 1).filter((x) => x.kind === "game").length - 1)}
+              upto={Math.max(0, steps.slice(0, cur + 1).filter((x) => x.kind === "game").length - 1)}
             />
           )}
           {warmup && loading && <LoadingPanel key="warm" {...loading} />}
-          {!warmup && step.kind === "month" && <MonthPanel key={`m${i}`} step={step} />}
-          {!warmup && step.kind === "card" && <CardPanel key={`c${i}`} step={step} />}
-          {!warmup && step.kind === "round" && <RoundPanel key={`r${i}`} step={step} />}
-          {!warmup && step.kind === "hs" && <HsPanel key={`h${i}`} step={step} />}
-          {!warmup && step.kind === "game" && <GamePanel key={`g${i}`} step={step} />}
+          {!warmup && step.kind === "month" && <MonthPanel key={`m${cur}`} step={step} />}
+          {!warmup && step.kind === "card" && <CardPanel key={`c${cur}`} step={step} />}
+          {!warmup && step.kind === "round" && <RoundPanel key={`r${cur}`} step={step} />}
+          {!warmup && step.kind === "hs" && <HsPanel key={`h${cur}`} step={step} />}
+          {!warmup && step.kind === "game" && <GamePanel key={`g${cur}`} step={step} />}
           {!warmup && step.kind === "clutch" && (
-            <div key={`k${i}`}>
+            <div key={`k${cur}`}>
               {step.r ? (
                 <>
                   <ClutchReveal r={step.r} />
@@ -513,7 +530,7 @@ export function Broadcast({ g, kind, onDone, onAction, busy = false }: {
             </div>
           )}
           {!warmup && step.kind === "move" && (
-            <div key={`v${i}`}>
+            <div key={`v${cur}`}>
               <MovePanel step={step} />
               <button
                 onClick={() => setI((v) => v + 1)}
