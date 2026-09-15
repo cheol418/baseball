@@ -17,7 +17,7 @@ for (let i = 0; i < 40; i++) {
     onStep: (g: GameState) => {
       for (const m of g.monthLines ?? []) if (m.clutchSituation) seen.push(m.clutchSituation.title);
       if (g.allStarGame?.clutchSituation) seen.push(g.allStarGame.clutchSituation.title);
-      if (g.pendingEvent && g.pendingEvent.id !== prev?.pendingEvent?.id) ev.push(g.pendingEvent.id);
+      if (g.pendingEvent && g.pendingEvent.title !== prev?.pendingEvent?.title) ev.push(g.pendingEvent.title);
       prev = g;
     },
   });
