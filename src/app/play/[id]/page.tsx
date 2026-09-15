@@ -1606,12 +1606,12 @@ function RetireLink({ run, busy }: { run: (a: Action) => void; busy: boolean }) 
 /* ================================================================== */
 
 function DetailLine({ line, awards }: { line: StatLine; awards?: string[] }) {
-  // [표시 이름, 값, 타이틀 대응 키] — 도루왕·세이브왕·홀드왕은 이 표에만 나온다
+  // [표시 이름, 값, 타이틀 대응 키] — 요약 5칸에 없는 부문(안타·득점·출루율·장타율·도루·이닝·세이브·홀드)은 이 표에만 나온다
   const items: [string, string | number, string?][] = isHitterLine(line)
-    ? [["G", line.g], ["PA", line.pa], ["H", line.h], ["2B", line.b2], ["3B", line.b3],
-       ["R", line.r], ["BB", line.bb], ["SO", line.so], ["SB", line.sb, "sb"],
-       ["OBP", fmt3(line.obp)], ["SLG", fmt3(line.slg)]]
-    : [["G", line.g], ["GS", (line as PitcherLine).gs], ["IP", (line as PitcherLine).ip.toFixed(1)],
+    ? [["G", line.g], ["PA", line.pa], ["H", line.h, "h"], ["2B", line.b2], ["3B", line.b3],
+       ["R", line.r, "r"], ["BB", line.bb], ["SO", line.so], ["SB", line.sb, "sb"],
+       ["OBP", fmt3(line.obp), "obp"], ["SLG", fmt3(line.slg), "slg"]]
+    : [["G", line.g], ["GS", (line as PitcherLine).gs], ["IP", (line as PitcherLine).ip.toFixed(1), "ip"],
        ["SV", (line as PitcherLine).sv, "sv"], ["HLD", (line as PitcherLine).hld, "hld"],
        ["H", line.h], ["BB", line.bb], ["SO", line.so, "so"], ["HR", (line as PitcherLine).hrAllowed],
        ["WHIP", fmt2((line as PitcherLine).whip)], ["K/9", fmt2((line as PitcherLine).k9)]];

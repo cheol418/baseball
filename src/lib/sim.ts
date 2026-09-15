@@ -293,24 +293,45 @@ function emptyPitcher(): PitcherLine {
  * 그 해 리그 1위 기록. 매 시즌 새로 뽑아 "경쟁자를 이겼는가"로 타이틀을 준다.
  * 확률로 대충 주던 방식보다, 기록을 보고 납득할 수 있다.
  */
+/**
+ * 그 해 부문 1위 기록 — 이 선을 넘으면 타이틀을 가져간다.
+ *
+ * 기준선은 눈대중이 아니라 **우리 리그의 실제 분포**에서 뽑는다.
+ * 규정타석(혹은 규정이닝) 시즌의 상위 10% 지점을 중심에 두고,
+ * 상위 1% 근처까지를 폭으로 잡는다. 그래야 부문마다 난이도가 비슷해진다.
+ * 리그 분포를 바꾸면 `scripts/titlebar.ts`를 돌려 여기도 같이 옮긴다.
+ * (실제로 겪음: 타율 기준선만 실제 KBO 값으로 둬서 타격왕이 0.1%,
+ *  탈삼진은 기준선이 낮아 9.6% — 같은 리그에서 난이도가 100배 벌어졌다)
+ */
 function leagueLeaders(rng: RNG) {
   return {
-    hr: rng.int(30, 44),
-    avg: rng.float(0.330, 0.368),
-    rbi: rng.int(112, 142),
-    sb: rng.int(34, 58),
+    // 타자
+    avg: rng.float(0.308, 0.340),
+    h: rng.int(155, 178),
+    hr: rng.int(33, 46),
+    rbi: rng.int(137, 168),
+    r: rng.int(91, 111),
+    sb: rng.int(27, 46),
+    obp: rng.float(0.383, 0.420),
+    slg: rng.float(0.548, 0.640),
+    // 투수
     w: rng.int(13, 16),
-    era: rng.float(2.35, 3.15),
-    so: rng.int(146, 190),
+    era: rng.float(2.80, 3.34),
+    so: rng.int(179, 216),
     sv: rng.int(28, 40),
     hld: rng.int(26, 36),
+    ip: rng.int(175, 202),
+    pct: rng.float(0.700, 0.850),
   };
 }
 
 /** 부문 타이틀 — 연봉 협상에서 크게 쳐준다 */
 export const MAJOR_TITLES = [
-  "정규시즌 MVP", "홈런왕", "타격왕", "타점왕", "도루왕",
-  "다승왕", "평균자책점 1위", "탈삼진왕", "세이브왕", "홀드왕",
+  "정규시즌 MVP",
+  // 타자 8부문 — 실제 KBO 타이틀홀더 시상 부문 그대로
+  "타격왕", "최다안타", "홈런왕", "타점왕", "득점왕", "도루왕", "출루율 1위", "장타율 1위",
+  // 투수 7부문
+  "다승왕", "평균자책점 1위", "탈삼진왕", "세이브왕", "홀드왕", "승률왕", "최다이닝",
 ];
 
 /**
@@ -321,9 +342,10 @@ export const MAJOR_TITLES = [
  * 화면 여러 곳이 참조하므로 **판정과 같은 파일에 두어 어긋나지 않게** 한다.
  */
 export const TITLE_STAT: Record<string, string> = {
-  홈런왕: "hr", 타격왕: "avg", 타점왕: "rbi", 도루왕: "sb",
+  타격왕: "avg", 최다안타: "h", 홈런왕: "hr", 타점왕: "rbi",
+  득점왕: "r", 도루왕: "sb", "출루율 1위": "obp", "장타율 1위": "slg",
   다승왕: "w", "평균자책점 1위": "era", 탈삼진왕: "so",
-  세이브왕: "sv", 홀드왕: "hld",
+  세이브왕: "sv", 홀드왕: "hld", 최다이닝: "ip",
 };
 
 /** 그 기록으로 받은 타이틀 이름 (없으면 null) */
@@ -342,10 +364,15 @@ export function judgeAwards(
 
   if (isHitterLine(line)) {
     if (line.pa < 300) return out;
+    const qualified = line.pa >= 440;          // 규정타석 — 비율 부문은 여기부터
+    if (line.avg >= lead.avg && qualified) out.push("타격왕");
+    if (line.h >= lead.h) out.push("최다안타");
     if (line.hr >= lead.hr) out.push("홈런왕");
-    if (line.avg >= lead.avg && line.pa >= 440) out.push("타격왕");
     if (line.rbi >= lead.rbi) out.push("타점왕");
+    if (line.r >= lead.r) out.push("득점왕");
     if (line.sb >= lead.sb) out.push("도루왕");
+    if (line.obp >= lead.obp && qualified) out.push("출루율 1위");
+    if (line.slg >= lead.slg && qualified) out.push("장타율 1위");
     if (line.war >= 3.6 && rng.chance(0.6)) out.push("골든글러브");
     if (line.war >= 5.4 && rng.chance(0.65)) out.push("정규시즌 MVP");
     if (isRookie && line.war >= 1.8 && rng.chance(0.75)) out.push("신인왕");
@@ -356,6 +383,10 @@ export function judgeAwards(
     if (line.so >= lead.so) out.push("탈삼진왕");
     if (line.sv >= lead.sv) out.push("세이브왕");
     if (line.hld >= lead.hld) out.push("홀드왕");
+    if (line.ip >= lead.ip) out.push("최다이닝");
+    // 승률왕은 실제 KBO도 최소 승수를 둔다 — 3승 1패가 1위가 되면 안 된다
+    const dec = line.w + line.l;
+    if (line.w >= 12 && dec >= 12 && line.w / dec >= lead.pct) out.push("승률왕");
     // 투수 WAR는 구조적으로 타자보다 천장이 낮다(상위3% 4.7 vs 5.9).
     // 같은 문턱을 쓰면 투수가 MVP를 거의 못 받는다 — 자리마다 문턱을 따로 둔다.
     // 골든글러브는 투수 1자리뿐이다(타자는 포지션별 9자리) — 더 희소하게
