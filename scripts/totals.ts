@@ -1,7 +1,7 @@
 /** 통산 기록이 시즌 합계와 맞는지 — 비율 스탯 재계산 검증 */
 import { RNG } from "../src/lib/rng";
 import { rollCandidate } from "../src/lib/player";
-import { newGame, careerTotals } from "../src/lib/career";
+import { newGame, careerTotals, seasonsAtLevel } from "../src/lib/career";
 import { autoPlay } from "./autoplay";
 import { isHitterLine } from "../src/lib/sim";
 import type { HitterLine, PitcherLine } from "../src/lib/types";
@@ -16,7 +16,9 @@ for (const [kind, pos, style] of [
     const rng = new RNG(19000 + i * 41);
     const p = rollCandidate({ name: "샘플", number: 1, kind, position: pos as never, bats: "R", throws: "R", styleId: style }, rng);
     const g = autoPlay(newGame(p, "DAG", rng.int(1, 2 ** 30)));
-    const kbo = g.seasons.filter((s) => s.level === "KBO");
+    // 1군·2군을 오간 시즌은 byLevel로 나뉜다 — careerTotals와 같은 방식으로 뽑아야
+    // 비교가 성립한다 (전체 line을 쓰면 2군 몫까지 더해져 늘 어긋난다)
+    const kbo = seasonsAtLevel(g.seasons, "KBO");
     if (!kbo.length) continue;
     const t = careerTotals(g.seasons, kind, "KBO") as Record<string, number>;
     checked++;

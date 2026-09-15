@@ -1,6 +1,6 @@
 /** 대졸/고졸 신인의 1군 첫 시즌 성적 — 과한지 실측 */
 import { RNG } from "../src/lib/rng";
-import { rollCandidate, overall } from "../src/lib/player";
+import { rollCandidate, overall, makeTrainingOptions, grow } from "../src/lib/player";
 import { newGame } from "../src/lib/career";
 import { autoPlay } from "./autoplay";
 import { isHitterLine } from "../src/lib/sim";
@@ -42,7 +42,7 @@ for (let i = 0; i < 400; i++) {
   const p = rollCandidate({ name: "s", number: 1, kind: "HITTER", position: "CF", bats: "R", throws: "R", styleId: "toolsy" }, rng);
   p.age = 22;
   const before = { ...(p.abilities as unknown as Record<string, number>) };
-  const { makeTrainingOptions, grow } = require("../src/lib/player");
+
   const opts = makeTrainingOptions(p, rng);
   const hell = opts.find((o: { id: string }) => o.id === "hell") ?? opts[0];
   grow(p, rng, hell, 1.0);

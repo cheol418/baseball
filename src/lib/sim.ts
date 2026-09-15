@@ -250,19 +250,30 @@ export function simPitcher(inp: SimInput): PitcherLine {
   const whip = Math.round(((h + bb) / ip) * 100) / 100;
 
   const teamF = (teamPower - 65) * 0.004;
+  /**
+   * 승·패·세이브·홀드는 **언제나 추첨한다**.
+   *
+   * 시즌을 월 단위로 쪼개 부르므로 한 구간의 경기 수가 10 안팎이다.
+   * 불펜의 승률은 경기당 0.05 남짓이라 기댓값이 0.5 근처에서 맴돌고,
+   * 반올림하면 9경기 달에는 0, 10경기 달에는 1로 **계단처럼 갈린다**.
+   * 실제로 40경기 이상 던진 마무리 시즌의 절반이 0승으로 나왔다.
+   * (CLAUDE.md 규칙 7 — 작은 구간은 반올림하지 말고 추첨한다)
+   */
+  const draw = (n: number, prob: number) => rbinom(rng, Math.max(0, Math.round(n)), clamp(prob, 0, 1));
   let w = 0, l = 0, sv = 0, hld = 0;
   if (isSP) {
     const wr = clamp(0.36 + (4.3 - era) * 0.055 + teamF, 0.08, 0.78);
-    w = Math.round(gs * wr);
-    l = Math.round(gs * clamp(0.62 - wr, 0.06, 0.6));
+    w = draw(gs, wr);
+    l = draw(gs, clamp(0.62 - wr, 0.06, 0.6));
   } else if (isCP) {
-    sv = Math.round(g * clamp(0.52 + teamF * 2 - (era - 3.2) * 0.05, 0.12, 0.78));
-    w = Math.round(g * 0.05);
-    l = Math.round(g * 0.06);
+    sv = draw(g, clamp(0.52 + teamF * 2 - (era - 3.2) * 0.05, 0.12, 0.78));
+    // 마무리는 이기는 경기에 나가 지키는 자리다 — 승리보다 블론 뒤의 패가 많다
+    w = draw(g, 0.035);
+    l = draw(g, 0.062);
   } else {
-    hld = Math.round(g * clamp(0.34 + teamF * 2 - (era - 4) * 0.04, 0.05, 0.62));
-    w = Math.round(g * 0.07);
-    l = Math.round(g * 0.06);
+    hld = draw(g, clamp(0.34 + teamF * 2 - (era - 4) * 0.04, 0.05, 0.62));
+    w = draw(g, 0.060);
+    l = draw(g, 0.058);
   }
 
   const ra9 = era * 1.07;
@@ -315,13 +326,13 @@ function leagueLeaders(rng: RNG) {
     obp: rng.float(0.383, 0.420),
     slg: rng.float(0.548, 0.640),
     // 투수
-    w: rng.int(13, 16),
+    w: rng.int(16, 20),
     era: rng.float(2.80, 3.34),
-    so: rng.int(179, 216),
+    so: rng.int(183, 220),
     sv: rng.int(28, 40),
     hld: rng.int(26, 36),
-    ip: rng.int(175, 202),
-    pct: rng.float(0.700, 0.850),
+    ip: rng.int(182, 204),
+    pct: rng.float(0.820, 0.930),
   };
 }
 
@@ -407,6 +418,18 @@ export const POSITION_GROUP = (pos: Position) =>
 /* ------------------------------------------------------------------ */
 /* 성적 합산                                                            */
 /* ------------------------------------------------------------------ */
+
+/**
+ * 이닝 표기 — 야구는 이닝을 **3분의 1 단위**로 쓴다.
+ *
+ * 161과 3분의 2이닝은 `161.2`라고 적지 `161.7`이라고 적지 않는다.
+ * 계산은 실수로 하되(ERA·WHIP), 화면·문구에 낼 때만 .0 / .1 / .2로 바꾼다.
+ */
+export const fmtIP = (v: number) => {
+  const whole = Math.floor(v + 1e-9);
+  const third = Math.round((v - whole) * 3);
+  return third >= 3 ? `${whole + 1}.0` : `${whole}.${third}`;
+};
 
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
 const r2 = (v: number) => Math.round(v * 100) / 100;

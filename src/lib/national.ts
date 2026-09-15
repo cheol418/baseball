@@ -1,6 +1,6 @@
 import { RNG, clamp } from "./rng";
 import { overall } from "./player";
-import { emptyLine, isHitterLine, mergeLines, oneGameShare, simHitter, simPitcher } from "./sim";
+import { emptyLine, fmtIP, isHitterLine, mergeLines, oneGameShare, simHitter, simPitcher } from "./sim";
 import type {
   GameState, HitterLine, IntlGame, IntlResult, MilitaryStatus, PitcherLine, Player, StatLine,
   Tournament, TournamentId,
@@ -293,7 +293,7 @@ export function simTournament(
 
   const perf = isHitterLine(total)
     ? `${total.g}경기 타율 ${total.avg.toFixed(3).replace(/^0/, "")} ${total.hr}홈런`
-    : `${total.g}경기 ${(total as PitcherLine).ip.toFixed(1)}이닝 평균자책 ${(total as PitcherLine).era.toFixed(2)}`;
+    : `${total.g}경기 ${fmtIP((total as PitcherLine).ip)}이닝 평균자책 ${(total as PitcherLine).era.toFixed(2)}`;
 
   return {
     year: s.year,

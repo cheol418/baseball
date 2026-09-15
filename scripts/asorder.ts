@@ -6,7 +6,7 @@ import { autoPlay } from "./autoplay";
 import type { GameState } from "../src/lib/types";
 
 let hidden = 0;
-let review = 0, bustShown = 0, allstarLater = 0, gameLater = 0, scoreEarly = 0;
+let review = 0, scoreEarly = 0;
 const prev = new Map<string, boolean>();
 for (let i = 0; i < 60; i++) {
   const rng = new RNG(900 + i);
@@ -17,11 +17,9 @@ for (let i = 0; i < 60; i++) {
       if (g.phase === "HALF_REVIEW" && g.liveHalf === "H1") {
         review++;
         // 중계에 "불발" 문구가 실제로 들어가는가 (문구는 broadcast.tsx가 만든다)
-        if (!g.allStar) pendingBust = true; else pendingBust = false;
+        pendingBust = !g.allStar;
       }
       if (g.phase === "ALL_STAR") {
-        if (pendingBust && g.allStar) allstarLater++;
-        if (pendingBust && g.allStarGame) gameLater++;
         pendingBust = false;
         // 승부처가 남아 있는데 최종 스코어가 이미 확정돼 화면에 뜬다
         // ALL_STAR 화면이 스코어를 감추는 조건 (page.tsx의 asPending과 같은 식)

@@ -48,6 +48,8 @@ export default function CreatePage() {
   const [school, setSchool] = useState("");
   const schoolInfo = useMemo(() => schoolOf(school), [school]);
   const [number, setNumber] = useState(7);
+  // 입력 중에는 빈 칸을 허용해야 지우고 다시 칠 수 있다 — 확정값은 `number`가 쥔다
+  const [numberText, setNumberText] = useState("7");
   const [kind, setKind] = useState<Kind>("HITTER");
   const [position, setPosition] = useState<Position>("CF");
   const [bats, setBats] = useState<Hand>("R");
@@ -101,6 +103,7 @@ export default function CreatePage() {
       setName(o.name);
       setSchool(o.school);
       setNumber(o.number);
+      setNumberText(String(o.number));
       // 구분이 바뀌면 유형·포지션도 함께 옮겨야 앞뒤가 맞는다
       if (o.kind !== kind) switchKind(o.kind);
       setBats(o.bats);
@@ -185,16 +188,22 @@ export default function CreatePage() {
             </Field>
 
             <Field label="등번호">
-              <div className="flex items-center gap-2">
-                <input
-                  type="range" min={0} max={99} value={number}
-                  onChange={(e) => setNumber(Number(e.target.value))}
-                  className="h-1.5 flex-1 accent-[var(--brand)]"
-                />
-                <span className="tabular w-10 rounded-lg bg-[var(--brand)] py-1 text-center text-[13px] font-black text-white">
-                  {number}
-                </span>
-              </div>
+              {/*
+                슬라이더로는 원하는 번호를 딱 맞추기 어렵다 — 등번호는 폭이
+                아니라 "그 번호"라서, 직접 치는 편이 빠르다.
+                비운 상태(빈 문자열)를 허용해야 지우고 다시 칠 수 있다.
+              */}
+              <input
+                type="text" inputMode="numeric" value={numberText}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/[^0-9]/g, "").slice(0, 2);
+                  setNumberText(v);
+                  if (v !== "") setNumber(Number(v));
+                }}
+                onBlur={() => { if (numberText === "") setNumberText(String(number)); }}
+                placeholder="0~99" maxLength={2}
+                className="tabular w-full rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2.5 text-[14px] outline-none focus:border-[var(--brand)]"
+              />
             </Field>
 
             <Field label="선수 구분">

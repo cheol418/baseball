@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { fmt2, fmt3 } from "./stats";
+import { fmt2, fmt3, fmtIP } from "./stats";
 import { isHitterLine, mergeLines } from "@/lib/sim";
 import { TOURNAMENTS } from "@/lib/national";
 import { formatMoney } from "@/lib/career";
@@ -51,7 +51,7 @@ function cells(line: StatLine): { k: string; v: string }[] {
   const p = line as PitcherLine;
   return [
     { k: "ERA", v: p.ip ? fmt2(p.era) : "-" },
-    { k: "IP", v: p.ip.toFixed(1) },
+    { k: "IP", v: fmtIP(p.ip) },
     { k: p.sv > p.hld ? "SV" : p.hld > 0 ? "HLD" : "W-L", v: p.sv > p.hld ? String(p.sv) : p.hld > 0 ? String(p.hld) : `${p.w}-${p.l}` },
     { k: "SO", v: String(p.so) },
   ];

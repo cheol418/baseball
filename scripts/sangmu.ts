@@ -4,7 +4,8 @@ import { rollCandidate } from "../src/lib/player";
 import { newGame } from "../src/lib/career";
 import { autoPlay } from "./autoplay";
 
-let careers = 0, applied = 0, passed = 0, exempt = 0, active = 0, tries: number[] = [];
+let careers = 0, applied = 0, passed = 0, exempt = 0, active = 0;
+const tries: number[] = [];
 
 for (const [kind, pos, style] of [
   ["HITTER", "CF", "toolsy"], ["PITCHER", "SP", "power_p"],

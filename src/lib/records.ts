@@ -1,7 +1,7 @@
 import { RNG } from "./rng";
 import { deriveStyle } from "./player";
 import { isFranchiseRole, isRotationRole, roleTier } from "./roles";
-import { isHitterLine } from "./sim";
+import { fmtIP, isHitterLine } from "./sim";
 import type { GameState, Kind, SeasonGoal, SeasonRecord, StatLine, PitcherLine, HitterLine } from "./types";
 
 /* ------------------------------------------------------------------ */
@@ -152,7 +152,7 @@ export function judgeSeasonGoal(
   /** 투수도 마찬가지 — 이닝·등판 수 조건을 먼저 본다 */
   const ipGate = (need: number, hit: boolean, miss: string) =>
     p.ip < need
-      ? { met: false, reason: `${need}이닝을 채우지 못했습니다 (${p.ip.toFixed(1)}이닝).` }
+      ? { met: false, reason: `${need}이닝을 채우지 못했습니다 (${fmtIP(p.ip)}이닝).` }
       : ok(hit, miss);
   const gGate = (need: number, hit: boolean, miss: string) =>
     p.g < need
@@ -198,8 +198,8 @@ export function judgeSeasonGoal(
     /* 투수 — 선발 */
     case "w12": return ok(p.w >= 12, `12승에 미치지 못했습니다 (${p.w}승).`);
     case "qs15": return ok(p.w >= 13, `13승에 미치지 못했습니다 (${p.w}승).`);
-    case "ip170": return ok(p.ip >= 165, `165이닝에 미치지 못했습니다 (${p.ip.toFixed(1)}이닝).`);
-    case "ip140": return ok(p.ip >= 150, `150이닝에 미치지 못했습니다 (${p.ip.toFixed(1)}이닝).`);
+    case "ip170": return ok(p.ip >= 165, `165이닝에 미치지 못했습니다 (${fmtIP(p.ip)}이닝).`);
+    case "ip140": return ok(p.ip >= 150, `150이닝에 미치지 못했습니다 (${fmtIP(p.ip)}이닝).`);
     case "so150": return ok(p.so >= 140, `140탈삼진에 미치지 못했습니다 (${p.so}탈삼진).`);
     case "era400": return ipGate(100, p.era <= 4.00, `평균자책 4.00을 넘겼습니다 (${p.era.toFixed(2)}).`);
     case "era300ace": return ipGate(140, p.era <= 3.00, `평균자책 3.00을 넘겼습니다 (${p.era.toFixed(2)}).`);

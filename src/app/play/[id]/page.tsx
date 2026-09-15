@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 import { AbilityBar, AppBar, Column, Container, Empty, Fold, Pill, Section, SeasonProgress } from "@/components/ui";
 import { Broadcast, type BroadcastKind } from "@/components/broadcast";
-import { KeyStats, SeasonTable, fmt2, fmt3 } from "@/components/stats";
+import { KeyStats, SeasonTable, fmt2, fmt3, fmtIP } from "@/components/stats";
 import {
   FA_SERVICE, MAX_SALARY, MILITARY_DEADLINE, MILITARY_OPTIONS, advance,
   canVolunteer, careerTotals, computeHof, draftForecast, formatMoney, sangmuOdds,
@@ -432,7 +432,7 @@ function SplitBox({ rec }: { rec: SeasonRecord }) {
   const full = rec.line;
   const row = (l: StatLine) => isHitterLine(l)
     ? [fmt3(l.avg), String(l.hr), String(l.rbi), fmt3(l.ops)]
-    : [fmt2((l as PitcherLine).era), (l as PitcherLine).ip.toFixed(1),
+    : [fmt2((l as PitcherLine).era), fmtIP((l as PitcherLine).ip),
        String((l as PitcherLine).so), fmt2((l as PitcherLine).whip)];
   const head = isHitterLine(full) ? ["AVG", "HR", "RBI", "OPS"] : ["ERA", "IP", "SO", "WHIP"];
   // 후반기 = 시즌 전체 − 전반기
@@ -473,7 +473,7 @@ function PostseasonBox({ rec }: { rec: SeasonRecord }) {
   const row = (l: StatLine) => hitter
     ? [String(l.g), fmt3((l as HitterLine).avg), String((l as HitterLine).hr),
        String((l as HitterLine).rbi), fmt3((l as HitterLine).ops)]
-    : [String(l.g), (l as PitcherLine).ip.toFixed(1), fmt2((l as PitcherLine).era),
+    : [String(l.g), fmtIP((l as PitcherLine).ip), fmt2((l as PitcherLine).era),
        String((l as PitcherLine).so), fmt2((l as PitcherLine).whip)];
 
   return (
@@ -1426,7 +1426,7 @@ function IntlBox({ res }: { res: IntlResult }) {
   const row = (l: StatLine) => hitter
     ? [String(l.g), fmt3((l as HitterLine).avg), String((l as HitterLine).hr),
        String((l as HitterLine).rbi), fmt3((l as HitterLine).ops)]
-    : [String(l.g), (l as PitcherLine).ip.toFixed(1), fmt2((l as PitcherLine).era),
+    : [String(l.g), fmtIP((l as PitcherLine).ip), fmt2((l as PitcherLine).era),
        String((l as PitcherLine).so), fmt2((l as PitcherLine).whip)];
   const icon = res.medal === "금" ? "🥇" : res.medal === "은" ? "🥈" : res.medal === "동" ? "🥉"
     : TOURNAMENTS[res.tournamentId].icon;
@@ -1558,7 +1558,7 @@ function Strip({ label, line, where }: {
   const cells = isHitterLine(line)
     ? [["AVG", fmt3(line.avg)], ["HR", String(line.hr)], ["RBI", String(line.rbi)],
        ["OPS", fmt3(line.ops)], ["WAR", line.war.toFixed(1)]]
-    : [["ERA", fmt2((line as PitcherLine).era)], ["IP", (line as PitcherLine).ip.toFixed(1)],
+    : [["ERA", fmt2((line as PitcherLine).era)], ["IP", fmtIP((line as PitcherLine).ip)],
        ["SO", String((line as PitcherLine).so)],
        ["WHIP", fmt2((line as PitcherLine).whip)], ["WAR", line.war.toFixed(1)]];
   return (
@@ -1634,7 +1634,7 @@ function DetailLine({ line, awards }: { line: StatLine; awards?: string[] }) {
     ? [["G", line.g], ["PA", line.pa], ["H", line.h, "h"], ["2B", line.b2], ["3B", line.b3],
        ["R", line.r, "r"], ["BB", line.bb], ["SO", line.so], ["SB", line.sb, "sb"],
        ["OBP", fmt3(line.obp), "obp"], ["SLG", fmt3(line.slg), "slg"]]
-    : [["G", line.g], ["GS", (line as PitcherLine).gs], ["IP", (line as PitcherLine).ip.toFixed(1), "ip"],
+    : [["G", line.g], ["GS", (line as PitcherLine).gs], ["IP", fmtIP((line as PitcherLine).ip), "ip"],
        ["SV", (line as PitcherLine).sv, "sv"], ["HLD", (line as PitcherLine).hld, "hld"],
        ["H", line.h], ["BB", line.bb], ["SO", line.so, "so"], ["HR", (line as PitcherLine).hrAllowed],
        ["WHIP", fmt2((line as PitcherLine).whip)], ["K/9", fmt2((line as PitcherLine).k9)]];

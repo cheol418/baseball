@@ -1,10 +1,13 @@
 "use client";
 
-import { isHitterLine, titleOfStat } from "@/lib/sim";
+import { fmtIP, isHitterLine, titleOfStat } from "@/lib/sim";
+
+export { fmtIP };
 import type { HitterLine, PitcherLine, SeasonRecord, StatLine } from "@/lib/types";
 
 export const fmt3 = (v: number) => (v === 0 ? ".000" : v.toFixed(3).replace(/^0/, ""));
 export const fmt2 = (v: number) => v.toFixed(2);
+
 
 const LEVEL_LABEL: Record<string, string> = { HS: "고교", COLLEGE: "대학", MINOR: "2군", KBO: "1군" };
 
@@ -67,7 +70,7 @@ const HIT_COLS: { k: string; label: string; get: (l: HitterLine) => string | num
 
 const PIT_COLS: { k: string; label: string; get: (l: PitcherLine) => string | number }[] = [
   { k: "g", label: "G", get: (l) => l.g }, { k: "gs", label: "GS", get: (l) => l.gs },
-  { k: "ip", label: "IP", get: (l) => l.ip.toFixed(1) }, { k: "w", label: "W", get: (l) => l.w },
+  { k: "ip", label: "IP", get: (l) => fmtIP(l.ip) }, { k: "w", label: "W", get: (l) => l.w },
   { k: "l", label: "L", get: (l) => l.l }, { k: "sv", label: "SV", get: (l) => l.sv },
   { k: "hld", label: "HLD", get: (l) => l.hld }, { k: "so", label: "SO", get: (l) => l.so },
   { k: "bb", label: "BB", get: (l) => l.bb }, { k: "h", label: "H", get: (l) => l.h },

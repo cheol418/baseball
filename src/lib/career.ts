@@ -1902,6 +1902,14 @@ export function advance(prev: GameState, action: Action): GameState {
           ps.clutch = r;
           ps.line = applyClutchToLine(ps.line, r);
           /**
+           * 승부처는 **마지막 시리즈의 한 타석**이다.
+           * 합계에만 얹고 시리즈별 기록을 그대로 두면, 상세 표의 합이
+           * 합계와 1씩 어긋난다 — 같은 사실을 두 곳에 적어 두면 갈라진다.
+           * (실제로 겪음: 가을야구 안타 합계가 늘 시리즈합 +1)
+           */
+          const lastRound = ps.rounds[ps.rounds.length - 1];
+          if (lastRound) lastRound.line = applyClutchToLine(lastRound.line, r);
+          /**
            * 가을야구는 시즌을 닫은 뒤(중계 중)에 승부처를 치른다.
            * clone()이 JSON 왕복이라 SeasonRecord.ps와 s.postseason은 이미
            * 서로 다른 객체다 — 둘 다 손대지 않으면 기록에 남지 않는다.
@@ -1924,6 +1932,9 @@ export function advance(prev: GameState, action: Action): GameState {
         return settle(intl.clutchSituation, (r) => {
           intl.clutch = r;
           intl.line = applyClutchToLine(intl.line, r);
+          // 승부처는 마지막으로 출장한 경기의 한 타석이다 — 경기별 기록에도 얹는다
+          const lastGame = [...intl.games].reverse().find((x) => x.appeared);
+          if (lastGame) lastGame.line = applyClutchToLine(lastGame.line, r);
         }, 2) ?? s;
       }
 
