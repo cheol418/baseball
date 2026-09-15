@@ -306,7 +306,7 @@ export default function CreatePage() {
                     <span className="block truncate text-[12.5px] font-bold">{t.short}</span>
                     <span className="block text-[10px] text-[var(--ink-3)]">{t.city} · 전력 {t.power}</span>
                     <span className="block truncate text-[9.5px] text-[var(--ink-3)]">
-                      {t.park.hr >= 1.1 ? "🔥" : t.park.hr <= 0.92 ? "🧊" : "▪️"} {t.park.name}
+                      {t.park.hr >= 1.06 ? "🔥" : t.park.hr <= 0.95 ? "🧊" : "▪️"} {t.park.name}
                     </span>
                   </span>
                 </button>
@@ -315,7 +315,7 @@ export default function CreatePage() {
             <p className="mt-2 text-[11px] leading-relaxed text-[var(--ink-3)]">
               희망 구단에 반드시 지명되는 것은 아닙니다 (지명 순위가 높고 육성 성향이 강한 팀일수록 확률이 오릅니다).
               <b> 못 가더라도 그 구단은 이적·FA 시장에서 끝까지 관심을 보이고, 그 유니폼을 입은 해에는 구단 신뢰와 동료 관계가 더 쌓입니다.</b>
-              🔥는 타자친화, 🧊는 투수친화 구장입니다 — 같은 기량도 구장에 따라 성적이 달라집니다.
+              🔥는 타자친화, 🧊는 투수친화 구장입니다. 한 시즌 기준 홈런 ±1개, OPS ±13 정도로 흐름을 바꿉니다 — 거들 뿐, 커리어를 뒤집지는 않습니다.
             </p>
           </div>
         </Section>
