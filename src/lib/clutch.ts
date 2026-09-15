@@ -287,6 +287,55 @@ const STAGE_SCENES: Record<string, { eyebrow: string; title: string; body: strin
   ],
 };
 
+
+/**
+ * 투수용 장면.
+ *
+ * 무대 장면(고교·대학·2군·올스타·국대·가을)을 타자와 투수가 함께 쓰면,
+ * 투수에게 "고교 시절의 **한 타석**"이 뜨고 선택지는 "병살을 유도한다"가
+ * 된다 — 장면과 선택이 따로 논다. (실제로 겪음)
+ * 같은 무대라도 서 있는 자리가 다르므로 문장을 따로 쓴다.
+ */
+const HS_SCENES_P = [
+  { eyebrow: "전국대회 8강 9회말", title: "고교 시절의 마지막 한 구", body: "스탠드에 프로 스카우트들이 앉아 있습니다. 이 한 구가 드래프트를 바꿉니다." },
+  { eyebrow: "결승 연장 마운드", title: "3학년의 마지막 여름", body: "지면 여기서 끝입니다. 더 이상 다음이 없습니다." },
+  { eyebrow: "지역 예선 결승 등판", title: "전국으로 가는 문", body: "여기서 지면 전국대회 마운드를 밟지 못합니다." },
+  { eyebrow: "부모님이 보러 온 날", title: "스탠드의 두 사람", body: "처음으로 경기장에 오셨습니다. 3루 쪽 스탠드에 앉아 계십니다." },
+  { eyebrow: "라이벌 학교 4번 타자", title: "3년을 벼른 승부", body: "중학교 때부터 이 타자에게 당해 왔습니다. 마지막 기회입니다." },
+];
+
+const COLLEGE_SCENES_P = [
+  { eyebrow: "대학 선수권 준결승", title: "다시 증명할 차례", body: "고교 때 받지 못한 평가를 뒤집을 기회입니다." },
+  { eyebrow: "프로 스카우트 앞에서", title: "스피드건이 켜져 있다", body: "이 한 구의 구속으로 지명 순위가 달라집니다." },
+  { eyebrow: "4학년 마지막 대회", title: "이번이 아니면 없다", body: "여기서 못 보여주면 지명을 못 받을 수도 있습니다." },
+  { eyebrow: "고교 동기와 맞대결", title: "먼저 프로로 간 친구", body: "같이 뛰던 동기는 이미 1군에 있습니다. 오늘 상대는 그 학교입니다." },
+  { eyebrow: "전국대회 개막 선발", title: "긴 시즌의 첫 마운드", body: "지난해 우승팀과 맞붙습니다." },
+];
+
+const MINOR_SCENES_P = [
+  { eyebrow: "퓨처스 9회 1점 차", title: "1군이 보고 있다", body: "스카우트와 코칭스태프가 관중석에 앉아 있습니다. 여기서 보여줘야 합니다." },
+  { eyebrow: "콜업을 앞둔 등판", title: "마지막 시험대", body: "이 등판 결과로 1군 등록이 갈릴 수 있습니다." },
+  { eyebrow: "재활 등판 마지막 날", title: "팔은 다 만들었다", body: "오늘만 무사히 넘기면 1군으로 올라갑니다." },
+  { eyebrow: "관중 200명 앞에서", title: "아무도 보지 않아도", body: "빈 스탠드입니다. 그래도 기록은 남습니다." },
+  { eyebrow: "강등 첫 등판", title: "내려온 자리에서", body: "어제까지 1군이었습니다. 다시 올라가려면 여기서 시작해야 합니다." },
+  { eyebrow: "퓨처스 올스타 선발", title: "2군의 에이스", body: "이 무대에서 잘하면 1군 코칭스태프의 눈에 듭니다." },
+];
+
+const STAGE_SCENES_P: Record<string, { eyebrow: string; title: string; body: string }[]> = {
+  AS: [
+    { eyebrow: "올스타전 8회 등판", title: "별들 사이에서", body: "만원 관중과 전국 중계. 이 한 이닝이 하이라이트에 남습니다." },
+    { eyebrow: "올스타전 9회 2사", title: "마지막 순간", body: "한 점 차. 오늘의 MVP가 여기서 갈립니다." },
+  ],
+  INTL: [
+    { eyebrow: "국제대회 결승 8회", title: "태극마크의 무게", body: "온 나라가 지켜보고 있습니다. 여기서 물러설 수 없습니다." },
+    { eyebrow: "숙적의 4번 타자", title: "질 수 없는 승부", body: "상대는 늘 우리를 괴롭혀 온 타자입니다." },
+  ],
+  PS: [
+    { eyebrow: "한국시리즈 9회말 마운드", title: "가을의 주인공", body: "이 한 구로 시리즈의 흐름이 정해집니다." },
+    { eyebrow: "가을야구 연장 10회", title: "막지 못하면 끝난다", body: "더그아웃의 모두가 일어서 있습니다." },
+  ],
+};
+
 /**
  * 큰 무대에 걸리는 승부처.
  * 리그 경기보다 인지도가 크게 움직인다 — 보는 눈이 다르다.
@@ -296,7 +345,9 @@ export function rollStageClutch(
 ): Clutch {
   const hitter = s.player.kind === "HITTER";
   const scene = rng.pick(
-    stage === "HS" ? HS_SCENES : stage === "COLLEGE" ? COLLEGE_SCENES : STAGE_SCENES[stage],
+    stage === "HS" ? (hitter ? HS_SCENES : HS_SCENES_P)
+      : stage === "COLLEGE" ? (hitter ? COLLEGE_SCENES : COLLEGE_SCENES_P)
+        : (hitter ? STAGE_SCENES : STAGE_SCENES_P)[stage],
   );
   return {
     monthIndex: -1,
@@ -320,7 +371,7 @@ export function rollClutch(
   if (!s.contract || (s.seasonLevel !== "KBO" && s.seasonLevel !== "MINOR")) return null;
   const hitter = s.player.kind === "HITTER";
   const scenes = s.seasonLevel === "MINOR"
-    ? MINOR_SCENES
+    ? (hitter ? MINOR_SCENES : MINOR_SCENES_P)
     : hitter
       ? HIT_SCENES
       : isRotationRole(s.seasonRole ?? "") ? PIT_SCENES_SP : PIT_SCENES_RP;

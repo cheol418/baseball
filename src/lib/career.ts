@@ -1904,10 +1904,30 @@ export function advance(prev: GameState, action: Action): GameState {
         const RG = resolveEffect(s);
         const { deltas } = grow(s.player, rng, opt, devRate * RG.growth, hellMul,
           { breakMul: RG.breakMul, declineGuard: RG.declineGuard });
-        const ups = (Object.entries(deltas) as [string, number][]).filter(([, v]) => v > 0);
-        const gainText = ups.length
-          ? `능력치 상승: ${ups.map(([k, v]) => `${ABILITY_LABEL[k] ?? k} +${v}`).join(", ")}`
-          : "눈에 띄는 성장은 없었습니다.";
+        /**
+         * 오른 것만 보여주면 화면이 거짓말을 한다.
+         *
+         * 서른다섯 선수는 훈련이 잘 풀려도 노쇠가 상승분을 상쇄해 **총합이
+         * 0 근처**가 된다. 오른 항목만 세면 "훈련이 잘 풀렸다 · 성장 없음"이
+         * 되어 앞뒤가 안 맞는다. 실제로는 구속 +2, 스태미나 −3처럼
+         * 오르내림이 같이 있었다. (실제로 겪음)
+         * 내려간 것도 같이 적고, 나이가 들어 방어가 성과인 때는 그렇게 말한다.
+         */
+        const moves = (Object.entries(deltas) as [string, number][])
+          .filter(([, v]) => v !== 0)
+          .sort((a, b) => b[1] - a[1]);
+        const ups = moves.filter(([, v]) => v > 0);
+        const downs = moves.filter(([, v]) => v < 0);
+        const fmtMove = (list: [string, number][]) =>
+          list.map(([k, v]) => `${ABILITY_LABEL[k] ?? k} ${v > 0 ? "+" : "−"}${Math.abs(v)}`).join(", ");
+        const gainText = moves.length
+          ? [ups.length ? `상승 ${fmtMove(ups)}` : "", downs.length ? `하락 ${fmtMove(downs)}` : ""]
+            .filter(Boolean).join(" · ")
+          : (s.player.age >= 31
+            ? "오르지도 내리지도 않았습니다. 이 나이엔 지키는 것도 성과입니다."
+            : "눈에 띄는 성장은 없었습니다.");
+        // 나이가 들어 하락을 막은 해는 "성장 없음"이 아니라 "방어"다
+        const defended = s.player.age >= 31 && !ups.length && downs.length > 0;
 
         if (hell) {
           const left = HELL_LIMIT - (s.hellUsed ?? 0);
@@ -1933,14 +1953,14 @@ export function advance(prev: GameState, action: Action): GameState {
               ? `${opt.name} — 몸을 갈아 넣은 겨울이 결실을 맺었습니다.`
               : `${opt.name} — 몸이 따라주지 않았습니다. 늘긴 했지만, 갈아 넣은 값은 못 했습니다.`,
             change: [
-              { label: "훈련 결과", from: "—", to: ups.length ? ups.map(([k, v]) => `${ABILITY_LABEL[k] ?? k} +${v}`).join(" · ") : "성장 없음" },
+              { label: "훈련 결과", from: "—", to: moves.length ? fmtMove(moves.slice(0, 4)) : "변화 없음" },
               { label: "남은 기회", from: `${left + 1}회`, to: `${left}회` },
             ],
           });
         } else if (grade) {
           log(s, {
             icon: grade.icon, title: `${opt.name} — ${grade.label}`, tone: grade.tone,
-            body: `${grade.note} ${gainText}`,
+            body: `${defended ? "나이를 이길 수는 없지만, 갈아 넣은 만큼 덜 빠졌습니다." : grade.note} ${gainText}`,
           });
           // 훈련은 선수가 직접 고른 선택이다 — 결과를 로그에만 남기면
           // 무엇이 달라졌는지 모른 채 시즌으로 넘어간다. 오버레이로 띄운다.
@@ -1949,7 +1969,7 @@ export function advance(prev: GameState, action: Action): GameState {
             body: `${opt.name} — ${grade.note}`,
             change: [
               { label: "훈련 방향", from: "—", to: opt.name },
-              { label: "능력치", from: "—", to: ups.length ? ups.map(([k, v]) => `${ABILITY_LABEL[k] ?? k} +${v}`).join(" · ") : "성장 없음" },
+              { label: "능력치", from: "—", to: moves.length ? fmtMove(moves.slice(0, 4)) : (s.player.age >= 31 ? "지켜냈다" : "변화 없음") },
             ],
           });
         }
