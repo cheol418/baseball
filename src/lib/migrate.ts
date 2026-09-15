@@ -36,6 +36,8 @@ export function migrateSave(raw: unknown): GameState | null {
   // 올해의 각오 — 구버전 세이브는 각오 없이(중립 보정) 이어간다
   def("seasonResolve", null);
   def("resolveHistory", []);
+  // 동기 — 구버전 세이브는 동기 없이 이어간다(중간에 만들면 나이가 어긋난다)
+  def("rivals", []);
   def("liveHalf", null);
   def("retireRefusedYear", null);
   def("rookieDeal", null);

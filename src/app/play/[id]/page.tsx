@@ -23,8 +23,9 @@ import {
   HAND_LABEL, overall, platoonProfile, POSITION_LABEL, scoutedOverall,
   scoutedPotential, traitById,
 } from "@/lib/player";
-import { isHitterLine, subtractLine, titleOfStat } from "@/lib/sim";
+import { isHitterLine, MAJOR_TITLES, subtractLine, titleOfStat } from "@/lib/sim";
 import { RESOLVES } from "@/lib/resolve";
+import { myRankAmong } from "@/lib/rivals";
 import { saveGame, useGame } from "@/lib/storage";
 import { isFranchiseRole } from "@/lib/roles";
 import { teamById } from "@/lib/teams";
@@ -1675,6 +1676,60 @@ function DetailLine({ line, awards }: { line: StatLine; awards?: string[] }) {
   );
 }
 
+/**
+ * 동기 보드 — 같은 해에 지명받은 선수들이 지금 어디까지 왔는가.
+ * "내가 리그 1위"보다 "내가 류태호를 제쳤다"가 기록에 무게를 싣는다.
+ */
+function RivalBoard({ g, myWar }: { g: GameState; myWar: number }) {
+  const rows = [
+    ...(g.rivals ?? []).map((r) => ({
+      key: r.id, name: r.name, teamId: r.teamId, pick: `${r.pick}순위`,
+      pos: r.position, seasons: r.seasons, war: r.war,
+      titles: r.titles, mvp: r.mvp, gone: r.retiredYear, epitaph: r.epitaph, me: false,
+    })),
+    {
+      key: "me", name: g.player.name, teamId: g.contract?.teamId ?? "-",
+      pick: g.draftPick ? `${g.draftPick}순위` : "—",
+      pos: g.player.position,
+      seasons: seasonsAtLevel(g.seasons, "KBO").length, war: myWar,
+      titles: g.seasons.reduce((a, s) => a + s.awards.filter((w) => MAJOR_TITLES.includes(w) && w !== "정규시즌 MVP").length, 0),
+      mvp: g.seasons.reduce((a, s) => a + s.awards.filter((w) => w === "정규시즌 MVP").length, 0),
+      gone: null as number | null, epitaph: null as string | null, me: true,
+    },
+  ].sort((a, b) => b.war - a.war);
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {rows.map((r, i) => (
+        <div key={r.key}
+          className="flex items-center gap-2 rounded-lg px-2.5 py-2"
+          style={{
+            background: r.me ? "var(--brand)" : "var(--surface-2)",
+            color: r.me ? "#fff" : undefined,
+            opacity: r.gone ? 0.6 : 1,
+          }}>
+          <span className={`num w-[18px] shrink-0 text-center text-[12px] font-black ${r.me ? "" : "text-[var(--ink-3)]"}`}>{i + 1}</span>
+          <Emblem teamId={r.teamId} size={20} />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[12.5px] font-extrabold">
+              {r.name}{r.me && " (나)"}
+            </span>
+            <span className={`block text-[9.5px] ${r.me ? "opacity-70" : "text-[var(--ink-3)]"}`}>
+              {r.pick} · {r.pos} · {r.seasons}시즌{r.gone ? ` · ${r.gone} 은퇴` : ""}
+            </span>
+          </span>
+          <span className="shrink-0 text-right">
+            <span className="num block text-[13px] font-black">{r.war.toFixed(1)}</span>
+            <span className={`block text-[9px] ${r.me ? "opacity-70" : "text-[var(--ink-3)]"}`}>
+              WAR{r.mvp ? ` · MVP ${r.mvp}` : r.titles ? ` · 타이틀 ${r.titles}` : ""}
+            </span>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function CareerTab({ g }: { g: GameState }) {
   const kbo = seasonsAtLevel(g.seasons, "KBO");
   // 1군을 오간 시즌은 2군 표에도 그 몫만 들어간다
@@ -1696,6 +1751,15 @@ function CareerTab({ g }: { g: GameState }) {
           ? <Empty>아직 1군 기록이 없습니다.</Empty>
           : <SeasonTable seasons={kbo} kind={g.player.kind} totals={totals as unknown as Record<string, number>} />}
       </Section>
+
+      {!!g.rivals?.length && (
+        <Section eyebrow="Draft Class" title={`${g.rivals.length + 1}인의 동기`}>
+          <Fold title="같은 해에 지명받은 선수들"
+            count={`통산 WAR ${myRankAmong(g.rivals, (totals as unknown as Record<string, number>).war)}위 / ${g.rivals.length + 1}명`}>
+            <RivalBoard g={g} myWar={(totals as unknown as Record<string, number>).war} />
+          </Fold>
+        </Section>
+      )}
 
       {allTimeRanks(g.seasons, g.player.kind).length > 0 && (
         <Section eyebrow="All-Time" title="KBO 역대 순위">

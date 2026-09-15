@@ -6,7 +6,7 @@ import {
   potentialOverall, setAb,
 } from "./player";
 import {
-  emptyLine, HALF_SHARE, isHitterLine, judgeAllStar, judgeAwards, LEVEL_GAMES, MAJOR_TITLES, mergeLines,
+  emptyLine, HALF_SHARE, isHitterLine, judgeAllStar, judgeAwards, LEVEL_GAMES, leagueLeaders, MAJOR_TITLES, mergeLines, TITLE_STAT,
   simAllStarGame, simHitter, simPitcher,
 } from "./sim";
 import {
@@ -16,6 +16,7 @@ import type { Clutch, ClutchResult } from "./clutch";
 import { applyClutchToLine, resolveClutch, rollClutch, rollStageClutch } from "./clutch";
 import { judgeMonthForm, potmOdds } from "./form";
 import { RESOLVES, resolveEffect } from "./resolve";
+import { advanceRivals, makeRivals, settleTitles } from "./rivals";
 import { PS_CUT, simPostseason } from "./postseason";
 import {
   defaultRoleOf, isEverydayRole, isFranchiseRole, isRotationRole, minorRoleOf, roleTier,
@@ -1110,7 +1111,10 @@ function simPart(s: GameState, rng: RNG, from: number, to: number): StatLine {
     player: p, level, role,
     teamPower: team?.power ?? 62,
     park: team?.park,
-    availability: clamp(s.seasonAvailability * R.playing, 0, 1.05), rng,
+    // 출장 배수는 **1을 넘지 않는다** — 한 시즌은 144경기가 전부다.
+    // 1.05까지 허용했더니 선발이 232이닝을 던졌다. (실제로 겪음)
+    // 배수는 다친 해·자리가 흔들리는 해에만 실제로 작동한다.
+    availability: clamp(s.seasonAvailability * R.playing, 0, 1), rng,
     share: to - from,
     cume: [from, to] as const,
     extraAdj: R.adj,
@@ -1327,8 +1331,43 @@ function closeSeason(s: GameState, rng: RNG) {
     : s.kboShare >= 0.35 ? "KBO" : "MINOR";
   const regular = s.seasonLine ?? mergeLines([s.halfLine]);
   const isRookie = level === "KBO" && s.serviceYears === 0;
-  const awards = judgeAwards(p, regular, level, isRookie, rng);
+  // 그 해의 리그 기준선은 한 번만 뽑아 나와 동기가 **같은 선**을 놓고 다툰다
+  const lead = leagueLeaders(rng);
+  const awards = judgeAwards(p, regular, level, isRookie, rng, lead);
   if (s.allStar) awards.unshift("올스타");
+
+  // 동기들도 한 해를 치른다 — 부문 1위는 리그에 한 명뿐이다
+  if (s.rivals?.length) {
+    s.rivals = advanceRivals(s.rivals, rng, s.year, lead);
+    if (level === "KBO") {
+      const settled = settleTitles(awards, regular, s.rivals, TITLE_STAT);
+      awards.length = 0;
+      awards.push(...settled.mine);
+      for (const { title, to } of settled.lost) {
+        log(s, {
+          icon: "😤", title: `${title}을(를) 놓쳤다`, tone: "bad",
+          body: `${teamById(to.teamId)?.short ?? ""} ${to.name}에게 밀렸습니다. 같은 해에 지명받은 동기입니다.`,
+        });
+      }
+    }
+    const justRetired = s.rivals.filter((r) => r.retiredYear === s.year);
+    for (const r of justRetired) {
+      log(s, {
+        icon: "🎽", title: `동기 ${r.name} 은퇴`, tone: "neutral",
+        body: `${r.epitaph ?? ""} 같은 해에 지명받아 함께 뛰던 선수입니다.`,
+      });
+    }
+    // 동기가 받은 상은 리그 소식으로 전한다 — 내 상만 보이면 리그가 비어 보인다
+    const shout = s.rivals
+      .filter((r) => r.lastAwards.some((a) => a === "정규시즌 MVP" || MAJOR_TITLES.includes(a)))
+      .slice(0, 2);
+    for (const r of shout) {
+      log(s, {
+        icon: "📰", title: `동기 ${r.name} ${r.lastAwards[0]}`, tone: "neutral",
+        body: `${teamById(r.teamId)?.short ?? ""} ${r.name}이(가) ${r.lastAwards.join(" · ")}을(를) 받았습니다.`,
+      });
+    }
+  }
 
   const rec: SeasonRecord = {
     year: s.year, age: p.age, level,
@@ -1624,6 +1663,8 @@ export function advance(prev: GameState, action: Action): GameState {
     case "DO_DRAFT": {
       runDraft(s, rng);
       if (s.phase !== "PATH_CHOICE") {
+        // 같은 해에 지명받은 동기들 — 여기서부터 같이 늙는다
+        s.rivals = makeRivals(rng, s.contract?.teamId ?? "DAG", s.player.age + 1, s.player.kind);
         // 지명을 받은 뒤 한 해를 넘겨 프로 첫 캠프에 합류한다 (가을 지명 → 이듬해 봄 입단)
         s.player.age += 1;
         s.year += 1;

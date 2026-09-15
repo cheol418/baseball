@@ -390,6 +390,8 @@ export interface GameState {
   seasonResolve?: string | null;
   /** 지난 각오들 (무엇을 택해 온 선수인가) */
   resolveHistory?: string[];
+  /** 드래프트 동기 — 같이 늙어가며 타이틀과 순위를 다툰다 */
+  rivals?: import("./rivals").Rival[];
 
   /* --- 시즌 진행 --- */
   /** 직전에 치른 반기의 월별 성적 (중계 재생용) */

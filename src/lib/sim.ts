@@ -314,7 +314,9 @@ function emptyPitcher(): PitcherLine {
  * (실제로 겪음: 타율 기준선만 실제 KBO 값으로 둬서 타격왕이 0.1%,
  *  탈삼진은 기준선이 낮아 9.6% — 같은 리그에서 난이도가 100배 벌어졌다)
  */
-function leagueLeaders(rng: RNG) {
+export type LeagueLeaders = ReturnType<typeof leagueLeaders>;
+
+export function leagueLeaders(rng: RNG) {
   return {
     // 타자
     avg: rng.float(0.308, 0.340),
@@ -368,10 +370,17 @@ export function titleOfStat(awards: string[] | undefined, stat: string): string 
 /** 시즌 수상 판정 (KBO 레벨만) */
 export function judgeAwards(
   p: Player, line: HitterLine | PitcherLine, level: LevelTag, isRookie: boolean, rng: RNG,
+  /**
+   * 그 해의 리그 1위 기준선.
+   *
+   * 넘겨주지 않으면 새로 뽑는다. **동기와 함께 판정할 때는 반드시 같은 선을
+   * 넘겨야 한다** — 각자 다른 선을 뽑으면 둘 다 "넘은" 경우가 거의 없어져
+   * 타이틀 경쟁이 일어나지 않는다. (실제로 겪음: 430번 중 1번만 뺏겼다)
+   */
+  lead: LeagueLeaders = leagueLeaders(rng),
 ): string[] {
   if (level !== "KBO") return [];
   const out: string[] = [];
-  const lead = leagueLeaders(rng);
 
   if (isHitterLine(line)) {
     if (line.pa < 300) return out;
