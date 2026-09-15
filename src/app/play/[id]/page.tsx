@@ -578,6 +578,7 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
                   <div className="mt-2.5 flex gap-2">
                     <Mini label="지명 확률" value={`${Math.round(f.odds * 100)}%`} />
                     <Mini label="예상 지명" value={f.round} />
+                    <Mini label={`${f.wishName} 입단`} value={`${Math.round(f.wishOdds * 100)}%`} />
                   </div>
                 </>
               )}
@@ -615,7 +616,12 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
           <div className="card mb-3 flex gap-2 px-4 py-3">
             <Mini label="지명 확률" value={`${Math.round(f.odds * 100)}%`} />
             <Mini label="예상 지명" value={f.round} />
+            <Mini label={`${f.wishName} 입단`} value={`${Math.round(f.wishOdds * 100)}%`} />
           </div>
+          <p className="mb-3 text-[11px] leading-relaxed text-[var(--ink-3)]">
+            지명 순위가 높을수록 희망 구단에 갈 여지가 커집니다. 못 가더라도 그 구단은
+            <b> 이적·FA 시장에서 끝까지 관심을 보입니다.</b>
+          </p>
           <Primary onClick={() => run({ type: "DO_DRAFT" })} busy={busy} label="호명을 기다리는 중…">드래프트 참가하기 📋</Primary>
         </Wrap>
       );

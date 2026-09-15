@@ -386,7 +386,16 @@ export function draftForecast(s: GameState) {
   const round =
     score >= 91 ? "1라운드 상위" : score >= 84 ? "1라운드" : score >= 78 ? "2~3라운드"
     : score >= 72 ? "4~6라운드" : score >= 66 ? "7~9라운드" : score >= 59 ? "10라운드" : "미지명 유력";
-  return { odds, round };
+  /**
+   * 희망 구단에 갈 확률도 같이 내준다.
+   * 예상 지명 순위를 밴드 가운데 값으로 바꿔 넣는다 — 잘할수록 원하는 곳에
+   * 갈 여지가 커진다는 걸 화면에서 보여주려면 숫자가 있어야 한다.
+   */
+  const expectedPick =
+    score >= 91 ? 2 : score >= 84 ? 6 : score >= 78 ? 20
+    : score >= 72 ? 45 : score >= 66 ? 75 : score >= 59 ? 95 : 100;
+  const wish = teamById(s.wishTeamId);
+  return { odds, round, wishOdds: wishOdds(expectedPick, wish.youth), wishName: wish.short };
 }
 
 function runDraft(s: GameState, rng: RNG) {
@@ -432,8 +441,17 @@ function runDraft(s: GameState, rng: RNG) {
 
   const round = Math.ceil(overallPick / 10);
   const wish = teamById(s.wishTeamId);
-  const wishChance = clamp(0.12 + (100 - overallPick) * 0.0018 + (wish.youth - 55) * 0.004, 0.05, 0.35);
-  const team = rng.chance(wishChance) ? wish : rng.pick(TEAMS);
+  /**
+   * 희망 구단에 갈 확률.
+   *
+   * 잘할수록(= 지명 순위가 높을수록) 원하는 곳에 갈 여지가 커진다.
+   * 실패했을 때 **희망 구단을 후보에서 뺀다** — 넣어두면 모든 순위에
+   * 1/10이 덤으로 붙어 차이가 뭉개진다. 실제로 1~10순위 35.5% vs
+   * 31순위~ 39.8%로 순위와 무관하게 나왔다. (실제로 겪음)
+   */
+  const wishChance = wishOdds(overallPick, wish.youth);
+  const others = TEAMS.filter((t) => t.id !== wish.id);
+  const team = rng.chance(wishChance) ? wish : rng.pick(others);
   const bonus = Math.round(clamp(45000 - overallPick * 430, 3000, 50000) / 500) * 500;
 
   s.draftPick = { round, overall: overallPick, teamId: team.id };
@@ -850,7 +868,16 @@ function makeFaOffers(s: GameState, rng: RNG): Offer[] {
    * 원소속팀은 보상을 낼 일이 없으니 영향받지 않는다.
    */
   const fa = faGradeOf(prevSalary);
-  const candidates = rng.shuffle(TEAMS.filter((t) => t.id !== s.contract?.teamId)).slice(0, fa.suitors);
+  /**
+   * FA 시장에서도 희망 구단은 빠지지 않는다.
+   *
+   * 드래프트에서 못 갔다면, 이 자리가 그 팀에서 뛸 마지막 기회다.
+   * 붙는 구단 수는 등급이 정하므로 늘리지 않고, **자리 하나를 먼저 준다.**
+   */
+  const pool = TEAMS.filter((t) => t.id !== s.contract?.teamId);
+  const wishTeam = pool.find((t) => t.id === s.wishTeamId);
+  const rest = rng.shuffle(pool.filter((t) => t.id !== wishTeam?.id));
+  const candidates = (wishTeam ? [wishTeam, ...rest] : rest).slice(0, fa.suitors);
   const offers = candidates.map((t) => buildOffer(s, t, base * fa.discount, ageP, rng, false));
   if (s.contract) offers.unshift(buildOffer(s, teamById(s.contract.teamId), base, ageP, rng, true));
   return offers;
@@ -961,6 +988,17 @@ function openSeason(s: GameState, rng: RNG, campInjury = 0, availCap = 1) {
     s.seasonRole = role;
     s.contract!.role = role;
   }
+  /**
+   * 꿈꾸던 유니폼을 입고 있는가.
+   *
+   * 희망 구단에서 뛰는 해에는 마음가짐이 다르다 — 구단도 "우리 팀에 오고
+   * 싶어 했던 선수"로 대한다. 크지 않지만 매 시즌 쌓여, 생성 화면의
+   * 선택이 커리어 내내 살아 있게 한다.
+   */
+  if (s.contract?.teamId === s.wishTeamId) {
+    s.trust = clamp(s.trust + 2, 0, 100);
+    s.teammate = clamp(s.teammate + 2, 0, 100);
+  }
   const inj = rollInjury(s.player, rng, s.seasonLevel ?? "MINOR", resolveEffect(s).injury);
   const carried = s.nextSeasonAvailability;
   s.seasonAvailability = clamp(
@@ -1002,6 +1040,11 @@ function openSeason(s: GameState, rng: RNG, campInjury = 0, availCap = 1) {
   }
 }
 
+/** 희망 구단 입단 확률 — 드래프트 예측 화면에도 그대로 보여준다 */
+export function wishOdds(overallPick: number, youth: number): number {
+  return clamp(0.10 + (100 - overallPick) * 0.0032 + (youth - 55) * 0.005, 0.06, 0.48);
+}
+
 export function makeTransferTargets(s: GameState, rng: RNG): TransferTarget[] {
   if (!s.contract) return [];
   const value = marketValue(s);
@@ -1026,9 +1069,18 @@ export function makeTransferTargets(s: GameState, rng: RNG): TransferTarget[] {
     const posAdj = POS_MARKET[s.player.position] ?? 0;
     // 지금 연봉이 그 구단 지갑에 얼마나 부담인가
     const payload = -clamp((s.contract!.salary / 10000 - t.money * 0.12) * 1.6, 0, 30);
+    /**
+     * 희망 구단은 끝까지 따라다닌다.
+     *
+     * 드래프트에서 못 갔다고 그걸로 끝이면, 생성 화면의 희망 구단 선택은
+     * "35% 확률로 거기 간다" 하나로 끝나는 장식이 된다.
+     * 그 팀은 한 번 마음에 뒀던 선수를 계속 지켜본다 — 이적·FA 시장에서
+     * 관심이 더 높다. 못 이룬 선택이 커리어 내내 살아 있게 한다.
+     */
+    const wishPull = t.id === s.wishTeamId && s.contract!.teamId !== s.wishTeamId ? 11 : 0;
     const interest = clamp(
       Math.round(
-        38 + merit + need + contendFit + ageAdj + posAdj + payload
+        38 + merit + need + contendFit + ageAdj + posAdj + payload + wishPull
         + s.player.fame * 0.08 + rng.float(-6, 6),
       ),
       3, 99,

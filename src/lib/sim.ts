@@ -271,20 +271,33 @@ export function simPitcher(inp: SimInput): PitcherLine {
    * (CLAUDE.md 규칙 7 — 작은 구간은 반올림하지 말고 추첨한다)
    */
   const draw = (n: number, prob: number) => rbinom(rng, Math.max(0, Math.round(n)), clamp(prob, 0, 1));
+  /**
+   * 승·패는 **따로 뽑지 않는다.**
+   *
+   * 한 경기는 승이거나 패이거나 승패 없음이다. 둘을 독립으로 추첨하면
+   * 같은 경기가 승이면서 패가 될 수 있어, 드물게 승+패가 등판 수를 넘는다.
+   * (실제로 겪음 — 288커리어 감사에서 "승패>경기"로 잡혔다)
+   * 먼저 **승패가 갈린 경기 수**를 뽑고, 그 안에서 승을 가른다.
+   */
+  const decide = (games: number, winRate: number, loseRate: number) => {
+    const total = winRate + loseRate;
+    if (total <= 0) return { w: 0, l: 0 };
+    const dec = draw(games, Math.min(total, 1));
+    const won = draw(dec, winRate / total);
+    return { w: won, l: dec - won };
+  };
+
   let w = 0, l = 0, sv = 0, hld = 0;
   if (isSP) {
     const wr = clamp(0.36 + (4.3 - era) * 0.055 + teamF, 0.08, 0.78);
-    w = draw(gs, wr);
-    l = draw(gs, clamp(0.62 - wr, 0.06, 0.6));
+    ({ w, l } = decide(gs, wr, clamp(0.62 - wr, 0.06, 0.6)));
   } else if (isCP) {
     sv = draw(g, clamp(0.52 + teamF * 2 - (era - 3.2) * 0.05, 0.12, 0.78));
     // 마무리는 이기는 경기에 나가 지키는 자리다 — 승리보다 블론 뒤의 패가 많다
-    w = draw(g, 0.035);
-    l = draw(g, 0.062);
+    ({ w, l } = decide(g, 0.035, 0.062));
   } else {
     hld = draw(g, clamp(0.34 + teamF * 2 - (era - 4) * 0.04, 0.05, 0.62));
-    w = draw(g, 0.060);
-    l = draw(g, 0.058);
+    ({ w, l } = decide(g, 0.060, 0.058));
   }
 
   const ra9 = era * 1.07;
