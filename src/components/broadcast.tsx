@@ -17,9 +17,17 @@ import type {
 export type BroadcastKind = "H1" | "H2" | "PS" | "HS" | "INTL";
 
 type Step =
-  | { kind: "month"; label: string; line: StatLine; cume: StatLine; form: MonthForm; note: string; potm?: boolean }
+  /** `level`·`role`은 **그 달의 자리**다 — 반기가 끝난 시점의 소속으로 적으면,
+      8월에 내려간 선수의 5월 카드에까지 "2군"이 붙는다 */
+  | {
+      kind: "month"; label: string; line: StatLine; cume: StatLine; form: MonthForm; note: string;
+      potm?: boolean; level?: MonthLine["level"]; role?: string;
+    }
   /** 승부처 — 중계가 그 달에 닿으면 멈춰서 선택을 받고, 그 자리에서 결과가 열린다 */
-  | { kind: "clutch"; situation: Clutch; r?: ClutchResult; where?: "AS" | "INTL" | "PS" | "AM" }
+  | {
+      kind: "clutch"; situation: Clutch; r?: ClutchResult; where?: "AS" | "INTL" | "PS" | "AM";
+      level?: MonthLine["level"]; role?: string;
+    }
   | { kind: "card"; icon: string; title: string; body: string; tone: "good" | "bad" | "epic" | "neutral" }
   | { kind: "round"; name: string; opponent: string; win: boolean; score: string }
   | { kind: "hs"; t: AmateurTournament }
@@ -164,7 +172,9 @@ function buildSteps(g: GameState, kind: BroadcastKind): Step[] {
     const m = months[i];
     const form = judgeMonthForm(m.line, m.level);
     // 승부처는 그 달 기록을 만든 사건이므로 월 카드보다 먼저 온다
-    if (m.clutchSituation) steps.push({ kind: "clutch", situation: m.clutchSituation, r: m.clutch });
+    if (m.clutchSituation) {
+      steps.push({ kind: "clutch", situation: m.clutchSituation, r: m.clutch, level: m.level, role: m.role });
+    }
     steps.push({
       kind: "month",
       label: m.label,
@@ -173,6 +183,8 @@ function buildSteps(g: GameState, kind: BroadcastKind): Step[] {
       form,
       note: formNote(m.line, form, g.seed + i),
       potm: m.potm,
+      level: m.level,
+      role: m.role,
     });
     // 그 달이 끝나고 엔트리가 바뀌었다면 바로 이어서 통보한다
     if (m.move) {
@@ -432,8 +444,25 @@ export function Broadcast({ g, kind, onDone, onAction, busy = false }: {
     : kind === "PS" ? `${g.year} 가을야구`
     : kind === "INTL" ? `${g.year} ${intlOfYear ? TOURNAMENTS[intlOfYear.tournamentId].name : "국가대표"}`
     : kind === "H1" ? `${g.year} 전반기` : `${g.year} 후반기`;
+  /**
+   * 뱃지는 **지금 보고 있는 달의 자리**를 말한다.
+   *
+   * `g.seasonLevel`은 반기가 다 끝난 뒤의 소속이다. 그걸 그대로 쓰면
+   * 8월에 1군으로 올라간 선수의 5월 카드에도 "1군 주전"이 붙고,
+   * 반대로 10월에 내려간 선수는 중계 내내 "2군"으로 찍힌다. (실제로 겪음)
+   * 자리를 모르는 단계(총평 카드 등)는 **직전에 지나온 달**을 그대로 쓴다.
+   */
+  const seat = (() => {
+    for (let k = Math.min(i, steps.length - 1); k >= 0; k--) {
+      const st = steps[k];
+      if ((st.kind === "month" || st.kind === "clutch") && st.level) {
+        return { level: st.level, role: st.role };
+      }
+    }
+    return { level: g.seasonLevel, role: g.seasonRole ?? undefined };
+  })();
   const levelText = kind === "INTL" ? "국가대표"
-    : g.seasonLevel === "KBO" ? "1군" : g.seasonLevel === "MINOR" ? "2군" : null;
+    : seat.level === "KBO" ? "1군" : seat.level === "MINOR" ? "2군" : null;
   /**
    * 화면에 그리는 인덱스는 따로 둔다.
    *
@@ -459,7 +488,7 @@ export function Broadcast({ g, kind, onDone, onAction, busy = false }: {
               <span className="text-[15px] font-black">{title}</span>
               {levelText && (
                 <span className="shrink-0 rounded bg-white/20 px-1.5 py-[1px] text-[9.5px] font-black">
-                  {levelText}{kind !== "INTL" && g.seasonRole ? ` ${g.seasonRole}` : ""}
+                  {levelText}{kind !== "INTL" && seat.role ? ` ${seat.role}` : ""}
                 </span>
               )}
             </div>

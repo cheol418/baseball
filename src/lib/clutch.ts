@@ -106,20 +106,50 @@ interface Scene {
   title: string;
   body: string;
   walkoff?: boolean;
+  /**
+   * 그 달에만 말이 되는 장면.
+   * "개막전 첫 타석"이 9월에 뜨거나 "시즌 최종전"이 4월에 뜨면 안 된다.
+   */
+  when?: "OPENER" | "FINALE";
+  /**
+   * 선수의 지난 일을 전제로 하는 장면.
+   * 1군에 올라간 적 없는 신인에게 "강등 첫 경기 — 어제까지 1군이었습니다"가
+   * 뜨면 없던 과거를 만들어낸다. (실제로 겪음)
+   */
+  requires?: (c: SceneContext) => boolean;
+}
+
+/** 장면이 말이 되는지 따지는 데 필요한 것들 */
+export interface SceneContext {
+  /** 1군에서 뛰어본 적이 있는가 (이번 시즌 포함) */
+  hasKbo: boolean;
+  /** 지금 팀이 아닌 팀에서 뛰어본 적이 있는가 */
+  hasFormerTeam: boolean;
+  /** 올해 다쳤는가 */
+  injured: boolean;
+}
+
+export function sceneContext(s: GameState): SceneContext {
+  const pro = s.seasons.filter((r) => r.level === "KBO" || r.level === "MINOR");
+  return {
+    hasKbo: !!s.seasonByLevel?.KBO || s.seasons.some((r) => r.level === "KBO"),
+    hasFormerTeam: !!s.contract && pro.some((r) => r.teamId !== s.contract!.teamId),
+    injured: !!s.seasonNote || s.seasonAvailability < 0.95,
+  };
 }
 
 const HIT_SCENES: Scene[] = [
   { eyebrow: "9회말 2사 만루", title: "한 방이면 끝난다", body: "1점 차로 뒤진 9회말 2사 만루. 구장 전체가 일어섰습니다.", walkoff: true },
   { eyebrow: "연장 10회 1사 3루", title: "외야 뜬공이면 끝난다", body: "동점으로 맞선 연장 10회. 3루 주자가 홈을 노리고 있습니다.", walkoff: true },
   { eyebrow: "8회 2사 2·3루", title: "역전의 기회", body: "두 점 차 추격. 여기서 한 방이면 경기를 뒤집습니다." },
-  { eyebrow: "개막전 첫 타석", title: "한 해의 첫 스윙", body: "만원 관중 앞에서 맞는 올 시즌 첫 타석입니다." },
+  { eyebrow: "개막전 첫 타석", title: "한 해의 첫 스윙", body: "만원 관중 앞에서 맞는 올 시즌 첫 타석입니다.", when: "OPENER" },
   { eyebrow: "라이벌전 9회초", title: "적지에서의 한 타석", body: "야유가 쏟아지는 원정 구장, 동점 주자가 2루에 있습니다." },
   { eyebrow: "7회 1사 만루", title: "병살만은 안 된다", body: "한 점만 나면 흐름이 넘어옵니다. 내야는 전진 수비입니다." },
   { eyebrow: "더블헤더 2차전 9회", title: "긴 하루의 끝", body: "다리가 무겁습니다. 그래도 타석은 돌아왔습니다." },
   { eyebrow: "4타수 무안타 · 9회", title: "오늘을 지우는 한 번", body: "오늘 네 번 모두 침묵했습니다. 마지막 기회입니다." },
   { eyebrow: "20경기 연속 안타 도전", title: "기록이 걸린 타석", body: "오늘 안타가 없습니다. 이번이 마지막 타석입니다." },
-  { eyebrow: "홈런 1개 차 · 시즌 최종전", title: "타이틀이 걸렸다", body: "홈런왕 경쟁자와 한 개 차이. 오늘이 마지막 경기입니다." },
-  { eyebrow: "친정팀 상대 첫 타석", title: "떠나온 자리에서", body: "지난해까지 입던 유니폼을 상대로 섭니다. 3루 관중석이 조용합니다." },
+  { eyebrow: "홈런 1개 차 · 시즌 최종전", title: "타이틀이 걸렸다", body: "홈런왕 경쟁자와 한 개 차이. 오늘이 마지막 경기입니다.", when: "FINALE" },
+  { eyebrow: "친정팀 상대 첫 타석", title: "떠나온 자리에서", body: "지난해까지 입던 유니폼을 상대로 섭니다. 3루 관중석이 조용합니다.", requires: (c) => c.hasFormerTeam },
   { eyebrow: "우천 중단 뒤 재개 · 8회", title: "두 시간을 기다린 타석", body: "몸이 식었습니다. 그래도 상황은 그대로 남아 있습니다." },
   { eyebrow: "빈볼 직후 타석", title: "맞고 나서 다시 선다", body: "앞 타석에서 등에 공을 맞았습니다. 더그아웃이 날이 서 있습니다." },
   { eyebrow: "은사 은퇴 경기 · 9회", title: "보내드리는 한 타석", body: "오늘로 유니폼을 벗는 노장이 더그아웃에서 보고 있습니다." },
@@ -132,13 +162,13 @@ const PIT_SCENES_SP: Scene[] = [
   { eyebrow: "7회 무사 1·2루", title: "여기서 끊어야 한다", body: "1점 차 리드. 투구수 95개, 불펜은 아직 몸을 풀고 있습니다." },
   { eyebrow: "8회 2사 만루", title: "한 타자만 더", body: "완봉이 눈앞입니다. 상대는 이번 시즌 타율 3할의 4번 타자." },
   { eyebrow: "노히트 진행 중 · 8회", title: "아무도 말을 걸지 않는다", body: "더그아웃이 조용합니다. 8회를 무사히 넘기면 역사가 됩니다." },
-  { eyebrow: "개막전 선발", title: "한 해의 첫 공", body: "만원 관중 앞에서 던지는 올 시즌 첫 이닝입니다." },
+  { eyebrow: "개막전 선발", title: "한 해의 첫 공", body: "만원 관중 앞에서 던지는 올 시즌 첫 이닝입니다.", when: "OPENER" },
   { eyebrow: "1회 무사 만루", title: "시작부터 흔들린다", body: "아직 아웃 카운트가 하나도 없습니다. 여기서 무너지면 조기 강판입니다." },
   { eyebrow: "투구수 118개 · 9회", title: "내 손으로 끝낸다", body: "감독이 마운드를 보고 있습니다. 아웃 하나면 완투입니다." },
-  { eyebrow: "20승 도전 등판", title: "한 해의 마지막 등판", body: "오늘 이기면 20승입니다. 다음 등판은 없습니다." },
+  { eyebrow: "20승 도전 등판", title: "한 해의 마지막 등판", body: "오늘 이기면 20승입니다. 다음 등판은 없습니다.", when: "FINALE" },
   { eyebrow: "상대 에이스와 맞대결", title: "0의 행진", body: "7회까지 양 팀 무득점. 한 점이면 갈립니다." },
-  { eyebrow: "부상 복귀 첫 등판", title: "다시 마운드 위에서", body: "재활에만 반년이 걸렸습니다. 첫 타자를 상대합니다." },
-  { eyebrow: "친정팀 상대 선발", title: "떠나온 자리에서", body: "지난해까지 함께 뛰던 타자들이 타석에 들어섭니다." },
+  { eyebrow: "부상 복귀 첫 등판", title: "다시 마운드 위에서", body: "재활에만 반년이 걸렸습니다. 첫 타자를 상대합니다.", requires: (c) => c.injured },
+  { eyebrow: "친정팀 상대 선발", title: "떠나온 자리에서", body: "지난해까지 함께 뛰던 타자들이 타석에 들어섭니다.", requires: (c) => c.hasFormerTeam },
   { eyebrow: "3연패 끊기 등판", title: "흐름을 바꿔야 한다", body: "팀이 세 경기를 내리 졌습니다. 오늘은 길게 끌어줘야 합니다." },
   { eyebrow: "만원 관중 · 라이벌전", title: "야유 속의 한 구", body: "원정 구장이 가득 찼습니다. 주자는 득점권에 있습니다." },
 ];
@@ -146,9 +176,9 @@ const PIT_SCENES_SP: Scene[] = [
 const MINOR_SCENES: Scene[] = [
   { eyebrow: "퓨처스 9회말 2사", title: "1군이 보고 있다", body: "스카우트와 코칭스태프가 관중석에 앉아 있습니다. 여기서 보여줘야 합니다.", walkoff: true },
   { eyebrow: "콜업을 앞둔 한 경기", title: "마지막 시험대", body: "이 경기 결과로 1군 등록이 갈릴 수 있습니다." },
-  { eyebrow: "재활 경기 마지막 날", title: "몸은 다 만들었다", body: "오늘만 무사히 넘기면 1군으로 올라갑니다." },
+  { eyebrow: "재활 경기 마지막 날", title: "몸은 다 만들었다", body: "오늘만 무사히 넘기면 1군으로 올라갑니다.", requires: (c) => c.injured },
   { eyebrow: "관중 200명 앞에서", title: "아무도 보지 않아도", body: "빈 스탠드입니다. 그래도 기록은 남습니다." },
-  { eyebrow: "강등 첫 경기", title: "내려온 자리에서", body: "어제까지 1군이었습니다. 다시 올라가려면 여기서 시작해야 합니다." },
+  { eyebrow: "강등 첫 경기", title: "내려온 자리에서", body: "어제까지 1군이었습니다. 다시 올라가려면 여기서 시작해야 합니다.", requires: (c) => c.hasKbo },
   { eyebrow: "퓨처스 올스타 선발", title: "2군의 간판", body: "이 무대에서 잘하면 1군 코칭스태프의 눈에 듭니다." },
 ];
 
@@ -174,7 +204,7 @@ const PIT_SCENES_RP: Scene[] = [
   { eyebrow: "연장 11회 등판", title: "지면 끝난다", body: "양 팀 불펜이 모두 소진됐습니다. 이 이닝을 막아야 합니다." },
   { eyebrow: "3일 연투 · 9회", title: "팔이 무겁다", body: "사흘 연속 등판입니다. 그래도 문을 닫을 사람은 나뿐입니다." },
   { eyebrow: "블론 다음 날 등판", title: "어제를 지운다", body: "어제 다 잡은 경기를 날렸습니다. 같은 상황이 또 왔습니다." },
-  { eyebrow: "40세이브 도전", title: "한 개가 남았다", body: "시즌 39세이브. 기록이 걸린 9회입니다." },
+  { eyebrow: "40세이브 도전", title: "한 개가 남았다", body: "시즌 39세이브. 기록이 걸린 9회입니다.", when: "FINALE" },
   { eyebrow: "동점 9회말 무사 2루", title: "끝내기를 막아라", body: "한 점도 줄 수 없습니다. 내야는 전진합니다." },
   { eyebrow: "4점 차 9회 등판", title: "세이브가 아닌 이닝", body: "기록은 안 붙지만, 오늘 불펜이 바닥났습니다." },
 ];
@@ -364,9 +394,9 @@ const COLLEGE_SCENES_P: Scene[] = [
 const MINOR_SCENES_P: Scene[] = [
   { eyebrow: "퓨처스 9회 1점 차", title: "1군이 보고 있다", body: "스카우트와 코칭스태프가 관중석에 앉아 있습니다. 여기서 보여줘야 합니다." },
   { eyebrow: "콜업을 앞둔 등판", title: "마지막 시험대", body: "이 등판 결과로 1군 등록이 갈릴 수 있습니다." },
-  { eyebrow: "재활 등판 마지막 날", title: "팔은 다 만들었다", body: "오늘만 무사히 넘기면 1군으로 올라갑니다." },
+  { eyebrow: "재활 등판 마지막 날", title: "팔은 다 만들었다", body: "오늘만 무사히 넘기면 1군으로 올라갑니다.", requires: (c) => c.injured },
   { eyebrow: "관중 200명 앞에서", title: "아무도 보지 않아도", body: "빈 스탠드입니다. 그래도 기록은 남습니다." },
-  { eyebrow: "강등 첫 등판", title: "내려온 자리에서", body: "어제까지 1군이었습니다. 다시 올라가려면 여기서 시작해야 합니다." },
+  { eyebrow: "강등 첫 등판", title: "내려온 자리에서", body: "어제까지 1군이었습니다. 다시 올라가려면 여기서 시작해야 합니다.", requires: (c) => c.hasKbo },
   { eyebrow: "퓨처스 올스타 선발", title: "2군의 에이스", body: "이 무대에서 잘하면 1군 코칭스태프의 눈에 듭니다." },
 ];
 
@@ -425,6 +455,51 @@ export function rollStageClutch(
  * 2군에도 건다 — 콜업이 걸린 경기는 1군 못지않게 무겁다.
  * 다만 무대가 작아 인지도는 덜 움직인다(applyStageScale 참고).
  */
+/** 그 달에 이 장면을 써도 되는가 */
+function sceneFits(sc: Scene, ctx: SceneContext, when: "OPENER" | "FINALE" | null): boolean {
+  if (sc.when && sc.when !== when) return false;
+  return !sc.requires || sc.requires(ctx);
+}
+
+/**
+ * 그 자리에 맞는 장면 하나 — 1군인가 2군인가, 선발인가 불펜인가,
+ * 개막인가 최종전인가, 그리고 **그 선수가 실제로 겪은 일인가**.
+ * 조건을 다 만족하는 장면이 하나도 없으면 조건 없는 장면 중에서 고른다.
+ */
+function pickScene(
+  hitter: boolean, level: "KBO" | "MINOR", role: string, rng: RNG,
+  ctx: SceneContext, when: "OPENER" | "FINALE" | null,
+): Scene {
+  const pool = level === "MINOR"
+    ? (hitter ? MINOR_SCENES : MINOR_SCENES_P)
+    : hitter
+      ? HIT_SCENES
+      : isRotationRole(role) ? PIT_SCENES_SP : PIT_SCENES_RP;
+  const fit = pool.filter((sc) => sceneFits(sc, ctx, when));
+  return rng.pick(fit.length ? fit : pool.filter((sc) => !sc.when && !sc.requires));
+}
+
+/**
+ * 장면을 **그 달의 자리에** 다시 맞춘다.
+ *
+ * 승부처는 반기가 시작될 때 걸어두지만, 그 사이에 콜업·말소·보직 변경이 일어난다.
+ * 8월에 1군으로 올라간 선수에게 10월 승부처로 "퓨처스 올스타 선발 · 2군의 간판"이
+ * 뜨면, 그 달 기록은 1군인데 장면만 2군에 남아 있는 꼴이 된다. (실제로 겪음)
+ * 선발↔불펜도 같다 — 불펜으로 내려온 뒤에 "투구수 118개 · 9회"가 뜨면 안 된다.
+ */
+export function fitClutchScene(
+  c: Clutch, s: GameState, rng: RNG, level: "KBO" | "MINOR", role: string,
+  /** 시즌의 첫 달인가 마지막 달인가 — 개막전·최종전 장면은 여기서만 쓴다 */
+  when: "OPENER" | "FINALE" | null = null,
+): Clutch {
+  const scene = pickScene(s.player.kind === "HITTER", level, role, rng, sceneContext(s), when);
+  return {
+    ...c,
+    eyebrow: scene.eyebrow, title: scene.title, body: scene.body,
+    walkoff: scene.walkoff ?? false,
+  };
+}
+
 export function rollClutch(
   s: GameState, rng: RNG, months: readonly { key: string; label: string }[],
   /** `monthAvail`(12개월)에서 이 반기가 시작하는 자리 — 전반기 0, 후반기 5 */
@@ -432,12 +507,8 @@ export function rollClutch(
 ): Clutch | null {
   if (!s.contract || (s.seasonLevel !== "KBO" && s.seasonLevel !== "MINOR")) return null;
   const hitter = s.player.kind === "HITTER";
-  const scenes = s.seasonLevel === "MINOR"
-    ? (hitter ? MINOR_SCENES : MINOR_SCENES_P)
-    : hitter
-      ? HIT_SCENES
-      : isRotationRole(s.seasonRole ?? "") ? PIT_SCENES_SP : PIT_SCENES_RP;
-  const scene = rng.pick(scenes);
+  // 장면은 걸어둘 때 한 번 고르고, 심을 때 그 달의 자리로 다시 맞춘다(fitClutchScene)
+  const scene = pickScene(hitter, s.seasonLevel, s.seasonRole ?? "", rng, sceneContext(s), null);
   /**
    * **뛰는 달에만 건다.**
    * 달을 먼저 정하고 그 달은 나중에 시뮬레이션되므로, 부상으로 통째로 비는 달을

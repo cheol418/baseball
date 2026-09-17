@@ -13,7 +13,7 @@ import {
   HOF_CUT, advanceHofVote, legacyContext, newHofVote, resolveSecondLife,
 } from "./legacy";
 import type { Clutch, ClutchResult } from "./clutch";
-import { applyClutchToLine, resolveClutch, rollClutch, rollStageClutch } from "./clutch";
+import { applyClutchToLine, fitClutchScene, resolveClutch, rollClutch, rollStageClutch } from "./clutch";
 import { judgeMonthForm, potmOdds } from "./form";
 import { RESOLVES, resolveEffect } from "./resolve";
 import { rollBarracks, serviceOptionById } from "./military";
@@ -1387,7 +1387,15 @@ function playHalf(
     const due = s.pendingClutch && s.pendingClutch.monthIndex <= mi;
     const played = (line as { g: number }).g > 0;
     if (due && played && (level === "KBO" || level === "MINOR")) {
-      entry.clutchSituation = { ...s.pendingClutch!, monthIndex: mi, monthLabel: m.label };
+      // 장면은 그 달의 자리(1군/2군 · 선발/불펜)로 다시 맞춘다 —
+      // 걸어둔 뒤에 콜업·말소가 일어나면 장면만 옛 자리에 남는다
+      // 4월은 개막, 10월은 최종전 — 개막전·시즌 최종전 장면은 그 달에만 쓴다
+      const when = m.key === H1_MONTHS[0].key ? "OPENER"
+        : m.key === H2_MONTHS[H2_MONTHS.length - 1].key ? "FINALE"
+          : null;
+      entry.clutchSituation = fitClutchScene(
+        { ...s.pendingClutch!, monthIndex: mi, monthLabel: m.label }, s, rng, level, role, when,
+      );
       s.pendingClutch = null;
     }
     // 1군·2군을 오간 시즌은 나중에 따로 보여줘야 하므로 그때그때 갈라 담는다
