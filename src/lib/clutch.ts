@@ -39,6 +39,20 @@ export interface ClutchOutcome {
    * 투수의 "삼진으로 위기 탈출"이 같은 id를 써서 뒤엉켰다. 결과 자체에 적는다.
    */
   good: boolean;
+  /**
+   * 경기를 끝낼 수 있는 자리가 아닐 때 쓰는 말.
+   * 7회 1사 만루에서 "끝내기 만루홈런"이 뜨면 장면과 결과가 따로 논다.
+   */
+  notWalkoff?: { title: string; body: string };
+  /**
+   * 팀이 그 경기를 졌을 때 쓰는 말.
+   * 올스타·국대·가을야구는 **결과 카드가 바로 옆에** 붙는다 —
+   * "끝내기 만루홈런" 밑에 "패배 3-7"이 찍히면 화면이 자기 말을 뒤집는다.
+   * (실제로 겪음)
+   */
+  inLoss?: { title: string; body: string };
+  /** 팀이 그 경기를 이겼을 때 쓰는 말 (내가 내주고도 팀이 이긴 경우) */
+  inWin?: { title: string; body: string };
   /** 그 달 기록에 더해지는 값 */
   stat: Partial<Record<string, number>>;
   fame: number;
@@ -54,6 +68,14 @@ export interface Clutch {
   title: string;
   body: string;
   opponent: string;
+  /** 여기서 터지면 경기가 끝나는 자리인가 (우리 팀의 마지막 공격) */
+  walkoff?: boolean;
+  /**
+   * 이 승부처가 걸린 경기의 결과.
+   * 결과 카드가 붙는 무대(올스타·국대·가을야구)에서만 정해진다 —
+   * 월별 중계에는 경기 결과 카드가 없으므로 undefined다.
+   */
+  teamWon?: boolean;
   options: ClutchOption[];
 }
 
@@ -74,9 +96,21 @@ export interface ClutchResult {
 /* 상황                                                               */
 /* ------------------------------------------------------------------ */
 
-const HIT_SCENES = [
-  { eyebrow: "9회말 2사 만루", title: "한 방이면 끝난다", body: "1점 차로 뒤진 9회말 2사 만루. 구장 전체가 일어섰습니다." },
-  { eyebrow: "연장 10회 1사 3루", title: "외야 뜬공이면 끝난다", body: "동점으로 맞선 연장 10회. 3루 주자가 홈을 노리고 있습니다." },
+/**
+ * 장면 하나.
+ * `walkoff`는 **여기서 터지면 경기가 끝나는 자리**라는 뜻이다 —
+ * 이 표시가 있어야 결과에 "끝내기"라고 쓸 수 있다.
+ */
+interface Scene {
+  eyebrow: string;
+  title: string;
+  body: string;
+  walkoff?: boolean;
+}
+
+const HIT_SCENES: Scene[] = [
+  { eyebrow: "9회말 2사 만루", title: "한 방이면 끝난다", body: "1점 차로 뒤진 9회말 2사 만루. 구장 전체가 일어섰습니다.", walkoff: true },
+  { eyebrow: "연장 10회 1사 3루", title: "외야 뜬공이면 끝난다", body: "동점으로 맞선 연장 10회. 3루 주자가 홈을 노리고 있습니다.", walkoff: true },
   { eyebrow: "8회 2사 2·3루", title: "역전의 기회", body: "두 점 차 추격. 여기서 한 방이면 경기를 뒤집습니다." },
   { eyebrow: "개막전 첫 타석", title: "한 해의 첫 스윙", body: "만원 관중 앞에서 맞는 올 시즌 첫 타석입니다." },
   { eyebrow: "라이벌전 9회초", title: "적지에서의 한 타석", body: "야유가 쏟아지는 원정 구장, 동점 주자가 2루에 있습니다." },
@@ -90,9 +124,11 @@ const HIT_SCENES = [
   { eyebrow: "빈볼 직후 타석", title: "맞고 나서 다시 선다", body: "앞 타석에서 등에 공을 맞았습니다. 더그아웃이 날이 서 있습니다." },
   { eyebrow: "은사 은퇴 경기 · 9회", title: "보내드리는 한 타석", body: "오늘로 유니폼을 벗는 노장이 더그아웃에서 보고 있습니다." },
   { eyebrow: "1위 팀과 3연전 마지막", title: "승차를 줄일 기회", body: "여기서 이기면 1경기 차, 지면 3경기 차입니다." },
+  { eyebrow: "9회말 1사 1·2루", title: "한 점만 따라가면 동점", body: "두 점 차 9회말. 여기서 지면 오늘은 끝입니다.", walkoff: true },
+  { eyebrow: "연장 12회말 2사", title: "더 이상 던질 투수가 없다", body: "양 팀 불펜이 모두 비었습니다. 이 이닝이 마지막입니다.", walkoff: true },
 ];
 
-const PIT_SCENES_SP = [
+const PIT_SCENES_SP: Scene[] = [
   { eyebrow: "7회 무사 1·2루", title: "여기서 끊어야 한다", body: "1점 차 리드. 투구수 95개, 불펜은 아직 몸을 풀고 있습니다." },
   { eyebrow: "8회 2사 만루", title: "한 타자만 더", body: "완봉이 눈앞입니다. 상대는 이번 시즌 타율 3할의 4번 타자." },
   { eyebrow: "노히트 진행 중 · 8회", title: "아무도 말을 걸지 않는다", body: "더그아웃이 조용합니다. 8회를 무사히 넘기면 역사가 됩니다." },
@@ -107,8 +143,8 @@ const PIT_SCENES_SP = [
   { eyebrow: "만원 관중 · 라이벌전", title: "야유 속의 한 구", body: "원정 구장이 가득 찼습니다. 주자는 득점권에 있습니다." },
 ];
 
-const MINOR_SCENES = [
-  { eyebrow: "퓨처스 9회말 2사", title: "1군이 보고 있다", body: "스카우트와 코칭스태프가 관중석에 앉아 있습니다. 여기서 보여줘야 합니다." },
+const MINOR_SCENES: Scene[] = [
+  { eyebrow: "퓨처스 9회말 2사", title: "1군이 보고 있다", body: "스카우트와 코칭스태프가 관중석에 앉아 있습니다. 여기서 보여줘야 합니다.", walkoff: true },
   { eyebrow: "콜업을 앞둔 한 경기", title: "마지막 시험대", body: "이 경기 결과로 1군 등록이 갈릴 수 있습니다." },
   { eyebrow: "재활 경기 마지막 날", title: "몸은 다 만들었다", body: "오늘만 무사히 넘기면 1군으로 올라갑니다." },
   { eyebrow: "관중 200명 앞에서", title: "아무도 보지 않아도", body: "빈 스탠드입니다. 그래도 기록은 남습니다." },
@@ -116,7 +152,7 @@ const MINOR_SCENES = [
   { eyebrow: "퓨처스 올스타 선발", title: "2군의 간판", body: "이 무대에서 잘하면 1군 코칭스태프의 눈에 듭니다." },
 ];
 
-const HS_SCENES = [
+const HS_SCENES: Scene[] = [
   { eyebrow: "전국대회 8강 9회말", title: "고교 시절의 한 타석", body: "스탠드에 프로 스카우트들이 앉아 있습니다. 이 한 번이 드래프트를 바꿉니다." },
   { eyebrow: "결승 연장 승부", title: "3학년의 마지막 여름", body: "지면 여기서 끝입니다. 더 이상 다음이 없습니다." },
   { eyebrow: "지역 예선 결승", title: "전국으로 가는 문", body: "여기서 지면 전국대회 무대를 밟지 못합니다." },
@@ -124,7 +160,7 @@ const HS_SCENES = [
   { eyebrow: "라이벌 학교와 맞대결", title: "3년을 벼른 한 번", body: "중학교 때부터 져 온 상대입니다. 마지막 기회입니다." },
 ];
 
-const COLLEGE_SCENES = [
+const COLLEGE_SCENES: Scene[] = [
   { eyebrow: "대학 선수권 준결승", title: "다시 증명할 차례", body: "고교 때 받지 못한 평가를 뒤집을 기회입니다." },
   { eyebrow: "프로 스카우트 앞에서", title: "보고 있는 눈이 많다", body: "이 경기 하나로 지명 순위가 달라집니다." },
   { eyebrow: "4학년 마지막 대회", title: "이번이 아니면 없다", body: "여기서 못 보여주면 지명을 못 받을 수도 있습니다." },
@@ -132,7 +168,7 @@ const COLLEGE_SCENES = [
   { eyebrow: "전국대회 개막전", title: "긴 시즌의 첫 경기", body: "지난해 우승팀과 맞붙습니다." },
 ];
 
-const PIT_SCENES_RP = [
+const PIT_SCENES_RP: Scene[] = [
   { eyebrow: "9회 1점 차 등판", title: "세이브 상황", body: "선두 타자가 출루하면 동점 주자가 나갑니다." },
   { eyebrow: "8회 무사 만루 승계", title: "불을 꺼야 한다", body: "앞선 투수가 만들어 놓은 위기. 실점 없이 막으면 팀이 이깁니다." },
   { eyebrow: "연장 11회 등판", title: "지면 끝난다", body: "양 팀 불펜이 모두 소진됐습니다. 이 이닝을 막아야 합니다." },
@@ -206,8 +242,11 @@ function pitcherOptions(s: GameState): ClutchOption[] {
 const HIT_POOL: Record<string, ClutchOutcome[]> = {
   swing: [
     { id: "walkoff", good: true, title: "끝내기 만루홈런", body: "받아친 타구가 담장을 넘어갔습니다. 더그아웃이 쏟아져 나옵니다.", tone: "epic",
+      notWalkoff: { title: "만루홈런", body: "받아친 타구가 그대로 담장을 넘어갔습니다. 주자 셋이 모두 홈을 밟았습니다." },
+      inLoss: { title: "만루홈런", body: "넉 점짜리 한 방으로 따라붙었습니다. 팀은 끝내 고개를 숙였지만, 이 타구는 남습니다." },
       stat: { hr: 1, rbi: 4, h: 1, r: 1 }, fame: 14, trust: 8, condition: 10 },
     { id: "hr", good: true, title: "역전 투런", body: "가운데 담장을 넘겼습니다. 경기가 뒤집혔습니다.", tone: "epic",
+      inLoss: { title: "추격의 투런", body: "가운데 담장을 넘겼습니다. 두 점을 따라붙었지만 거기서 멈췄습니다." },
       stat: { hr: 1, rbi: 2, h: 1, r: 1 }, fame: 10, trust: 6, condition: 8 },
     { id: "swing_k", good: false, title: "헛스윙 삼진", body: "크게 돌린 방망이가 허공을 갈랐습니다.", tone: "bad",
       stat: { so: 1 }, fame: -2, trust: -4, condition: -8 },
@@ -216,8 +255,10 @@ const HIT_POOL: Record<string, ClutchOutcome[]> = {
   ],
   contact: [
     { id: "clutch2", good: true, title: "싹쓸이 2루타", body: "우중간을 가르는 타구, 주자가 모두 들어왔습니다.", tone: "epic",
+      inLoss: { title: "싹쓸이 2루타", body: "우중간을 가르는 타구로 세 점을 따라붙었습니다. 그래도 모자랐습니다." },
       stat: { b2: 1, h: 1, rbi: 3 }, fame: 8, trust: 7, condition: 8 },
     { id: "single", good: true, title: "결승 적시타", body: "중전 안타로 주자를 불러들였습니다.", tone: "good",
+      inLoss: { title: "동점 적시타", body: "중전 안타로 주자를 불러들여 균형을 맞췄습니다." },
       stat: { h: 1, rbi: 2 }, fame: 5, trust: 5, condition: 6 },
     { id: "gidp", good: false, title: "병살타", body: "잘 맞은 타구가 유격수 정면으로 향했습니다.", tone: "bad",
       stat: {}, fame: -2, trust: -4, condition: -7 },
@@ -226,6 +267,7 @@ const HIT_POOL: Record<string, ClutchOutcome[]> = {
   ],
   patient: [
     { id: "bb_win", good: true, title: "밀어내기 볼넷", body: "끝까지 골라 결승점을 밀어냈습니다. 화려하진 않지만 이겼습니다.", tone: "good",
+      inLoss: { title: "밀어내기 볼넷", body: "끝까지 골라 한 점을 밀어냈습니다. 화려하진 않지만 할 일은 했습니다." },
       stat: { bb: 1, rbi: 1 }, fame: 5, trust: 6, condition: 5 },
     { id: "bb", good: true, title: "볼넷 출루", body: "승부를 피하는 공에 손대지 않았습니다. 다음 타자에게 넘깁니다.", tone: "neutral",
       stat: { bb: 1 }, fame: 2, trust: 3, condition: 2 },
@@ -243,6 +285,7 @@ const PIT_POOL: Record<string, ClutchOutcome[]> = {
     { id: "pw_k", good: true, title: "삼진으로 위기 탈출", body: "결국 헛스윙을 끌어냈습니다.", tone: "good",
       stat: { so: 1 }, fame: 7, trust: 6, condition: 7 },
     { id: "hr_allow", good: false, title: "역전 피홈런", body: "가운데로 몰린 공이 그대로 넘어갔습니다.", tone: "bad",
+      inWin: { title: "석 점 피홈런", body: "가운데로 몰린 공이 그대로 넘어갔습니다. 타선이 뒤에서 지워줬습니다." },
       stat: { hrAllowed: 1, er: 3, h: 1 }, fame: -4, trust: -7, condition: -10 },
     { id: "pw_hit", good: false, title: "적시타 허용", body: "빠른 공에 타이밍이 맞았습니다.", tone: "bad",
       stat: { h: 1, er: 1 }, fame: -1, trust: -4, condition: -6 },
@@ -272,18 +315,24 @@ const PIT_POOL: Record<string, ClutchOutcome[]> = {
 /* ------------------------------------------------------------------ */
 
 /** 큰 무대의 승부처 — 무대마다 장면이 다르다 */
-const STAGE_SCENES: Record<string, { eyebrow: string; title: string; body: string }[]> = {
+const STAGE_SCENES: Record<string, Scene[]> = {
   AS: [
     { eyebrow: "올스타전 8회", title: "별들 사이에서", body: "만원 관중과 전국 중계. 이 한 타석이 하이라이트에 남습니다." },
-    { eyebrow: "올스타전 9회 2사", title: "마지막 순간", body: "한 점 차. 오늘의 MVP가 여기서 갈립니다." },
+    { eyebrow: "올스타전 9회초 2사", title: "마지막 순간", body: "한 점 차. 오늘의 MVP가 여기서 갈립니다." },
+    { eyebrow: "홈런 더비 다음 날", title: "손바닥이 얼얼하다", body: "어제 스무 번을 넘게 휘둘렀습니다. 그래도 타석은 돌아옵니다." },
+    { eyebrow: "올스타전 첫 타석", title: "이름을 불러주는 곳", body: "전광판에 내 이름이 크게 떴습니다. 스탠드가 들썩입니다." },
   ],
   INTL: [
     { eyebrow: "국제대회 결승 8회", title: "태극마크의 무게", body: "온 나라가 지켜보고 있습니다. 여기서 물러설 수 없습니다." },
     { eyebrow: "숙적과의 맞대결", title: "질 수 없는 경기", body: "상대는 늘 우리를 괴롭혀 온 팀입니다." },
+    { eyebrow: "조별리그 최종전 6회", title: "이겨야 올라간다", body: "득실차까지 계산이 서 있습니다. 한 점이 아쉽습니다." },
+    { eyebrow: "원정 관중 4만 명", title: "야유를 등지고", body: "우리 편은 3루 쪽 한 귀퉁이뿐입니다." },
   ],
   PS: [
-    { eyebrow: "한국시리즈 9회말", title: "가을의 주인공", body: "이 한 타석으로 시리즈의 흐름이 정해집니다." },
-    { eyebrow: "가을야구 연장 10회", title: "끝내지 못하면 끝난다", body: "더그아웃의 모두가 일어서 있습니다." },
+    { eyebrow: "한국시리즈 7차전 8회", title: "가을의 주인공", body: "이 한 타석으로 시리즈의 흐름이 정해집니다." },
+    { eyebrow: "가을야구 연장 10회초", title: "끝내지 못하면 끝난다", body: "더그아웃의 모두가 일어서 있습니다." },
+    { eyebrow: "벼랑 끝 · 2패 뒤 3차전", title: "지면 겨울이다", body: "여기서 지면 올해 가을은 여기서 끝납니다." },
+    { eyebrow: "가을야구 첫 타석", title: "10월의 공기", body: "정규시즌과 관중 소리가 다릅니다. 숨이 가쁩니다." },
   ],
 };
 
@@ -296,7 +345,7 @@ const STAGE_SCENES: Record<string, { eyebrow: string; title: string; body: strin
  * 된다 — 장면과 선택이 따로 논다. (실제로 겪음)
  * 같은 무대라도 서 있는 자리가 다르므로 문장을 따로 쓴다.
  */
-const HS_SCENES_P = [
+const HS_SCENES_P: Scene[] = [
   { eyebrow: "전국대회 8강 9회말", title: "고교 시절의 마지막 한 구", body: "스탠드에 프로 스카우트들이 앉아 있습니다. 이 한 구가 드래프트를 바꿉니다." },
   { eyebrow: "결승 연장 마운드", title: "3학년의 마지막 여름", body: "지면 여기서 끝입니다. 더 이상 다음이 없습니다." },
   { eyebrow: "지역 예선 결승 등판", title: "전국으로 가는 문", body: "여기서 지면 전국대회 마운드를 밟지 못합니다." },
@@ -304,7 +353,7 @@ const HS_SCENES_P = [
   { eyebrow: "라이벌 학교 4번 타자", title: "3년을 벼른 승부", body: "중학교 때부터 이 타자에게 당해 왔습니다. 마지막 기회입니다." },
 ];
 
-const COLLEGE_SCENES_P = [
+const COLLEGE_SCENES_P: Scene[] = [
   { eyebrow: "대학 선수권 준결승", title: "다시 증명할 차례", body: "고교 때 받지 못한 평가를 뒤집을 기회입니다." },
   { eyebrow: "프로 스카우트 앞에서", title: "스피드건이 켜져 있다", body: "이 한 구의 구속으로 지명 순위가 달라집니다." },
   { eyebrow: "4학년 마지막 대회", title: "이번이 아니면 없다", body: "여기서 못 보여주면 지명을 못 받을 수도 있습니다." },
@@ -312,7 +361,7 @@ const COLLEGE_SCENES_P = [
   { eyebrow: "전국대회 개막 선발", title: "긴 시즌의 첫 마운드", body: "지난해 우승팀과 맞붙습니다." },
 ];
 
-const MINOR_SCENES_P = [
+const MINOR_SCENES_P: Scene[] = [
   { eyebrow: "퓨처스 9회 1점 차", title: "1군이 보고 있다", body: "스카우트와 코칭스태프가 관중석에 앉아 있습니다. 여기서 보여줘야 합니다." },
   { eyebrow: "콜업을 앞둔 등판", title: "마지막 시험대", body: "이 등판 결과로 1군 등록이 갈릴 수 있습니다." },
   { eyebrow: "재활 등판 마지막 날", title: "팔은 다 만들었다", body: "오늘만 무사히 넘기면 1군으로 올라갑니다." },
@@ -321,18 +370,24 @@ const MINOR_SCENES_P = [
   { eyebrow: "퓨처스 올스타 선발", title: "2군의 에이스", body: "이 무대에서 잘하면 1군 코칭스태프의 눈에 듭니다." },
 ];
 
-const STAGE_SCENES_P: Record<string, { eyebrow: string; title: string; body: string }[]> = {
+const STAGE_SCENES_P: Record<string, Scene[]> = {
   AS: [
     { eyebrow: "올스타전 8회 등판", title: "별들 사이에서", body: "만원 관중과 전국 중계. 이 한 이닝이 하이라이트에 남습니다." },
-    { eyebrow: "올스타전 9회 2사", title: "마지막 순간", body: "한 점 차. 오늘의 MVP가 여기서 갈립니다." },
+    { eyebrow: "올스타전 6회 등판", title: "마운드 위의 축제", body: "타자도 나도 웃고 있습니다. 그래도 승부는 승부입니다." },
+    { eyebrow: "상대 홈런왕과 맞대결", title: "피하지 않는다", body: "관중이 원하는 그림입니다. 도망가면 야유가 쏟아집니다." },
+    { eyebrow: "올스타전 첫 등판", title: "이름을 불러주는 곳", body: "전광판에 구속이 그대로 뜹니다. 스탠드가 들썩입니다." },
   ],
   INTL: [
     { eyebrow: "국제대회 결승 8회", title: "태극마크의 무게", body: "온 나라가 지켜보고 있습니다. 여기서 물러설 수 없습니다." },
     { eyebrow: "숙적의 4번 타자", title: "질 수 없는 승부", body: "상대는 늘 우리를 괴롭혀 온 타자입니다." },
+    { eyebrow: "조별리그 최종전 6회", title: "이겨야 올라간다", body: "득실차까지 계산이 서 있습니다. 한 점도 아깝습니다." },
+    { eyebrow: "원정 관중 4만 명", title: "야유를 등지고", body: "우리 편은 3루 쪽 한 귀퉁이뿐입니다." },
   ],
   PS: [
-    { eyebrow: "한국시리즈 9회말 마운드", title: "가을의 주인공", body: "이 한 구로 시리즈의 흐름이 정해집니다." },
-    { eyebrow: "가을야구 연장 10회", title: "막지 못하면 끝난다", body: "더그아웃의 모두가 일어서 있습니다." },
+    { eyebrow: "한국시리즈 7차전 8회 마운드", title: "가을의 주인공", body: "이 한 구로 시리즈의 흐름이 정해집니다." },
+    { eyebrow: "가을야구 연장 10회초", title: "막지 못하면 끝난다", body: "더그아웃의 모두가 일어서 있습니다." },
+    { eyebrow: "벼랑 끝 · 2패 뒤 3차전", title: "지면 겨울이다", body: "여기서 지면 올해 가을은 여기서 끝납니다." },
+    { eyebrow: "가을야구 첫 등판", title: "10월의 공기", body: "정규시즌과 관중 소리가 다릅니다. 손끝이 차갑습니다." },
   ],
 };
 
@@ -342,6 +397,8 @@ const STAGE_SCENES_P: Record<string, { eyebrow: string; title: string; body: str
  */
 export function rollStageClutch(
   stage: "AS" | "INTL" | "PS" | "HS" | "COLLEGE", s: GameState, rng: RNG, label: string,
+  /** 이 승부처가 걸린 경기의 결과 — 결과 카드가 바로 옆에 붙는 무대에서만 넘긴다 */
+  teamWon?: boolean,
 ): Clutch {
   const hitter = s.player.kind === "HITTER";
   const scene = rng.pick(
@@ -356,6 +413,9 @@ export function rollStageClutch(
     title: scene.title,
     body: scene.body,
     opponent: stage === "INTL" ? rng.pick(["일본", "대만", "미국", "도미니카", "쿠바"]) : "",
+    // 무대 장면은 경기를 끝내는 자리가 아니다 — 승패는 옆 카드가 말한다
+    walkoff: false,
+    teamWon,
     options: hitter ? hitterOptions(s) : pitcherOptions(s),
   };
 }
@@ -384,6 +444,8 @@ export function rollClutch(
     title: scene.title,
     body: scene.body,
     opponent: rng.pick(["대구 라이온즈", "광주 타이거즈", "서울 트윈스", "부산 자이언츠", "인천 랜더스", "창원 다이노스"]),
+    // 월별 중계에는 경기 결과 카드가 없다 — 장면이 허락하면 끝내기라고 말해도 된다
+    walkoff: scene.walkoff ?? false,
     options: hitter ? hitterOptions(s) : pitcherOptions(s),
   };
 }
@@ -404,8 +466,28 @@ export function resolveClutch(c: Clutch, optionId: string, s: GameState, rng: RN
   return {
     monthIndex: c.monthIndex, monthLabel: c.monthLabel,
     optionId: opt.id, optionLabel: opt.label,
-    pool, outcome, success,
+    // 나오지 않은 결과까지 흐리게 깔아두므로(DrawReveal) 풀도 같이 맞춘다 —
+    // 한쪽만 바꾸면 "끝내기 만루홈런"이 목록에만 남는다
+    pool: pool.map((o) => fitOutcome(o, c)),
+    outcome: fitOutcome(outcome, c),
+    success,
   };
+}
+
+/**
+ * 결과 문구를 그 자리에 맞춘다.
+ *
+ * 승부처의 결과는 주사위로 뽑지만, **경기의 승패는 이미 정해져 있다**.
+ * 둘을 따로 두면 "끝내기 만루홈런" 바로 밑에 "패배 3-7"이 찍힌다. (실제로 겪음)
+ * 기록(stat)은 건드리지 않는다 — 바뀌는 건 말뿐이므로 밸런스는 그대로다.
+ */
+function fitOutcome(o: ClutchOutcome, c: Clutch): ClutchOutcome {
+  const alt = c.teamWon === false ? o.inLoss
+    : c.teamWon === true ? o.inWin
+      : undefined;
+  // 경기를 끝낼 수 있는 자리가 아니면 "끝내기"라고 쓰지 않는다
+  const fit = alt ?? (c.walkoff ? undefined : o.notWalkoff);
+  return fit ? { ...o, title: fit.title, body: fit.body } : o;
 }
 
 /** 결과를 그 달 기록에 더한다 */

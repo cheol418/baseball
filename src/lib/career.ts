@@ -896,7 +896,9 @@ function runTournament(s: GameState, rng: RNG, slot: TournamentSlot) {
   if (t.slot !== slot) return;
 
   const res = simTournament(s, t, rng);
-  res.clutchSituation = rollStageClutch("INTL", s, rng, t.name);
+  // 중계는 이 승부처를 **마지막 경기 직전**에 끼워 넣는다 — 그 경기의 승패를 같이 넘겨,
+  // "역전 투런" 밑에 "패" 카드가 붙지 않게 한다
+  res.clutchSituation = rollStageClutch("INTL", s, rng, t.name, res.games[res.games.length - 1]?.won);
   s.intlResults.push(res);
   s.player.fame = clamp(s.player.fame + (res.medal ? 9 : 4), 0, 100);
   if (res.exempted && s.military === "PENDING") {
@@ -2112,7 +2114,9 @@ export function advance(prev: GameState, action: Action): GameState {
           });
           s.allStarGame = simAllStarGame(s.player, s.contract.teamId, rng, futures ? "MINOR" : "KBO");
           // 큰 무대에도 승부처를 하나씩 — 보는 눈이 다른 만큼 인지도가 크게 움직인다
-          if (!futures) s.allStarGame.clutchSituation = rollStageClutch("AS", s, rng, "올스타전");
+          if (!futures) {
+            s.allStarGame.clutchSituation = rollStageClutch("AS", s, rng, "올스타전", s.allStarGame.won);
+          }
           const ag = s.allStarGame;
           if (ag.mvp) s.player.fame = clamp(s.player.fame + 7, 0, 100);
           // 승부처가 걸려 있으면 결과를 아직 적지 않는다 —
@@ -2248,8 +2252,9 @@ export function advance(prev: GameState, action: Action): GameState {
       const team = s.contract ? teamById(s.contract.teamId) : null;
       if (team && s.teamRank) {
         s.postseason = simPostseason(s.player, team.id, s.teamRank, s.seasonAvailability, rng);
-        s.postseason.clutchSituation = rollStageClutch("PS", s, rng, "가을야구");
         const last = s.postseason.rounds[s.postseason.rounds.length - 1];
+        // 승부처는 마지막 시리즈의 한 타석이다 — 그 시리즈의 결과에 말을 맞춘다
+        s.postseason.clutchSituation = rollStageClutch("PS", s, rng, "가을야구", last?.win);
         log(s, {
           icon: s.postseason.champion ? "🏆" : "🍁",
           title: s.postseason.champion ? "한국시리즈 제패" : `${last?.name ?? "가을야구"} 탈락`,
