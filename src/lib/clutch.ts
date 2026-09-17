@@ -427,6 +427,8 @@ export function rollStageClutch(
  */
 export function rollClutch(
   s: GameState, rng: RNG, months: readonly { key: string; label: string }[],
+  /** `monthAvail`(12개월)에서 이 반기가 시작하는 자리 — 전반기 0, 후반기 5 */
+  availOffset = 0,
 ): Clutch | null {
   if (!s.contract || (s.seasonLevel !== "KBO" && s.seasonLevel !== "MINOR")) return null;
   const hitter = s.player.kind === "HITTER";
@@ -436,7 +438,15 @@ export function rollClutch(
       ? HIT_SCENES
       : isRotationRole(s.seasonRole ?? "") ? PIT_SCENES_SP : PIT_SCENES_RP;
   const scene = rng.pick(scenes);
-  const mi = rng.int(0, months.length - 1);
+  /**
+   * **뛰는 달에만 건다.**
+   * 달을 먼저 정하고 그 달은 나중에 시뮬레이션되므로, 부상으로 통째로 비는 달을
+   * 고르면 "5월 9회말 2사 만루"가 뜨고 5월 출장은 0경기로 찍힌다. (실제로 겪음)
+   * 반기가 통째로 비면 이번 반기엔 승부처가 없다.
+   */
+  const live = months.map((_, i) => i).filter((i) => (s.monthAvail?.[availOffset + i] ?? 1) > 0);
+  if (!live.length) return null;
+  const mi = rng.pick(live);
   return {
     monthIndex: mi,
     monthLabel: months[mi].label,

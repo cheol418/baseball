@@ -371,3 +371,19 @@ export function applyActiveServiceDecay(p: Player, rng: RNG, keys: string[], set
     set(k, clamp(Math.round(get(k) - loss), 15, 120));
   }
 }
+
+/**
+ * 승부처가 걸리는 경기.
+ *
+ * 대회의 **마지막 경기**가 아니라 **마지막으로 나간 경기**다 —
+ * 투수는 등판하지 않는 경기가 있어서, 그냥 마지막 경기에 걸면
+ * 나가지도 않은 결승전에서 "9회 2사 만루"를 맞는다. (실제로 겪음)
+ * 한 경기도 못 나갔으면 -1 — 그 대회엔 승부처가 없다.
+ *
+ * 중계의 끼워 넣는 자리(`broadcast.tsx`)와 기록을 얹는 자리(`career.ts`)가
+ * 같은 경기를 가리켜야 하므로 여기 한 곳에서만 고른다.
+ */
+export function clutchGameIndex(games: readonly IntlGame[]): number {
+  for (let i = games.length - 1; i >= 0; i--) if (games[i].appeared) return i;
+  return -1;
+}

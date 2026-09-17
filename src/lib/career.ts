@@ -27,8 +27,8 @@ import { schoolOf } from "./school";
 import { chainByKey, pickChain } from "./events";
 import { judgeSeasonGoal, makeSeasonGoal, newMilestones, rollFeats } from "./records";
 import {
-  MILITARY_DEADLINE, MILITARY_OPTIONS, TOURNAMENTS, canVolunteer, isCalledUp,
-  isServing, sangmuOdds, SANGMU_MAX_TRIES, simTournament, tournamentOf,
+  MILITARY_DEADLINE, MILITARY_OPTIONS, TOURNAMENTS, canVolunteer, clutchGameIndex,
+  isCalledUp, isServing, sangmuOdds, SANGMU_MAX_TRIES, simTournament, tournamentOf,
 } from "./national";
 import type {
   AmateurTournament, GameState, HitterLine, LevelTag, LogEntry, MonthLine, Negotiation,
@@ -896,9 +896,13 @@ function runTournament(s: GameState, rng: RNG, slot: TournamentSlot) {
   if (t.slot !== slot) return;
 
   const res = simTournament(s, t, rng);
-  // 중계는 이 승부처를 **마지막 경기 직전**에 끼워 넣는다 — 그 경기의 승패를 같이 넘겨,
-  // "역전 투런" 밑에 "패" 카드가 붙지 않게 한다
-  res.clutchSituation = rollStageClutch("INTL", s, rng, t.name, res.games[res.games.length - 1]?.won);
+  /**
+   * 승부처는 **실제로 나간 마지막 경기**에 건다 — 나가지도 않은 경기의 9회는 없다.
+   * 중계는 그 경기 카드 직전에 끼워 넣으므로, 같은 경기의 승패를 같이 넘겨
+   * "역전 투런" 밑에 "패" 카드가 붙지 않게 한다.
+   */
+  const clutchGame = res.games[clutchGameIndex(res.games)];
+  if (clutchGame) res.clutchSituation = rollStageClutch("INTL", s, rng, t.name, clutchGame.won);
   s.intlResults.push(res);
   s.player.fame = clamp(s.player.fame + (res.medal ? 9 : 4), 0, 100);
   if (res.exempted && s.military === "PENDING") {
@@ -1321,7 +1325,9 @@ function reviewRoster(
  * 고르는 것은 지금, 결과가 드러나는 것은 중계가 그 달에 닿았을 때다.
  */
 function armClutch(s: GameState, rng: RNG, months: readonly { key: string; label: string }[]) {
-  s.pendingClutch = rollClutch(s, rng, months);
+  // monthAvail은 12개월을 한 줄로 담는다 — 후반기는 전반기 길이만큼 뒤에서 읽는다
+  const availOffset = months === H2_MONTHS ? H1_MONTHS.length : 0;
+  s.pendingClutch = rollClutch(s, rng, months, availOffset);
   s.clutchResult = null;
 }
 
@@ -1370,9 +1376,19 @@ function playHalf(
     if (potm) s.potmMonths = [...(s.potmMonths ?? []), m.label];
 
     const entry: MonthLine = { key: m.key, label: m.label, line, level, role, potm };
-    // 걸어둔 승부처를 그 달에 심는다 — 2군에서 보낸 달이면 없던 일이 된다
-    if (s.pendingClutch && s.pendingClutch.monthIndex === mi && (level === "KBO" || level === "MINOR")) {
-      entry.clutchSituation = s.pendingClutch;
+    /**
+     * 걸어둔 승부처를 그 달에 심는다.
+     *
+     * **출장이 없는 달에는 심지 않는다** — 없던 경기의 9회말을 말하게 된다.
+     * 달은 `monthAvail`을 보고 골랐지만(rollClutch), 가동률이 낮은 달은
+     * 배분 뒤에도 0경기로 떨어질 수 있다. 그럴 땐 뛰는 다음 달로 미룬다.
+     * 끝까지 뛰는 달이 없으면 이번 반기엔 승부처가 없던 일이 된다.
+     */
+    const due = s.pendingClutch && s.pendingClutch.monthIndex <= mi;
+    const played = (line as { g: number }).g > 0;
+    if (due && played && (level === "KBO" || level === "MINOR")) {
+      entry.clutchSituation = { ...s.pendingClutch!, monthIndex: mi, monthLabel: m.label };
+      s.pendingClutch = null;
     }
     // 1군·2군을 오간 시즌은 나중에 따로 보여줘야 하므로 그때그때 갈라 담는다
     if (level === "KBO" || level === "MINOR") {
@@ -2215,9 +2231,9 @@ export function advance(prev: GameState, action: Action): GameState {
         return settle(intl.clutchSituation, (r) => {
           intl.clutch = r;
           intl.line = applyClutchToLine(intl.line, r);
-          // 승부처는 마지막으로 출장한 경기의 한 타석이다 — 경기별 기록에도 얹는다
-          const lastGame = [...intl.games].reverse().find((x) => x.appeared);
-          if (lastGame) lastGame.line = applyClutchToLine(lastGame.line, r);
+          // 승부처는 실제로 나간 마지막 경기의 한 타석이다 — 경기별 기록에도 얹는다
+          const target = intl.games[clutchGameIndex(intl.games)];
+          if (target) target.line = applyClutchToLine(target.line, r);
         }, 2) ?? s;
       }
 

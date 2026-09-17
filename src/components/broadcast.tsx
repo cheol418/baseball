@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { fmt2, fmt3, fmtIP } from "./stats";
 import { isHitterLine, mergeLines } from "@/lib/sim";
-import { TOURNAMENTS } from "@/lib/national";
+import { TOURNAMENTS, clutchGameIndex } from "@/lib/national";
 import { formatMoney } from "@/lib/career";
 import { roleTier } from "@/lib/roles";
 import type { Clutch, ClutchResult } from "@/lib/clutch";
@@ -69,9 +69,10 @@ function intlSteps(g: GameState, slot: TournamentSlot): Step[] {
     opponent: gm.opponent, won: gm.won, score: gm.score, line: gm.line,
     appeared: gm.appeared,
   }));
-  // 대회의 승부처는 마지막 경기 직전에 온다 — 가장 무거운 순간이다
-  if (intl.clutchSituation) {
-    steps.splice(Math.max(0, steps.length - 1), 0, {
+  // 승부처는 **실제로 나간 마지막 경기** 직전에 온다 — 기록을 얹는 자리와 같은 경기다
+  const ci = clutchGameIndex(intl.games);
+  if (intl.clutchSituation && ci >= 0) {
+    steps.splice(ci, 0, {
       kind: "clutch", situation: intl.clutchSituation, r: intl.clutch, where: "INTL",
     });
   }
