@@ -141,17 +141,22 @@ export default function CreatePage() {
     router.push(`/play/${g.id}`);
   };
 
+  /**
+   * 랜덤 생성은 헤더가 아니라 **그 단계 제목 옆**에 둔다.
+   * 지금 단계의 항목만 굴리므로(4단계를 한 번에 밀지 않는다) 제목에 붙어 있어야
+   * 무엇이 정해지는지 읽힌다. 4단계는 카드 머리에 "다시 뽑기"가 이미 있어 빼둔다.
+   */
+  const randomBtn = (
+    <button onClick={shuffle} className="btn btn-ghost shrink-0 px-3 py-1.5 text-[12px]">
+      🎲 랜덤 생성
+    </button>
+  );
+
   return (
     <main className="pb-28">
       {intro && <Intro onDone={closeIntro} />}
       <AppBar title="선수 생성" back="/" right={
-        <div className="flex items-center gap-2">
-          <button
-            onClick={shuffle}
-            className="rounded-lg bg-white/15 px-2.5 py-1 text-[11px] font-extrabold transition hover:bg-white/25"
-          >🎲 랜덤 생성</button>
-          <span className="text-[11px] opacity-70">{step + 1}/4</span>
-        </div>
+        <span className="text-[11px] opacity-70">{step + 1}/4</span>
       } />
 
       <div className="h-1 w-full bg-[var(--line)]">
@@ -160,7 +165,7 @@ export default function CreatePage() {
       <Column>
 
       {step === 0 && (
-        <Section eyebrow="Step 1" title="기본 정보">
+        <Section eyebrow="Step 1" title="기본 정보" action={randomBtn}>
           <div className="card flex flex-col gap-4 px-4 py-4">
             <Field label="이름">
               <input
@@ -257,7 +262,7 @@ export default function CreatePage() {
       )}
 
       {step === 1 && (
-        <Section eyebrow="Step 2" title="선수 유형">
+        <Section eyebrow="Step 2" title="선수 유형" action={randomBtn}>
           <p className="mb-3 text-[12.5px] leading-relaxed text-[var(--ink-2)]">
             어떤 선수로 자라고 싶은지 정합니다. 시작 능력치 배분이 달라지며, 이후 훈련에 따라 유형은 바뀔 수 있습니다.
           </p>
@@ -275,7 +280,7 @@ export default function CreatePage() {
       )}
 
       {step === 2 && (
-        <Section eyebrow="Step 3" title="포지션과 희망 구단">
+        <Section eyebrow="Step 3" title="포지션과 희망 구단" action={randomBtn}>
           <div className="eyebrow mb-2">포지션</div>
           <div className="flex flex-wrap gap-1.5">
             {positions.map((pos) => {
@@ -323,10 +328,16 @@ export default function CreatePage() {
 
       {step === 3 && (
         <Section eyebrow="Step 4" title="후보 선수 선택"
-          action={
+          /*
+           * 세 장을 **다 열어본 뒤에만** "다시 뽑기"를 보여준다.
+           * 덮인 카드를 앞에 두고 다시 뽑는 건 아무것도 바꾸지 않는다 —
+           * 무엇이 마음에 안 들어서 다시 뽑는지가 있어야 뽑기가 선택이 된다.
+           * 덕분에 "모두 열기"와 자리를 다투지도 않는다(그쪽은 다 열리면 사라진다).
+           */
+          action={opened.length >= candidates.length ? (
             <button onClick={() => { setBaseSeed(Math.floor(Math.random() * 1e9)); setPicked(null); }}
-              className="btn btn-ghost px-3 py-1.5 text-[12px]">🎲 다시 뽑기</button>
-          }>
+              className="btn btn-ghost shrink-0 px-3 py-1.5 text-[12px]">🎲 다시 뽑기</button>
+          ) : undefined}>
           {opened.length < candidates.length && (
             <div className="mb-3 flex items-center gap-2">
               <p className="flex-1 text-[11.5px] text-[var(--ink-3)]">
