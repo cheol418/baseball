@@ -10,6 +10,19 @@ import type { Team } from "./types";
  * 전력·육성·자금 수치는 밸런스 검증을 거친 값이라 그대로 둔다.
  */
 /**
+ * 유니폼 색은 **실제 구단색을 눌러 담은 값**이다.
+ *
+ * 실구단 색(랜더스 #ce0e2d · 이글스 #fc4e00)을 그대로 쓰면 채도가 1.0에 가까워,
+ * 헤더·탭 바·중계 배경처럼 **넓은 면을 통째로 칠할 때 눈이 아프다**.
+ * 색상(hue)은 그대로 두고 채도만 평균 0.75 → 0.45로 낮췄다 —
+ * 어느 팀인지는 그대로 알아보면서 화면은 차분해진다.
+ *
+ * 낮추기만 하면 빨강 계열 네 팀(트윈스·히어로즈·랜더스·타이거즈)이 한 덩어리로
+ * 뭉개지므로, 명도를 서로 벌려 구분을 지켰다 — 가장 가까운 두 팀 사이 ΔE 12.6
+ * (누르기 전 8.5보다 오히려 낫다). 흰 글씨 대비는 전 구단 4.9 이상이다.
+ * `accent`는 엠블럼 마크 색이라 밝은 쪽에 두되 채도를 같이 눌렀다.
+ */
+/**
  * 구장 계수는 **실제 파크팩터를 눌러 담은 게임용 값**이다.
  *
  * 실제 값(대구 1.18 · 잠실 0.84)을 그대로 쓰면 구장 하나가 시즌 OPS를
@@ -23,70 +36,70 @@ export const TEAMS: Team[] = [
   {
     // 잠실을 쓰는 서울 인기구단 — 파랑/빨강, 리그에서 가장 넓은 구장
     id: "SEO", name: "서울 트윈스", short: "트윈스", city: "서울",
-    color: "#c30452", accent: "#ffd3e2",
+    color: "#8e2a52", accent: "#eddee4",
     park: { name: "잠실 베이스볼파크", hr: 0.9, hit: 0.986, label: "극단적 투수친화 · 리그에서 가장 넓다" },
     power: 82, youth: 42, money: 95,
   },
   {
     // 잠실을 함께 쓰는 또 하나의 서울 구단 — 곰, 육성 명가
     id: "JAM", name: "잠실 베어스", short: "베어스", city: "서울",
-    color: "#131230", accent: "#c9cbe8",
+    color: "#1c1b33", accent: "#dfdeed",
     park: { name: "잠실 베이스볼파크", hr: 0.92, hit: 0.986, label: "투수친화 · 넓은 외야를 함께 쓴다" },
     power: 67, youth: 63, money: 69,
   },
   {
     // 돔구장을 쓰는 서울 구단 — 버건디, 영웅
     id: "KHO", name: "고척 히어로즈", short: "히어로즈", city: "서울",
-    color: "#570514", accent: "#e8c4cb",
+    color: "#5b2029", accent: "#eddee1",
     park: { name: "고척 스카이돔", hr: 0.97, hit: 0.996, label: "중립 · 날씨의 영향이 없는 실내 구장" },
     power: 58, youth: 78, money: 61,
   },
   {
-    // 인천 바닷가 구단 — 빨강, 홈런이 잘 나오는 구장
+    // 인천 바닷가 구단 — 벽돌빛 빨강, 홈런이 잘 나오는 구장
     id: "INC", name: "인천 랜더스", short: "랜더스", city: "인천",
-    color: "#ce0e2d", accent: "#ffd0d6",
+    color: "#a8483c", accent: "#ede0de",
     park: { name: "문학 랜더스필드", hr: 1.09, hit: 1.009, label: "타자친화 · 짧은 좌우 펜스" },
     power: 74, youth: 58, money: 78,
   },
   {
     // 수원 신생 구단 — 검정/빨강, 마법사
     id: "SUW", name: "수원 위즈", short: "위즈", city: "수원",
-    color: "#0b0b0d", accent: "#f0b6b8",
+    color: "#2b2b31", accent: "#e4e4e7",
     park: { name: "수원 위즈파크", hr: 1.05, hit: 1.004, label: "약한 타자친화" },
     power: 69, youth: 61, money: 70,
   },
   {
-    // 대전 독수리 — 주황, 젊은 선수에게 기회를 많이 준다
+    // 대전 독수리 — 가라앉힌 주황, 젊은 선수에게 기회를 많이 준다
     id: "DAJ", name: "대전 이글스", short: "이글스", city: "대전",
-    color: "#fc4e00", accent: "#ffdcc7",
+    color: "#ab5524", accent: "#ede4de",
     park: { name: "한화생명 볼파크", hr: 1.01, hit: 1.0, label: "중립 · 새로 지은 구장" },
     power: 55, youth: 84, money: 52,
   },
   {
     // 대구 사자 — 파랑, 홈런 공장으로 악명 높은 구장
     id: "DAG", name: "대구 라이온즈", short: "라이온즈", city: "대구",
-    color: "#074ca1", accent: "#c4dcf7",
+    color: "#2e5b91", accent: "#dee5ed",
     park: { name: "대구 라이온즈파크", hr: 1.11, hit: 1.014, label: "홈런 공장 · 리그에서 가장 좁다" },
     power: 77, youth: 49, money: 88,
   },
   {
     // 부산 갈매기 — 남색/빨강, 바닷바람이 타구를 잡는다
     id: "BUS", name: "부산 자이언츠", short: "자이언츠", city: "부산",
-    color: "#041e42", accent: "#c7d2e3",
+    color: "#12304f", accent: "#dee5ed",
     park: { name: "사직 야구장", hr: 0.96, hit: 1.0, label: "투수친화 · 바닷바람" },
     power: 61, youth: 72, money: 74,
   },
   {
-    // 광주 호랑이 — 빨강/검정, 우승 횟수가 가장 많은 전통의 강팀
+    // 광주 호랑이 — 짙은 자주빛 빨강/검정, 우승 횟수가 가장 많은 전통의 강팀
     id: "GWJ", name: "광주 타이거즈", short: "타이거즈", city: "광주",
-    color: "#ea0029", accent: "#ffd2d8",
+    color: "#7d2131", accent: "#eddee1",
     park: { name: "광주 챔피언스필드", hr: 1.04, hit: 1.004, label: "약한 타자친화" },
     power: 71, youth: 55, money: 66,
   },
   {
     // 창원 공룡 — 남색/금색, 데이터로 팀을 만든 신생 구단
     id: "CHW", name: "창원 다이노스", short: "다이노스", city: "창원",
-    color: "#315288", accent: "#cfdcef",
+    color: "#3b5364", accent: "#dfe7ec",
     park: { name: "창원 다이노스파크", hr: 1.0, hit: 0.996, label: "중립" },
     power: 64, youth: 66, money: 58,
   },

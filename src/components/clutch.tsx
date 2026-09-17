@@ -147,7 +147,7 @@ export function DrawReveal({ pool, hit, title }: {
 
 /** 중계 안에서 승부처 결과를 펼친다 */
 export function ClutchReveal({ r }: { r: ClutchResult }) {
-  const tone = r.success ? "#ffd166" : "#ffb4a2";
+  const tone = r.success ? "#e3c07a" : "#dba498";
   return (
     <div className="pop">
       <div className="text-[10px] font-black uppercase tracking-[0.2em] opacity-60">

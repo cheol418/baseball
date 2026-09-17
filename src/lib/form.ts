@@ -60,12 +60,12 @@ export function judgeMonthForm(line: StatLine, level: LevelTag = "KBO"): MonthFo
 
 /** 화면 표기 — 배지와 색 */
 export const FORM_STYLE: Record<MonthForm, { badge: string; color: string; rank: number }> = {
-  peak: { badge: "🏆 이달의 선수급", color: "#ffc233", rank: 3 },
-  hot: { badge: "🔥 상승세", color: "#ffd166", rank: 2 },
+  peak: { badge: "🏆 이달의 선수급", color: "#d9ab55", rank: 3 },
+  hot: { badge: "🔥 상승세", color: "#e3c07a", rank: 2 },
   normal: { badge: "— 평범", color: "rgba(255,255,255,0.75)", rank: 1 },
   cold: { badge: "🧊 부진", color: "#9fc7ff", rank: 0 },
   slump: { badge: "💀 깊은 슬럼프", color: "#7fa8e8", rank: -1 },
-  injured: { badge: "🏥 부상 결장", color: "#ffb4a2", rank: -1 },
+  injured: { badge: "🏥 부상 결장", color: "#dba498", rank: -1 },
   out: { badge: "🔻 출장 없음", color: "#c3ccd8", rank: -1 },
 };
 

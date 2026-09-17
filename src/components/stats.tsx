@@ -47,7 +47,7 @@ export function KeyStats({ line, awards }: { line: StatLine; awards?: string[] }
             </span>
             <span className="scoreboard-num mt-0.5 text-[16px] font-black">{c.v}</span>
             {title && (
-              <span className="mt-0.5 text-[8px] font-bold text-[#ffd166]">{title}</span>
+              <span className="mt-0.5 text-[8px] font-bold text-[#e3c07a]">{title}</span>
             )}
           </div>
         );

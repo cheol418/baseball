@@ -755,7 +755,7 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
                       <>
                         {g.allStarGame.side} {g.allStarGame.won ? "승리" : "패배"}
                         <span className="num ml-1.5">{g.allStarGame.score}</span>
-                        {g.allStarGame.mvp && <span className="ml-1.5 text-[11px] text-[#ffd166]">· MVP</span>}
+                        {g.allStarGame.mvp && <span className="ml-1.5 text-[11px] text-[#e3c07a]">· MVP</span>}
                       </>
                     )}
                   </div>

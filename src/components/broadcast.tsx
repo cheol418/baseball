@@ -291,7 +291,7 @@ function TourneyBoard({ games, upto }: { games: IntlGame[]; upto: number }) {
                 className="h-2 w-2 rounded-full"
                 style={{
                   background: i > upto ? "rgba(255,255,255,0.18)"
-                    : x.won ? "#8ee6a0" : "#ff9a8a",
+                    : x.won ? "#8cc79a" : "#cf8d7f",
                 }}
               />
             ))}
@@ -310,7 +310,7 @@ function TourneyBoard({ games, upto }: { games: IntlGame[]; upto: number }) {
                 <span
                   className={`flex-1 truncate rounded-md px-1.5 py-1 text-center text-[9.5px] font-extrabold transition ${
                     now ? "bg-white/25"
-                      : done ? (x.won ? "bg-[#8ee6a0]/25" : "bg-[#ff9a8a]/25")
+                      : done ? (x.won ? "bg-[#8cc79a]/25" : "bg-[#cf8d7f]/25")
                         : "bg-white/8 opacity-45"
                   }`}
                 >
@@ -564,7 +564,7 @@ function MovePanel({ step }: { step: Extract<Step, { kind: "move" }> }) {
       <div className="mt-2 text-[10px] font-black uppercase tracking-[0.2em] opacity-60">
         {step.teamName} · {step.month} 종료
       </div>
-      <div className="mt-1 text-[24px] font-black" style={{ color: promoted ? "#ffd166" : "#ffb4a2" }}>
+      <div className="mt-1 text-[24px] font-black" style={{ color: promoted ? "#e3c07a" : "#dba498" }}>
         {title}
       </div>
       <p className="mt-1.5 text-[12.5px] leading-relaxed opacity-85">
@@ -578,7 +578,7 @@ function MovePanel({ step }: { step: Extract<Step, { kind: "move" }> }) {
         <span>{step.toLabel}</span>
       </div>
       {step.move.salary !== undefined && (
-        <div className="mt-2 text-[12px] font-bold" style={{ color: "#ffd166" }}>
+        <div className="mt-2 text-[12px] font-bold" style={{ color: "#e3c07a" }}>
           1군 등록으로 연봉 조정 · {formatMoney(step.move.salary)}
         </div>
       )}
@@ -604,10 +604,10 @@ function MonthPanel({ step }: { step: Extract<Step, { kind: "month" }> }) {
         >
           <span className="text-[20px] leading-none">🏆</span>
           <div>
-            <div className="text-[9px] font-black uppercase tracking-[0.18em]" style={{ color: "#ffc233" }}>
+            <div className="text-[9px] font-black uppercase tracking-[0.18em]" style={{ color: "#d9ab55" }}>
               Player of the Month
             </div>
-            <div className="text-[13px] font-black" style={{ color: "#ffc233" }}>
+            <div className="text-[13px] font-black" style={{ color: "#d9ab55" }}>
               {step.label} 이달의 선수 선정
             </div>
           </div>
@@ -653,7 +653,7 @@ function HsPanel({ step }: { step: Extract<Step, { kind: "hs" }> }) {
           style={{ background: good ? "rgba(255,255,255,0.92)" : "rgba(0,0,0,0.28)", color: good ? "#0e2a4d" : "#fff" }}>
           {t.placement}
         </span>
-        {t.award && <span className="text-[11.5px] font-bold" style={{ color: "#ffd166" }}>🏅 {t.award}</span>}
+        {t.award && <span className="text-[11.5px] font-bold" style={{ color: "#e3c07a" }}>🏅 {t.award}</span>}
       </div>
 
       <ul className="mt-3 flex flex-col gap-1">
@@ -685,7 +685,7 @@ function GamePanel({ step }: { step: Extract<Step, { kind: "game" }> }) {
       <div className="text-[10px] font-black uppercase tracking-[0.16em] opacity-60">{step.tag}</div>
       <div className="mt-0.5 flex items-baseline gap-2">
         <span className="text-[17px] font-black">{step.round}</span>
-        {step.mvp && <span className="text-[11px] font-black" style={{ color: "#ffd166" }}>🌟 MVP</span>}
+        {step.mvp && <span className="text-[11px] font-black" style={{ color: "#e3c07a" }}>🌟 MVP</span>}
       </div>
 
       <div className="mt-2.5 flex items-center justify-between gap-3">

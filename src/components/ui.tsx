@@ -67,7 +67,7 @@ export function AbilityBar({ k, value, potential, potentialHi, known = true }: {
   const loPct = Math.min(100, (potential / ABILITY_MAX) * 100);
   const hiPct = Math.min(100, ((potentialHi ?? potential) / ABILITY_MAX) * 100);
   // 전광판 눈금처럼 — 상위 구간일수록 밝게
-  const tone = value >= 100 ? "#ffd166" : value >= 84 ? "#5fa8e8" : value >= 66 ? "#7f93a8" : "#5b6675";
+  const tone = value >= 100 ? "#e3c07a" : value >= 84 ? "#6d9fcb" : value >= 66 ? "#7f93a8" : "#5b6675";
   return (
     // 한 줄 최소폭 = 34+6+40+6+22+6+38 = 152px.
     // 2열로 깔리는 곳(후보 카드)이 있어 좁은 폰에서 옆 칸을 밀지 않아야 한다.
