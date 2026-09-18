@@ -2,7 +2,7 @@ import { RNG, clamp, n50 } from "./rng";
 import { TEAMS, teamById } from "./teams";
 import {
   ABILITY_LABEL, ABILITY_MAX, abilityKeys, deriveStyle, developmentRate, getAb,
-  grow, HELL_LIMIT, hellOdds, injuryRiskMultiplier, makeTrainingOptions, overall, rollTrainGrade,
+  grow, HELL_LIMIT, hellOdds, injuryRiskMultiplier, makeTrainingOptions, overall, reviseUpside, rollTrainGrade,
   potentialOverall, setAb,
 } from "./player";
 import {
@@ -1514,6 +1514,13 @@ function deservedFame(s: GameState): { target: number; floor: number } {
   return { target, floor };
 }
 
+/** 추정을 바꿀 만큼 뛰었는가 — 20타석 반짝 활약으로 천장이 열리면 안 된다 */
+function enoughToJudge(line: StatLine): boolean {
+  const h = line as HitterLine;
+  const p = line as PitcherLine;
+  return h.pa !== undefined ? h.pa >= 300 : p.ip >= 70;
+}
+
 function closeSeason(s: GameState, rng: RNG) {
   const p = s.player;
   const team = s.contract ? teamById(s.contract.teamId) : null;
@@ -1590,6 +1597,33 @@ function closeSeason(s: GameState, rng: RNG) {
     allStarGame: s.allStarGame ?? undefined,
     potm: s.potmMonths?.length ? s.potmMonths : undefined,
   };
+  /**
+   * 스카우팅 리포트 수정 — 기대를 넘는 시즌은 천장을 다시 연다.
+   * 1군에서 제대로 뛴 시즌만 본다(짧은 표본의 반짝 성적은 추정을 못 바꾼다).
+   */
+  if (level === "KBO" && enoughToJudge(regular)) {
+    // 기준은 자기 자신 — 지금까지의 1군 최고 WAR
+    const bestWar = s.seasons
+      .filter((r) => r.level === "KBO")
+      .reduce((a, r) => Math.max(a, r.line.war), 0);
+    const revised = reviseUpside(p, regular.war, bestWar, rec.awards, rng);
+    for (const r of revised) {
+      log(s, {
+        icon: "🔭", title: "스카우팅 리포트 수정", tone: "good",
+        body: `${ABILITY_LABEL[r.key] ?? r.key} 잠재력 평가가 ${r.from} → ${r.to}으로 올라갔습니다. `
+          + "기대를 넘는 시즌이 스카우트의 추정을 바꿨습니다.",
+      });
+    }
+    if (revised.length) {
+      notify(s, {
+        icon: "🔭", eyebrow: "Scouting", title: "잠재력 재평가", tone: "epic",
+        body: "기대를 넘는 시즌이었습니다. 한계로 보이던 선이 뒤로 물러났습니다.",
+        change: revised.map((r) => ({
+          label: ABILITY_LABEL[r.key] ?? r.key, from: `잠재 ${r.from}`, to: `잠재 ${r.to}`,
+        })),
+      });
+    }
+  }
   // 그해의 대기록
   rec.feats = rollFeats(regular, level, rng);
   // 구단 목표

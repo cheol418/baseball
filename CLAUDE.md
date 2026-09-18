@@ -205,6 +205,11 @@ UI는 `src/app/page.tsx`(홈) · `create/page.tsx`(4단계 생성) · `play/[id]
 | 선택의 무게 | 같은 시드에서 짝지어 본 WAR 폭 **10.2** (운 51.8 → 5.1배). 각오 도입 전엔 1.7 (34배)였다 — `agency.ts` |
 | 측정 주의 | 균형 잡힌 선택지는 **평균끼리 빼면 상쇄된다.** "내 선택이 내 커리어를 바꾸는가"는 같은 시드에서 짝지어 재야 한다 |
 | 훈련 | **방향 5종(타자)/4종(투수)** 선택 · 능력치는 자동 배분 (주력 1배 · 곁가지 0.5배) |
+| 훈련 방향의 덮개 | **모든 능력은 적어도 한 방향에서는 오를 수 있어야 한다.** 투수수비는 어느 방향의 주력도 곁가지도 아니어서 OVR에는 들어가면서 평생 한 칸도 못 올리고 노쇠로 깎이기만 했다 — 화면은 "성장 여지"를 보여주는데 갈 길이 없었다 (`scripts/traincover.ts`) |
+| 잠재력은 추정치다 | 잠재력에 닿으면 훈련 상승분이 **상한에서 통째로 잘려나간다.** 실측 27~29세에 능력치의 48%가 천장에 붙어, 훈련을 골라도 달라지는 게 없었다. 기대를 넘는 시즌은 `reviseUpside()`가 추정을 위로 고친다 — 커리어당 3.3회, 막힌 항목 48% → 40% (`scripts/ceiling.ts`) |
+| 재평가의 기준은 자기 자신 | **자기 최고 WAR를 넘었거나 타이틀을 땄을 때**만 연다. WAR 절대값을 기준으로 삼으면 보직이 기준을 정해버려, 마무리는 WAR 2.7이 천장이라 선발용 선을 영영 못 넘는다 (실제로 겪음: 커리어당 0.5회). 자기 최고가 기준이면 좋은 시즌이 쌓일수록 넘기 어려워져 눈덩이가 저절로 멎는다 |
+| 재평가의 대가 | 후반 성장을 열면 피크 OVR이 82.2 → 83.1로 오른다. **공짜 점심은 없다** — OVR은 능력치의 가중평균이라 뒤를 살리면 앞을 줄여야 총량이 같다. 훈련 `gain`을 6.0 → 5.2로 낮춰 되돌렸다(피크 82.6 · 리그 OPS·WAR·신인 성적·데뷔 나이 모두 그대로) |
+| 성장 곡선을 건드렸으면 | `potcap`(피크 OVR) · `ceiling`(막힌 항목·훈련 몫) · `statdist`(리그 기록) · `debut`(데뷔·주전 정착 나이) · `rookiestat`(신인 성적) · `traingrade`(기댓값 1.0) · `hellcheck`를 **before/after로 같이** 잰다. 측정에 ±0.2 노이즈가 있으니 한 번 돌린 값으로 판단하지 않는다 |
 | 지옥 훈련 | 커리어 **2회** · 성공률 ~50% · 성공 2.3배 / 실패 0.42배 (부상보다 헛수고가 위험) |
 | 훈련 성과 | 같은 방향을 골라도 갈린다 — 대성공 7% ×1.7 · 잘 풀림 21% ×1.3 · 무난 43% ×1.0 · 잘 안 됨 23% ×0.7 · 헛돈 겨울 7% ×0.4 |
 | 훈련 성과 기댓값 | **가중 기댓값 1.0** — 여기를 건드리면 성장 곡선 전체가 움직인다 (`traingrade.ts`) |
@@ -321,7 +326,7 @@ UI는 `src/app/page.tsx`(홈) · `create/page.tsx`(4단계 생성) · `play/[id]
 `rookiestat`(신인 성적·훈련 상승폭), `sangmu`(상무 지원), `notices`(통보 발생),
 `hellcheck`(지옥 훈련 도박 균형), `transferodds`(표기 확률 ↔ 실제 성사율),
 `service`(복무 기간·복귀 시점), `school`(학교 전력 효과),
-`titles`(성적 대비 수상), `titlebar`(부문별 기준선·수상률), `nego`(협상 도박 균형), `negotext`(협상 통보 문구), `integrity`(기록 불변식), `valuecheck`(값의 범위), `goaltext`(목표 표기↔판정), `campreport`(훈련 몫 ↔ 나이 몫), `logic`(칸 사이의 모순), `traingrade`(훈련 성과 분포), `agency`(선택의 무게), `decisions`(결정 밀도), `repeat`(장면 반복), `oddscheck`(표기 확률 검수), `rivals`(동기 분포·타이틀 중복), `fame`(인지도 눈금), `leagueavg`(리그 평균 기준), `injurymonth`(부상의 달력 배치), `wish`(희망 구단의 무게), `park`(구장 효과 크기), `scenefit`(장면↔자리 일치), `service2`(복무 방침의 값), `wl`(투수 승패), `randomcreate`(랜덤 조합 정합성), `agelimit`(AG 연령 제한), `wl`(투수 승패), `ipfmt`(이닝 표기), `titlebar`(부문별 기준선), `asscore`(올스타 스코어↔승패), `asorder`(올스타 정보 유출), `textcheck`(문구 빈칸),
+`titles`(성적 대비 수상), `titlebar`(부문별 기준선·수상률), `nego`(협상 도박 균형), `negotext`(협상 통보 문구), `integrity`(기록 불변식), `valuecheck`(값의 범위), `goaltext`(목표 표기↔판정), `campreport`(훈련 몫 ↔ 나이 몫), `logic`(칸 사이의 모순), `ceiling`(천장·훈련 몫), `headroom`(성장 여지), `traincover`(훈련 방향의 덮개), `traingrade`(훈련 성과 분포), `agency`(선택의 무게), `decisions`(결정 밀도), `repeat`(장면 반복), `oddscheck`(표기 확률 검수), `rivals`(동기 분포·타이틀 중복), `fame`(인지도 눈금), `leagueavg`(리그 평균 기준), `injurymonth`(부상의 달력 배치), `wish`(희망 구단의 무게), `park`(구장 효과 크기), `scenefit`(장면↔자리 일치), `service2`(복무 방침의 값), `wl`(투수 승패), `randomcreate`(랜덤 조합 정합성), `agelimit`(AG 연령 제한), `wl`(투수 승패), `ipfmt`(이닝 표기), `titlebar`(부문별 기준선), `asscore`(올스타 스코어↔승패), `asorder`(올스타 정보 유출), `textcheck`(문구 빈칸),
 `service_fa`(서비스타임 ↔ FA 도달), `titlemark`(타이틀↔기록 대응),
 `monthform`(월별 단계 분포·이달의 선수), `mvppay`(성적 대비 제시액),
 `clutch`(승부처 선택지 균형), `clutchwin`(승부처 문구 ↔ 경기 결과), `clutchgame`(승부처 ↔ 출장 기록), `clutchseat`(장면 ↔ 그 달의 자리), `fagate`(FA를 막는 조건),

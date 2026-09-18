@@ -605,6 +605,49 @@ export const DEV_RATE_LABEL = (rate: number) =>
 
 /** 오프시즌 성장 처리 */
 /**
+ * 스카우팅 리포트 수정 — 잘한 시즌이 천장을 연다.
+ *
+ * 잠재력은 **스카우트의 추정치**지 진짜 한계가 아니다. 스물일곱에 능력치의 절반이
+ * 천장에 닿아 훈련을 골라도 달라지는 게 없던 자리에, 성적으로 길을 다시 연다.
+ *
+ * 기준은 **자기 자신**이다 — 지금까지의 최고를 넘었거나, 타이틀을 땄거나.
+ * WAR 절대값을 쓰면 보직이 기준을 정해버린다. 마무리는 아무리 잘 던져도
+ * WAR 2.7이 천장이라 선발용 선을 영영 못 넘는다. (실제로 겪음: 커리어당 0.5회)
+ *
+ * 눈덩이를 막는 장치가 셋이다.
+ *  · 기준이 **자기 최고**라 좋은 시즌이 쌓일수록 넘기 어려워진다.
+ *  · 한 시즌에 여는 폭이 좁다(한두 항목 × 1~3).
+ *  · **막혀 있는 항목부터** 연다 — 여지가 남은 곳을 열어봐야 소용이 없으므로,
+ *    실제로 벽에 부딪힌 선수에게만 효과가 간다.
+ */
+export function reviseUpside(
+  p: Player, war: number, careerBestWar: number, awards: string[], rng: RNG,
+): { key: AbilityKey; from: number; to: number }[] {
+  const beatSelf = war >= careerBestWar + 0.3;
+  const bigAward = awards.some((a) => a.includes("MVP") || a.endsWith("왕"));
+  if (!beatSelf && !bigAward) return [];
+
+  // 벽에 부딪힌 항목만 연다
+  const stuck = abilityKeys(p.kind).filter((k) => {
+    const pot = getAb(p.potential, k);
+    return pot - getAb(p.abilities, k) <= 3 && pot < ABILITY_MAX;
+  });
+  if (!stuck.length) return [];
+
+  const big = bigAward || war >= careerBestWar + 1.5;
+  const picked = rng.shuffle(stuck).slice(0, Math.min(stuck.length, big ? 2 : 1));
+  const out: { key: AbilityKey; from: number; to: number }[] = [];
+  for (const k of picked) {
+    const from = getAb(p.potential, k);
+    const to = clamp(from + rng.int(1, big ? 3 : 2), 15, ABILITY_MAX);
+    if (to === from) continue;
+    setAb(p.potential, k, to);
+    out.push({ key: k, from, to });
+  }
+  return out;
+}
+
+/**
  * 한 겨울의 결과.
  *  · `deltas` 실제로 움직인 값 (훈련 + 세월)
  *  · `gains`  훈련이 보탠 몫 — **늘 0 이상이다**
@@ -750,6 +793,14 @@ export interface TrainingPath {
   leadsTo: string;
 }
 
+/**
+ * 훈련 방향.
+ *
+ * **모든 능력은 적어도 한 방향에서는 오를 수 있어야 한다.**
+ * 투수수비는 어느 방향의 주력도 곁가지도 아니어서, OVR에는 들어가면서
+ * 평생 한 칸도 못 올리고 노쇠로 깎이기만 했다 — 화면은 "성장 여지"를
+ * 보여주는데 갈 수 있는 길이 없었다. (`scripts/traincover.ts`)
+ */
 export const TRAINING_PATHS: TrainingPath[] = [
   {
     id: "power", name: "장타를 키운다", icon: "💪", kind: "HITTER",
@@ -784,8 +835,8 @@ export const TRAINING_PATHS: TrainingPath[] = [
   },
   {
     id: "command", name: "제구를 다듬는다", icon: "🎯", kind: "PITCHER",
-    desc: "원하는 곳에 던지는 기술을 기른다.",
-    main: ["control"], sub: ["movement", "mental"], leadsTo: "제구형 · 노련형",
+    desc: "원하는 곳에 던지는 기술과 마운드 위의 기본기를 기른다.",
+    main: ["control"], sub: ["movement", "mental", "fielding"], leadsTo: "제구형 · 노련형",
   },
   {
     id: "breaking", name: "변화구를 늘린다", icon: "🌀", kind: "PITCHER",
@@ -794,8 +845,8 @@ export const TRAINING_PATHS: TrainingPath[] = [
   },
   {
     id: "body_p", name: "몸을 만든다", icon: "🏋️", kind: "PITCHER",
-    desc: "많은 이닝과 연투를 견딜 몸을 만든다.",
-    main: ["stamina"], sub: ["durability", "velocity"], leadsTo: "이닝이터 · 고무팔",
+    desc: "많은 이닝과 연투를 견딜 몸과 수비 움직임을 만든다.",
+    main: ["stamina"], sub: ["durability", "velocity", "fielding"], leadsTo: "이닝이터 · 고무팔",
   },
 ];
 
@@ -892,7 +943,7 @@ export function makeTrainingOptions(p: Player, _rng: RNG): TrainingOption[] {
     desc: `${t.desc} 계속하면 ${t.leadsTo} 쪽으로 자랍니다.`,
     targets: [...t.main, ...t.sub],
     main: [...t.main],
-    gain: 6.0,
+    gain: 5.2,
     risk: 0.05,
     conditionCost: 9,
     room: roomOf([...t.main, ...t.sub]),
