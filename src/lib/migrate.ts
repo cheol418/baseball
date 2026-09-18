@@ -40,6 +40,7 @@ export function migrateSave(raw: unknown): GameState | null {
   def("rivals", []);
   // 달별 가동률 — 없으면 전 달 만근으로 본다
   def("monthAvail", null);
+  def("seasonRoleGames", null);
   def("liveHalf", null);
   def("retireRefusedYear", null);
   def("rookieDeal", null);

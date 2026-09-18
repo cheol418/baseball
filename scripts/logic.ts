@@ -10,8 +10,9 @@ import { rollCandidate } from "../src/lib/player";
 import { newGame } from "../src/lib/career";
 import { PS_CUT } from "../src/lib/postseason";
 import { TOURNAMENTS } from "../src/lib/national";
+import { isRotationRole } from "../src/lib/roles";
 import { autoPlay } from "./autoplay";
-import type { GameState } from "../src/lib/types";
+import type { GameState, PitcherLine } from "../src/lib/types";
 
 type Bad = { rule: string; detail: string };
 const bad: Bad[] = [];
@@ -58,6 +59,23 @@ for (let i = 0; i < 100; i++) {
     }
     // 올스타전을 치렀으면 올스타로 뽑힌 것이다
     if (rec.allStarGame && rec.allStar === false) fail("올스타전 ↔ 선정", tag);
+    /**
+     * 적힌 보직과 기록이 같은 말을 해야 한다.
+     *
+     * 다만 **섞인 줄은 모순이 아니다** — 시즌 중에 보직이 바뀌면 한 해 기록에
+     * 세이브와 홀드가 함께 남는다. "필승조 · 세이브 23"은 마무리를 맡았다
+     * 내려온 선수의 진짜 기록이다. 걸러야 할 것은 그 보직에서 **나올 수 없는**
+     * 줄이다 — 마무리로 한 해를 보냈는데 세이브가 하나도 없는 것.
+     */
+    if (rec.level === "KBO" && p.kind === "PITCHER") {
+      const l = rec.line as PitcherLine;
+      if (rec.role === "마무리" && l.g >= 20 && l.sv === 0) {
+        fail("마무리인데 세이브 0", `${tag} ${l.g}G SV 0 HLD ${l.hld}`);
+      }
+      if (isRotationRole(rec.role) && l.g >= 15 && l.gs === 0) {
+        fail("선발인데 선발 등판 0", `${tag} ${rec.role} ${l.g}G GS ${l.gs}`);
+      }
+    }
   }
   if (g.serviceYears > proSeasons) {
     fail("서비스타임 ≤ 프로 시즌 수", `${g.serviceYears} > ${proSeasons}`);

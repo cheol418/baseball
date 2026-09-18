@@ -424,6 +424,11 @@ export interface GameState {
   seasonAvailability: number;
   /** 달마다의 가동률 — 부상은 달력 위의 연속 구간으로 놓인다 */
   monthAvail?: number[] | null;
+  /**
+   * 그해 보직별로 뛴 경기 수.
+   * `monthLines`는 후반기가 전반기를 덮어쓰므로, 시즌 기록의 보직을 여기서 뽑는다.
+   */
+  seasonRoleGames?: Record<string, number> | null;
   /** 이번 시즌 올스타 선정 여부 */
   allStar: boolean;
   /** 올스타전 경기 결과 */

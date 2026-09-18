@@ -1398,6 +1398,13 @@ function playHalf(
       );
       s.pendingClutch = null;
     }
+    // 그해 어느 보직으로 몇 경기를 뛰었는지 쌓아둔다 — 시즌 기록의 보직을 여기서 뽑는다
+    const gamesHere = (line as { g: number }).g ?? 0;
+    if (gamesHere > 0) {
+      const tally = { ...(s.seasonRoleGames ?? {}) };
+      tally[role] = (tally[role] ?? 0) + gamesHere;
+      s.seasonRoleGames = tally;
+    }
     // 1군·2군을 오간 시즌은 나중에 따로 보여줘야 하므로 그때그때 갈라 담는다
     if (level === "KBO" || level === "MINOR") {
       const bucket = s.seasonByLevel ?? { KBO: null, MINOR: null };
@@ -1514,6 +1521,20 @@ function deservedFame(s: GameState): { target: number; floor: number } {
   return { target, floor };
 }
 
+/**
+ * 그 시즌을 **가장 오래 맡은 보직**.
+ *
+ * 시즌이 끝난 시점의 보직을 적으면, 8월에 마무리로 올라간 선수의 한 해가
+ * 통째로 "마무리"로 기록된다 — 정작 숫자는 홀드 19에 세이브 0이다.
+ * 반대도 마찬가지다("필승조인데 세이브 35"). (실제로 겪음)
+ * 경기 수로 저울질해 가장 오래 있었던 자리를 적는다.
+ */
+function seasonRoleOf(s: GameState): string | null {
+  const tally = Object.entries(s.seasonRoleGames ?? {});
+  if (!tally.length) return null;
+  return tally.sort((a, b) => b[1] - a[1])[0][0];
+}
+
 /** 추정을 바꿀 만큼 뛰었는가 — 20타석 반짝 활약으로 천장이 열리면 안 된다 */
 function enoughToJudge(line: StatLine): boolean {
   const h = line as HitterLine;
@@ -1570,7 +1591,7 @@ function closeSeason(s: GameState, rng: RNG) {
   const rec: SeasonRecord = {
     year: s.year, age: p.age, level,
     teamId: team?.id ?? "-", teamName: team?.name ?? "-",
-    position: p.position, role: s.seasonRole ?? defaultRole(p),
+    position: p.position, role: seasonRoleOf(s) ?? s.seasonRole ?? defaultRole(p),
     salary: s.contract?.salary ?? 0,
     line: regular,
     awards: [...new Set(awards)],
@@ -1779,6 +1800,7 @@ function startNextYear(s: GameState, rng: RNG) {
   s.pendingTransfers = null;
   s.transferRequested = false;
   s.monthLines = null;
+  s.seasonRoleGames = null;
   s.potmMonths = null;
   s.retireRefusedYear = null;
   s.halfLine = null;
