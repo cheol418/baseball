@@ -590,6 +590,9 @@ export function applyClutchToLine(line: StatLine, r: ClutchResult): StatLine {
   } else {
     const p = out as unknown as PitcherLine;
     p.ip = Math.round((p.ip + 0.3) * 10) / 10;
+    // 자책은 내보낸 주자 수를 넘지 못한다 — "역전 피홈런(3자책)"이 한 경기짜리
+    // 줄에 얹히면 주자 없이 3점을 준 기록이 된다 (sim.ts와 같은 규칙)
+    p.er = Math.min(p.er, p.h + p.bb);
     p.era = p.ip ? Math.round(((p.er * 9) / p.ip) * 100) / 100 : 0;
     p.whip = p.ip ? Math.round(((p.h + p.bb) / p.ip) * 100) / 100 : 0;
     p.k9 = p.ip ? Math.round(((p.so / p.ip) * 9) * 100) / 100 : 0;

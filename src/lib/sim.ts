@@ -127,14 +127,24 @@ export function simHitter(inp: SimInput): HitterLine {
   const bb = cnt(pa, bbRate);
   const hbp = cnt(pa, 0.0095);
   const sf = cnt(pa, 0.009);
-  const ab = Math.max(1, pa - bb - hbp - sf);
+  /**
+   * 타수는 0일 수 있다 — 4타석 전부 볼넷인 경기가 그렇다.
+   * 최소 1로 눌러두면 타수+볼넷+사구가 타석을 넘어, 한 경기 기록이
+   * "4타석인데 5번 나갔다"가 된다. 나누는 자리를 대신 지킨다.
+   */
+  const ab = Math.max(0, pa - bb - hbp - sf);
   const so = clamp(cnt(pa, kRate), 0, ab);
   const contacted = Math.max(0, ab - so);
   const hr = cnt(contacted, hrPerBall);
   const inPlay = Math.max(0, contacted - hr);
   const hIn = cnt(inPlay, babip);
-  const b2 = cnt(hIn, clamp(0.19 + 0.055 * n50(a("power")) + 0.03 * n50(a("speed")), 0.10, 0.34));
-  const b3 = cnt(hIn, clamp(0.015 + 0.035 * Math.max(0, n50(a("speed"))), 0, 0.07));
+  const b2 = Math.min(hIn, cnt(hIn, clamp(0.19 + 0.055 * n50(a("power")) + 0.03 * n50(a("speed")), 0.10, 0.34)));
+  /**
+   * 3루타는 **2루타를 뺀 나머지에서** 뽑는다.
+   * 같은 모수(hIn)에서 따로 뽑으면 짧은 구간에서 둘의 합이 안타를 넘어
+   * 단타가 음수가 된다 — "2루타 3개, 안타 2개". (실제로 겪음)
+   */
+  const b3 = cnt(hIn - b2, clamp(0.015 + 0.035 * Math.max(0, n50(a("speed"))), 0, 0.07));
   const h = hIn + hr;
 
   const sbAttempt = cnt(games, clamp(0.02 + 0.45 * Math.max(0, n50(a("speed"))), 0, 0.6));
@@ -149,9 +159,9 @@ export function simHitter(inp: SimInput): HitterLine {
 
   const singles = h - b2 - b3 - hr;
   const tb = singles + b2 * 2 + b3 * 3 + hr * 4;
-  const avg = h / ab;
+  const avg = ab ? h / ab : 0;
   const obp = (h + bb + hbp) / pa;
-  const slg = tb / ab;
+  const slg = ab ? tb / ab : 0;
 
   const woba = (0.69 * bb + 0.72 * hbp + 0.89 * singles + 1.27 * b2 + 1.62 * b3 + 2.1 * hr) / pa;
   /**
@@ -176,7 +186,13 @@ export function simHitter(inp: SimInput): HitterLine {
 
   return {
     g: games, pa, ab, h, b2, b3, hr, rbi, r, bb, so, sb, cs, hbp,
-    avg: round3(avg), obp: round3(obp), slg: round3(slg), ops: round3(obp + slg), war,
+    /**
+     * OPS는 **반올림한 출루·장타를 더해서** 낸다.
+     * 반올림 전 값으로 더하면 화면의 .341 + .401 이 .743으로 찍혀,
+     * 눈으로 더해본 사람에게는 틀린 숫자가 된다. `mergeLines`도 같은 방식이다.
+     */
+    avg: round3(avg), obp: round3(obp), slg: round3(slg),
+    ops: round3(round3(obp) + round3(slg)), war,
   };
 }
 
@@ -253,9 +269,18 @@ export function simPitcher(inp: SimInput): PitcherLine {
   // 자책점은 정수다. 1이닝에 기대 자책 0.4면 반올림으로 항상 0이 되어
   // 표시된 평균자책과 기록이 어긋난다(합산하면 0.00이 된다) — 짧은 구간은 추첨한다.
   const erRaw = (rate * ip) / 9;
-  const er = ip < 25
+  const erDrawn = ip < 25
     ? Math.floor(erRaw) + (rng.next() < erRaw - Math.floor(erRaw) ? 1 : 0)
     : Math.round(erRaw);
+  /**
+   * 자책점은 **내가 내보낸 주자 수**를 넘을 수 없다.
+   *
+   * 자책은 비율(FIP 기반)로 뽑고 피안타·볼넷은 따로 세므로, 한 경기짜리
+   * 짧은 등판에서 "2명 내보내고 3자책" 같은 줄이 나온다 — 야구에 없는 기록이다.
+   * (승계 주자의 실점은 앞 투수에게 붙으므로 내 줄에는 들어오지 않는다)
+   * 긴 구간에서는 이 선에 닿는 일이 없어 시즌 기록은 그대로다.
+   */
+  const er = Math.min(erDrawn, h + bb);
   // 평균자책은 항상 실제 자책점에서 되계산한다 — 합산해도 맞아떨어지게
   const era = ip ? Math.round(((er * 9) / ip) * 100) / 100 : 0;
   const whip = Math.round(((h + bb) / ip) * 100) / 100;

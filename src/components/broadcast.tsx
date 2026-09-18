@@ -6,6 +6,7 @@ import { isHitterLine, mergeLines } from "@/lib/sim";
 import { TOURNAMENTS, clutchGameIndex } from "@/lib/national";
 import { formatMoney } from "@/lib/career";
 import { roleTier } from "@/lib/roles";
+import { RNG } from "@/lib/rng";
 import type { Clutch, ClutchResult } from "@/lib/clutch";
 import { ClutchCard, ClutchReveal } from "@/components/clutch";
 import { FORM_STYLE, formNote, judgeMonthForm, type MonthForm } from "@/lib/form";
@@ -349,28 +350,70 @@ function TourneyBoard({ games, done, current }: { games: IntlGame[]; done: numbe
   );
 }
 
+/**
+ * 달마다 걸리는 일정 문구.
+ *
+ * KBO는 **3연전 단위**로 돌고 월요일은 쉰다 — 홈 연전은 세 시리즈를 붙여도
+ * 9경기가 최대다. "홈 10연전"은 있을 수 없는 일정이다. (실제로 겪음)
+ * 고정 문구 네 줄만 두면 매 시즌 같은 화면이 뜨므로, 그해 시드로 골라 쓴다.
+ * 실제 달력에 있는 것만 적는다 — 어린이날·광복절 3연전, 장마철 더블헤더,
+ * 7월 31일 트레이드 마감, 9월 1일 확대 엔트리.
+ */
+const SCHEDULE: Record<string, string[]> = {
+  "4": ["개막 시리즈", "개막전 홈 3연전", "시즌 첫 원정 3연전", "4월 마지막 주중 3연전", "쌀쌀한 저녁 경기"],
+  "5": ["어린이날 홈 3연전", "홈 9연전", "원정 6연전", "주말 라이벌 3연전", "5월 첫 주중 3연전"],
+  "6": ["장마철 원정", "우천 취소 · 더블헤더", "전반기 순위 굳히기", "6월 홈 6연전", "무더위 시작"],
+  "7": ["올스타 브레이크 직전", "트레이드 마감 직전", "전반기 마지막 3연전", "폭염 속 원정 3연전"],
+  "8": ["폭염 속 연전", "광복절 홈 3연전", "8월 원정 9연전", "우천 순연 · 더블헤더", "8월 막바지 주말 3연전"],
+  "9": ["순위 싸움", "확대 엔트리", "9월 맞대결 3연전", "가을야구 매직넘버", "잔여 경기 편성"],
+  "10": ["시즌 마지막 경기", "정규시즌 최종전", "잔여 경기 소화", "10월 첫 주 홈 3연전"],
+};
+/** 2군은 일정이 다르다 — 1군 콜업을 기다리는 달들이다 */
+const SCHEDULE_MINOR: Record<string, string[]> = {
+  "4": ["퓨처스리그 개막", "퓨처스 홈 3연전", "북부리그 원정"],
+  "5": ["퓨처스 홈 6연전", "1군 콜업 대기", "상무와 3연전"],
+  "6": ["장마철 순연", "퓨처스 원정 3연전", "1군 코칭스태프 방문"],
+  "7": ["퓨처스 올스타 브레이크", "한여름 낮경기", "콜업 경쟁"],
+  "8": ["퓨처스 홈 6연전", "폭염 속 낮경기", "1군 엔트리 변동"],
+  "9": ["확대 엔트리 · 콜업", "퓨처스 순위 싸움", "시즌 막바지"],
+  "10": ["퓨처스리그 폐막", "마무리캠프 명단", "시즌 마지막 경기"],
+};
+const TAIL_H1 = [
+  "경기 일정과 선수 기록을 계산하고 있습니다.",
+  "개막까지 얼마 남지 않았습니다.",
+  "긴 시즌의 첫 넉 달입니다.",
+  "라인업과 로테이션을 맞추는 중입니다.",
+];
+const TAIL_H2 = [
+  "가을야구가 걸린 두 달입니다.",
+  "여기서부터는 한 경기가 순위를 바꿉니다.",
+  "남은 경기가 얼마 없습니다.",
+  "확대 엔트리로 벤치가 두꺼워집니다.",
+];
+
+/** 그해 일정 — 같은 시즌이면 늘 같게, 시즌이 바뀌면 다르게 */
+function scheduleRows(g: GameState, months: string[]): { when: string; what: string }[] {
+  const rng = new RNG(g.seed + g.year * 977);
+  const pool = g.seasonLevel === "MINOR" ? SCHEDULE_MINOR : SCHEDULE;
+  return months.map((m) => ({ when: `${m}월`, what: rng.pick(pool[m] ?? ["경기"]) }));
+}
+
 /** 중계 종류별 로딩 화면 내용 */
 function loadingOf(g: GameState, kind: BroadcastKind): { title: string; subtitle: string; rows: { when: string; what: string }[]; tail: string } | null {
   if (kind === "H1") {
     return {
-      subtitle: `${g.year} · 정규시즌`,
+      subtitle: `${g.year} · ${g.seasonLevel === "MINOR" ? "퓨처스리그" : "정규시즌"}`,
       title: "전반기 일정을 짭니다",
-      rows: [
-        { when: "4월", what: "개막 시리즈" }, { when: "5월", what: "홈 10연전" },
-        { when: "6월", what: "장마철 원정" }, { when: "7월", what: "올스타 브레이크 직전" },
-      ],
-      tail: "경기 일정과 선수 기록을 계산하고 있습니다.",
+      rows: scheduleRows(g, ["4", "5", "6", "7"]),
+      tail: new RNG(g.seed + g.year * 31).pick(TAIL_H1),
     };
   }
   if (kind === "H2") {
     return {
-      subtitle: `${g.year} · 순위 싸움`,
+      subtitle: `${g.year} · ${g.seasonLevel === "MINOR" ? "퓨처스리그" : "순위 싸움"}`,
       title: "후반기가 시작됩니다",
-      rows: [
-        { when: "8월", what: "폭염 속 연전" }, { when: "9월", what: "순위 싸움" },
-        { when: "10월", what: "시즌 마지막 경기" },
-      ],
-      tail: "가을야구가 걸린 두 달입니다.",
+      rows: scheduleRows(g, ["8", "9", "10"]),
+      tail: new RNG(g.seed + g.year * 53).pick(TAIL_H2),
     };
   }
   if (kind === "PS") {
