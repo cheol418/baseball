@@ -131,8 +131,20 @@ const injuryReturn: ChainDef = {
 /* ------------------------------------------------------------------ */
 
 /** 수비 부담이 가벼워지는 순서 */
-const HITTER_SHIFT: Partial<Record<Position, Position>> = {
-  C: "1B", SS: "3B", "2B": "1B", "3B": "1B", CF: "LF", LF: "DH", RF: "DH", "1B": "DH",
+/**
+ * 수비 스펙트럼 — 부담이 큰 자리에서 작은 자리로 한 칸씩 내려간다.
+ * 실제 순서는 C → SS → 2B·3B·CF → LF·RF → 1B → DH다.
+ *
+ * **포수는 넣지 않는다.** 안방은 아무나 볼 수 없어서, 수비가 떨어져도
+ * 방망이가 되는 한 계속 마스크를 쓴다 — 실제로도 포수는 웬만해선 안 옮긴다.
+ */
+const HITTER_SHIFT: Partial<Record<Position, Position | Position[]>> = {
+  SS: "3B", "2B": "1B", "3B": "1B", CF: ["LF", "RF"], LF: "DH", RF: "DH", "1B": "DH",
+};
+const shiftTo = (pos: Position, rng: RNG): Position | null => {
+  const to = HITTER_SHIFT[pos];
+  if (!to) return null;
+  return Array.isArray(to) ? rng.pick(to) : to;
 };
 
 const positionChange: ChainDef = {
@@ -140,21 +152,21 @@ const positionChange: ChainDef = {
   when: (s) => {
     const p = s.player;
     if (p.kind === "PITCHER") return p.position === "SP" && p.age >= 31 && overall(p) < 78;
-    const nextPos = HITTER_SHIFT[p.position];
-    if (!nextPos) return false;
+    if (!HITTER_SHIFT[p.position]) return false;
     const def = getAb(p.abilities, "defense" as never);
     const spd = getAb(p.abilities, "speed" as never);
     return p.age >= 30 && (def < 70 || spd < 65);
   },
   prompt: (s) => {
     const p = s.player;
-    const to = p.kind === "PITCHER" ? "불펜" : POSITION_LABEL[HITTER_SHIFT[p.position]!];
+    const nextPos = p.kind === "HITTER" ? shiftTo(p.position, new RNG(s.seed + p.age)) : null;
+    const to = p.kind === "PITCHER" ? (closerFit(p) ? "마무리" : "불펜") : POSITION_LABEL[nextPos!];
     const from = p.kind === "PITCHER" ? "선발" : POSITION_LABEL[p.position];
     return {
       key: "POSITION_CHANGE", icon: "🔄",
       title: `${from} → ${to} 전환 제안`,
       body: p.kind === "PITCHER"
-        ? "구단이 선발 대신 불펜으로 뛰는 안을 제시했습니다. 이닝은 줄지만 몸에 무리가 덜합니다."
+        ? `구단이 선발 대신 ${to}(으)로 뛰는 안을 제시했습니다. 이닝은 줄지만 몸에 무리가 덜합니다.`
         : `수비 범위가 예전 같지 않습니다. 구단이 ${to}(으)로 옮기는 안을 제시했습니다.`,
       options: [
         { id: "accept", label: `${to}(으)로 옮긴다`, desc: "수비 부담이 줄어 방망이·구위에 집중할 수 있습니다. 대신 포지션 가치는 낮아집니다." },
@@ -166,10 +178,17 @@ const positionChange: ChainDef = {
     const p = s.player;
     if (choice === "accept") {
       if (p.kind === "PITCHER") {
-        p.position = "RP";
-        log({ icon: "🔄", title: "불펜 전환", tone: "neutral", body: "선발 로테이션을 떠나 불펜으로 자리를 옮깁니다." });
+        // 구위가 남아 있으면 뒷문으로 간다 — 긴 이닝이 안 될 뿐 한 이닝은 여전히 세다
+        const toCp = closerFit(p);
+        p.position = toCp ? "CP" : "RP";
+        log({
+          icon: "🔄", title: toCp ? "마무리 전환" : "불펜 전환", tone: "neutral",
+          body: toCp
+            ? "선발 로테이션을 떠나 9회를 맡습니다. 한 이닝이면 아직 누구보다 셉니다."
+            : "선발 로테이션을 떠나 불펜으로 자리를 옮깁니다.",
+        });
       } else {
-        const to = HITTER_SHIFT[p.position]!;
+        const to = shiftTo(p.position, rng) ?? p.position;
         p.position = to;
         log({ icon: "🔄", title: "포지션 전환", tone: "neutral", body: `${POSITION_LABEL[to]}(으)로 자리를 옮깁니다. 수비 부담이 줄었습니다.` });
       }
@@ -581,8 +600,139 @@ function roleTierOf(s: GameState): number {
   return roleTier(rec?.role ?? "");
 }
 
+/**
+ * 12. 발을 살리는 전환 — 수비 스펙트럼을 거슬러 올라간다
+ *
+ * 수비 부담은 보통 줄어드는 쪽으로만 간다. 하지만 **발이 빠른 젊은 선수**는
+ * 반대로 올라간다 — 1루나 코너 외야에 묶어두기 아까운 주력이면
+ * 구단이 중견수를 맡긴다. 포지션 가치가 올라가 같은 방망이로 더 쳐준다.
+ *
+ * 이게 없으면 자리는 한 방향으로만 흘러 커리어 내내 내려가기만 한다.
+ */
+const speedShift: ChainDef = {
+  key: "SPEED_SHIFT", weight: 80, dueIn: 1,
+  when: (s) => {
+    const p = s.player;
+    if (p.kind !== "HITTER" || p.age > 28) return false;
+    if (!["1B", "DH", "LF", "RF"].includes(p.position)) return false;
+    const spd = getAb(p.abilities, "speed" as never);
+    const def = getAb(p.abilities, "defense" as never);
+    return spd >= 78 && def >= 70 && !!lastKbo(s);
+  },
+  prompt: (s) => ({
+    key: "SPEED_SHIFT", icon: "⚡",
+    title: `${POSITION_LABEL[s.player.position]} → 중견수 전환 제안`,
+    body: "코너에 묶어두기 아까운 발입니다. 구단이 중견수를 맡기려 합니다.",
+    options: [
+      { id: "accept", label: "중견수를 맡는다", desc: "수비 부담이 커지는 만큼 같은 방망이로 더 높게 평가받습니다." },
+      { id: "refuse", label: "지금 자리를 지킨다", desc: "수비에 힘을 덜 쓰고 방망이에 집중합니다." },
+    ],
+  }),
+  apply: (s, choice, rng, log) => {
+    if (choice !== "accept") return;
+    s.player.position = "CF";
+    s.trust = clamp(s.trust + 4, 0, 100);
+    log({ icon: "⚡", title: "중견수 전환", tone: "good", body: "가장 넓은 자리를 맡았습니다. 발이 쓰이는 자리입니다." });
+  },
+  resolve: (s, choice, rng, log) => {
+    if (choice !== "accept") return;
+    for (const k of ["defense", "speed"]) bump(s, k, rng.int(2, 5));
+    log({ icon: "⚡", title: "외야가 넓어졌다", tone: "good", body: "한 해를 중견수로 보내며 타구 판단이 빨라졌습니다." });
+  },
+};
+
+/**
+ * 12. 보직 전환 — 중간계투에서 위로 올라가는 길
+ *
+ * 실제 KBO에서 불펜은 **머무는 자리가 아니다.** 긴 이닝을 견디는 몸이면
+ * 선발로 돌리고, 짧게 윽박지르는 구위면 뒷문을 맡긴다.
+ * 이 길이 없으면 중간계투로 시작한 선수는 평생 중간계투로 끝난다 —
+ * 같은 기량인데 통산 WAR이 선발의 절반에 묶인다.
+ *
+ * 무엇으로 불릴지는 **몸이 정한다** — 유형 이름이 아니라 능력치를 본다
+ * (유형은 능력치에서 나오므로 돌아가는 길일 뿐이다).
+ */
+const roleSwitch: ChainDef = {
+  key: "ROLE_SWITCH", weight: 95, dueIn: 1,
+  when: (s) => {
+    const p = s.player;
+    if (p.kind !== "PITCHER" || p.position !== "RP") return false;
+    if (p.age > 30 || overall(p) < 68) return false;
+    const rec = lastKbo(s);
+    if (!rec) return false;
+    return starterFit(p) || closerFit(p);
+  },
+  prompt: (s) => {
+    const p = s.player;
+    const toSP = starterFit(p) && (!closerFit(p) || getAb(p.abilities, "stamina" as never) >= getAb(p.abilities, "velocity" as never));
+    return toSP
+      ? {
+          key: "ROLE_SWITCH", icon: "🔄",
+          title: "선발 전환 제안",
+          body: "긴 이닝을 견디는 몸입니다. 구단이 로테이션 한 자리를 제안했습니다.",
+          options: [
+            { id: "accept", label: "선발로 간다", desc: "이닝이 세 배로 늘고 승수와 평가가 따라옵니다. 대신 한 경기의 무게가 무겁습니다." },
+            { id: "refuse", label: "불펜에 남는다", desc: "익숙한 자리를 지킵니다. 짧게 나가는 만큼 몸에 무리가 덜합니다." },
+          ],
+        }
+      : {
+          key: "ROLE_SWITCH", icon: "🔒",
+          title: "마무리 전환 제안",
+          body: "짧게 윽박지르는 구위입니다. 구단이 뒷문을 맡기려 합니다.",
+          options: [
+            { id: "accept", label: "뒷문을 맡는다", desc: "세이브가 쌓이고 이름이 알려집니다. 대신 한 번 무너지면 그날이 전부 무너집니다." },
+            { id: "refuse", label: "지금 자리를 지킨다", desc: "승부처는 앞에서도 옵니다. 부담이 덜한 대신 눈에 덜 띕니다." },
+          ],
+        };
+  },
+  apply: (s, choice, rng, log) => {
+    const p = s.player;
+    if (choice !== "accept") {
+      s.trust = clamp(s.trust - 3, 0, 100);
+      log({ icon: "🛡️", title: "지금 자리를 지키다", tone: "neutral", body: "익숙한 자리에서 한 해를 더 보내기로 했습니다." });
+      return;
+    }
+    const toSP = starterFit(p) && (!closerFit(p) || getAb(p.abilities, "stamina" as never) >= getAb(p.abilities, "velocity" as never));
+    p.position = toSP ? "SP" : "CP";
+    s.trust = clamp(s.trust + 4, 0, 100);
+    log({
+      icon: toSP ? "🔄" : "🔒",
+      title: toSP ? "선발 전환" : "마무리 전환",
+      tone: "good",
+      body: toSP
+        ? "불펜을 떠나 로테이션에 들어갑니다. 스프링캠프부터 선발 준비를 합니다."
+        : "9회를 맡습니다. 팀이 이기고 있을 때 마운드에 오릅니다.",
+    });
+  },
+  resolve: (s, choice, rng, log) => {
+    if (choice !== "accept") return;
+    const sp = s.player.position === "SP";
+    // 자리를 옮기면 그 자리에 필요한 것이 는다 — 선발은 버티는 힘, 마무리는 담력
+    for (const k of sp ? ["stamina", "control"] : ["velocity", "mental"]) bump(s, k, rng.int(2, 5));
+    log({
+      icon: sp ? "🔄" : "🔒",
+      title: sp ? "선발이 몸에 붙었다" : "9회가 몸에 붙었다",
+      tone: "good",
+      body: sp
+        ? "한 해를 로테이션에서 보내며 이닝을 버티는 몸이 됐습니다."
+        : "뒷문을 지키는 일에 익숙해졌습니다. 마지막 아웃의 무게를 압니다.",
+    });
+  },
+};
+
+/** 긴 이닝을 견디는 몸인가 */
+function starterFit(p: { abilities: unknown }): boolean {
+  const ab = (k: string) => getAb((p as { abilities: never }).abilities, k as never);
+  return ab("stamina") >= 72 && ab("control") >= 68;
+}
+/** 짧게 윽박지르는 구위인가 */
+function closerFit(p: { abilities: unknown }): boolean {
+  const ab = (k: string) => getAb((p as { abilities: never }).abilities, k as never);
+  return ab("velocity") >= 78 && ab("mental") >= 70;
+}
+
 export const CHAINS: ChainDef[] = [
-  firstCallup, injuryReturn, positionChange, turningPoint,
+  firstCallup, injuryReturn, positionChange, roleSwitch, speedShift, turningPoint,
   newPitch, swingChange, captaincy, endorsement, mentoring, slumpTalk, overseasLook,
 ];
 export const chainByKey = (k: string) => CHAINS.find((c) => c.key === k);
