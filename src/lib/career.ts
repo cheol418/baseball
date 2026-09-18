@@ -1968,13 +1968,14 @@ export function advance(prev: GameState, action: Action): GameState {
         const outrun = trained.length > 0 && ovrAfter < ovrBefore;
         /** 통보에 올릴 두 줄 — 훈련이 보탠 것과 세월이 가져간 것 */
         const campRows = [
+          // 라벨은 통보 카드의 라벨 칸(한 줄)에 들어가야 한다 — 길면 두 줄로 깨진다
           {
-            label: "훈련으로 얻은 것", from: "—",
-            to: trained.length ? fmtMove(trained.slice(0, 4)) : "이번 겨울은 소득이 없었습니다",
+            label: "훈련 효과", from: "—",
+            to: trained.length ? fmtMove(trained.slice(0, 4)) : "소득 없음",
           },
           // 스무 살의 하락은 나이 탓이 아니라 그해가 안 풀린 것이다 — 말을 나눈다
           ...(aged.length
-            ? [{ label: s.player.age >= 30 ? "나이로 잃은 것" : "내려간 것", from: "—", to: fmtMove(aged.slice(0, 4)) }]
+            ? [{ label: s.player.age >= 30 ? "나이 영향" : "내려감", from: "—", to: fmtMove(aged.slice(0, 4)) }]
             : []),
           { label: "OVR", from: String(ovrBefore), to: String(ovrAfter) },
         ];

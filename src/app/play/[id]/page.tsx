@@ -126,11 +126,16 @@ export default function PlayPage() {
   const ovr = overall(p);
   // 지금 어디 소속인지 — 시즌이 확정됐으면 올 시즌, 아니면 직전 시즌 기준
   const nick = nickname(g);
-  const levelNow = g.seasonLevel ?? last?.level ?? null;
-  const roleNow = g.seasonRole ?? last?.role ?? g.contract?.role ?? null;
+  /**
+   * 은퇴한 선수에게 "1군 필승조"를 계속 달아두면 아직 뛰는 사람처럼 읽힌다.
+   * 마지막 소속은 커리어 요약이 말해주므로, 헤더는 지금의 신분만 말한다.
+   */
+  const retired = g.phase === "RETIRED" || g.phase === "SECOND_LIFE";
+  const levelNow = retired ? null : g.seasonLevel ?? last?.level ?? null;
+  const roleNow = retired ? null : g.seasonRole ?? last?.role ?? g.contract?.role ?? null;
   // 프로 연차 — 1군·2군을 가리지 않고 프로에서 보낸 시즌 수 (진행 중인 시즌 포함)
   const proSeasons = g.seasons.filter((r) => r.level === "KBO" || r.level === "MINOR" || r.level === "ARMY").length;
-  const proYears = g.contract ? proSeasons + (g.seasonLevel ? 1 : 0) : 0;
+  const proYears = retired ? proSeasons : g.contract ? proSeasons + (g.seasonLevel ? 1 : 0) : 0;
 
   return (
     <main className="pb-10">
@@ -169,7 +174,9 @@ export default function PlayPage() {
                   {nick}
                 </span>
               )}
-              {levelNow && <LevelBadge level={levelNow} role={roleNow} />}
+              {retired ? (
+                <span className="shrink-0 rounded bg-white/20 px-1.5 py-[2px] text-[10px] font-extrabold">은퇴</span>
+              ) : levelNow && <LevelBadge level={levelNow} role={roleNow} />}
               {(g.military === "SANGMU" || g.military === "ACTIVE") && (
                 <span className="rounded bg-white/20 px-1.5 py-[1px] text-[9.5px] font-bold">
                   🪖 {g.military === "SANGMU" ? "상무" : "현역"} 복무중
@@ -1464,8 +1471,9 @@ function NoticeOverlay({ notice, onClose }: { notice: Notice; onClose: () => voi
           {notice.change && notice.change.length > 0 && (
             <ul className="mt-3 flex flex-col gap-1.5">
               {notice.change.map((c, i) => (
-                <li key={i} className="flex items-center gap-2 rounded-lg bg-[var(--surface-2)] px-3 py-2 text-[12px]">
-                  <span className="w-[62px] shrink-0 text-[var(--ink-3)]">{c.label}</span>
+                // 값이 길면 여러 줄이 된다 — 라벨은 한 줄로 두고 위쪽에 맞춘다
+                <li key={i} className="flex items-start gap-2 rounded-lg bg-[var(--surface-2)] px-3 py-2 text-[12px]">
+                  <span className="w-[68px] shrink-0 whitespace-nowrap text-[var(--ink-3)]">{c.label}</span>
                   <span className="text-[var(--ink-3)]">{c.from}</span>
                   <span className="text-[var(--ink-3)]">→</span>
                   <span className="font-extrabold" style={{ color: accent }}>{c.to}</span>
