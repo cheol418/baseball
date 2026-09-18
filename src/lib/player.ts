@@ -548,12 +548,12 @@ export function ageFactor(age: number, trait: string, key?: AbilityKey): number 
   if (trait === "latebloom") refAge -= 2.5; // 대기만성: 전 능력의 피크가 늦다
 
   let f: number;
-  if (refAge <= 20) f = 2.1;
-  else if (refAge <= 22) f = 1.7;
-  else if (refAge <= 24) f = 1.15;
-  else if (refAge <= 26) f = 0.62;
-  else if (refAge <= 28) f = 0.38;
-  else if (refAge <= 31) f = 0.22; // 고원 — 늦게 피크를 맞는 기술 능력이 계속 오른다
+  if (refAge <= 20) f = 1.75;
+  else if (refAge <= 22) f = 1.4;
+  else if (refAge <= 24) f = 0.95;
+  else if (refAge <= 26) f = 0.78;
+  else if (refAge <= 28) f = 0.55;
+  else if (refAge <= 31) f = 0.32; // 고원 — 늦게 피크를 맞는 기술 능력이 계속 오른다
   else if (refAge <= 33) f = -0.7;
   else if (refAge <= 35) f = -1.5;
   else if (refAge <= 37) f = -2.4;
@@ -635,11 +635,11 @@ export function reviseUpside(
   if (!stuck.length) return [];
 
   const big = bigAward || war >= careerBestWar + 1.5;
-  const picked = rng.shuffle(stuck).slice(0, Math.min(stuck.length, big ? 2 : 1));
+  const picked = rng.shuffle(stuck).slice(0, Math.min(stuck.length, big ? 3 : 2));
   const out: { key: AbilityKey; from: number; to: number }[] = [];
   for (const k of picked) {
     const from = getAb(p.potential, k);
-    const to = clamp(from + rng.int(1, big ? 3 : 2), 15, ABILITY_MAX);
+    const to = clamp(from + rng.int(1, big ? 4 : 3), 15, ABILITY_MAX);
     if (to === from) continue;
     setAb(p.potential, k, to);
     out.push({ key: k, from, to });
@@ -943,7 +943,7 @@ export function makeTrainingOptions(p: Player, _rng: RNG): TrainingOption[] {
     desc: `${t.desc} 계속하면 ${t.leadsTo} 쪽으로 자랍니다.`,
     targets: [...t.main, ...t.sub],
     main: [...t.main],
-    gain: 5.2,
+    gain: 5.6,
     risk: 0.05,
     conditionCost: 9,
     room: roomOf([...t.main, ...t.sub]),
