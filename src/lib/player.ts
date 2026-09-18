@@ -391,6 +391,18 @@ export const CANDIDATE_KINDS = [
 ] as const;
 
 /** 고교 3학년 선수 후보 1명 생성 */
+/**
+ * 유형 가중치를 OVR 중립으로 만들면 평균이 그만큼 내려앉는다.
+ * 이 두 상수가 전체 수준을 되돌린다 — 유형과 무관한 상수이므로 중립성은 그대로다.
+ *
+ * `STYLE_LEVEL`은 **생성 OVR을 52로** 맞추는 값이라 건드리면 스케일이 통째로 움직인다.
+ * `ROOM_LEVEL`은 잠재력의 폭이다 — **일부러 넉넉하게 뒀다.** 낮추면 피크 OVR이
+ * 82 근처로 내려오지만, 커리어 내내 조금씩이라도 자라는 쪽이 더 재미있다는 판단이다.
+ * (3.6 → 피크 83.6 · 1.9 → 82.4)
+ */
+const STYLE_LEVEL = 2.0;
+const ROOM_LEVEL = 3.6;
+
 export function rollCandidate(opts: CreateOptions, rng: RNG): Player {
   const style = STYLES.find((s) => s.id === opts.styleId) ?? STYLES[0];
   const keys = abilityKeys(opts.kind);
@@ -414,13 +426,31 @@ export function rollCandidate(opts: CreateOptions, rng: RNG): Player {
   const abilities = { ...ZERO } as Abilities;
   const potential = { ...ZERO } as Abilities;
 
+  /**
+   * 유형 가중치를 **OVR 중립**으로 만든다.
+   *
+   * `w`를 그대로 더하면, 수비형처럼 OVR 가중치가 낮은 능력(수비 0.85 · 송구 0.5)에
+   * 점수를 몰아주는 유형이 같은 점수를 쓰고도 낮은 OVR로 출발한다.
+   * 실측 수비형 50.6 ↔ 중장거리형 53.1 — 후보 카드는 둘 다 "균형형 52"라고
+   * 적어놓고 2.5가 벌어졌고, 그 차이가 피크(79 ↔ 84) · 1군 시즌(13.5 ↔ 16.2) ·
+   * 타석(413 ↔ 472)으로 곱해져 통산 WAR이 두 배가 됐다. (실제로 겪음)
+   * OVR 가중 평균을 빼면 유형은 **어디에 쓸지**만 정하고 총량은 건드리지 않는다.
+   */
+  const ow = ovrWeights(opts.kind, opts.armSlot);
+  const rawW = (k: AbilityKey) => (style.weights[k] ?? 0) + (slot?.weights[k] ?? 0);
+  const wTotal = keys.reduce((a, k) => a + (ow[k] ?? 1), 0);
+  /** OVR 가중 평균을 빼면 그만큼 전체 수준이 내려간다 — 상수로 되돌린다 */
+  const wBar = keys.reduce((a, k) => a + rawW(k) * (ow[k] ?? 1), 0) / wTotal;
+  const roomW = (k: AbilityKey) => (rawW(k) > 0 ? 7 : 0);
+  const rBar = keys.reduce((a, k) => a + roomW(k) * (ow[k] ?? 1), 0) / wTotal;
+
   for (const k of keys) {
-    const w = (style.weights[k] ?? 0) + (slot?.weights[k] ?? 0);
-    const base = 52 + w * 0.9 + rng.normal() * 7 + (talent - 1) * 14
+    const w = rawW(k) - wBar;
+    const base = 52 + STYLE_LEVEL + w * 0.9 + rng.normal() * 7 + (talent - 1) * 14
       - bias * 7 + (gifted ? 5 : 0);
     const cur = clamp(Math.round(base), 22, 80);
-    // 포텐셜은 현재치 + 재능/랜덤
-    const room = 4 + talent * 21 + rng.float(0, 15) + (w > 0 ? 7 : 0)
+    // 포텐셜은 현재치 + 재능/랜덤 (여기도 유형이 총량을 못 건드리게 중립화한다)
+    const room = 4 + talent * 21 + rng.float(0, 15) + ROOM_LEVEL + (roomW(k) - rBar)
       + bias * 8 + (gifted ? 6 : 0);
     setAb(abilities, k, cur);
     setAb(potential, k, clamp(Math.round(cur + room), cur + 5, ABILITY_MAX));
@@ -474,14 +504,23 @@ const PITCH_WEIGHTS: Record<ArmSlot, Record<string, number>> = {
   UNDER: { velocity: 0.8, control: 1.3, movement: 1.55, breaking: 0.85 },
 };
 
-export function overall(p: Player): number {
-  const keys = abilityKeys(p.kind);
-  const w: Record<string, number> = p.kind === "HITTER"
+/**
+ * OVR을 낼 때 능력마다 얼마나 쳐주는가.
+ * **생성도 같은 표를 본다**(`rollCandidate`) — 유형이 어디에 점수를 몰아주든
+ * 출발 OVR은 같아야 하기 때문이다.
+ */
+export function ovrWeights(kind: Kind, armSlot?: ArmSlot): Record<string, number> {
+  return kind === "HITTER"
     ? { contact: 1.25, power: 1.15, eye: 0.85, speed: 0.75, defense: 0.85, arm: 0.5, durability: 0.7, mental: 0.55 }
     : {
-        ...PITCH_WEIGHTS[p.armSlot ?? "THREE_QUARTER"],
+        ...PITCH_WEIGHTS[armSlot ?? "THREE_QUARTER"],
         stamina: 0.85, fielding: 0.35, durability: 0.75, mental: 0.6,
       };
+}
+
+export function overall(p: Player): number {
+  const keys = abilityKeys(p.kind);
+  const w = ovrWeights(p.kind, p.armSlot);
   let sum = 0, tw = 0;
   for (const k of keys) { sum += getAb(p.abilities, k) * (w[k] ?? 1); tw += w[k] ?? 1; }
   return Math.round(sum / tw);

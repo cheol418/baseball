@@ -1,6 +1,6 @@
 import { RNG, clamp, n50 } from "./rng";
 import { armSlotById, batterPlatoonBonus, getAb, platoonEdge } from "./player";
-import { isRotationRole } from "./roles";
+import { isRotationRole, roleTier } from "./roles";
 import type { AllStarGame, HitterLine, LevelTag, PitcherLine, Player, Position, StatLine } from "./types";
 
 export const LEVEL_GAMES: Record<LevelTag, number> = {
@@ -327,7 +327,14 @@ export function simPitcher(inp: SimInput): PitcherLine {
 
   const ra9 = era * 1.07;
   const replRa = isSP ? 5.7 : 5.9;
-  const lev = isSP ? 1 : isCP ? 1.0 : 0.78;
+  /**
+   * 구원 투수는 **승부처에서 던진다** — WAR는 그 상황의 무게를 셈에 넣는다.
+   * FanGraphs는 `(1 + gmLI) / 2`를 곱한다: 마무리 gmLI 1.8 → 1.4,
+   * 필승조 1.3 → 1.15, 추격조 0.7 → 0.85.
+   * 마무리를 1.0으로 두면 같은 기량의 선발보다 통산 WAR가 2.6배 벌어져
+   * (42.2 ↔ 16.5) 명예의 전당이 사실상 막힌다. (실제로 겪음)
+   */
+  const lev = isSP ? 1 : isCP ? 1.4 : roleTier(role) >= 4 ? 1.15 : 0.85;
   const levelScale = level === "KBO" ? 1 : level === "MINOR" ? 0.7 : 0.45;
   const war = Math.round(((replRa - ra9) / 10) * (ip / 9) * lev * levelScale * 10) / 10;
 
