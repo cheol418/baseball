@@ -133,7 +133,8 @@ export interface MonthLine {
   level: LevelTag;
   role: string;
   /** 그 달이 끝난 뒤 일어난 엔트리 이동 (ROLE = 같은 레벨 안에서 자리만 바뀜) */
-  move?: { type: "UP" | "DOWN" | "ROLE"; role: string; salary?: number };
+  /** 엔트리 이동. **연봉은 담지 않는다** — 시즌 중에 바뀌지 않기 때문이다 */
+  move?: { type: "UP" | "DOWN" | "ROLE"; role: string };
   /** 그 달 이달의 선수(월간 MVP)로 뽑혔는가 */
   potm?: boolean;
   /** 그 달에 걸린 승부처 상황 (아직 안 골랐으면 결과가 없다) */

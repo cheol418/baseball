@@ -131,8 +131,16 @@ export default function PlayPage() {
    * 마지막 소속은 커리어 요약이 말해주므로, 헤더는 지금의 신분만 말한다.
    */
   const retired = g.phase === "RETIRED" || g.phase === "SECOND_LIFE";
-  const levelNow = retired ? null : g.seasonLevel ?? last?.level ?? null;
-  const roleNow = retired ? null : g.seasonRole ?? last?.role ?? g.contract?.role ?? null;
+  /**
+   * 중계가 도는 동안에는 헤더의 입지 배지를 내린다.
+   *
+   * `g.seasonLevel`은 **반기가 다 끝난 뒤**의 소속이다. 7월 2군 경기를 보고
+   * 있는데 머리 위에 "1군 추격조"가 붙어 있으면, 화면이 결과를 앞질러 말하고
+   * 지금 보는 것과도 부딪힌다. (실제로 겪음)
+   * 지금 어디 있는지는 중계 안의 Live 배지가 달별로 말해준다.
+   */
+  const levelNow = retired || anim ? null : g.seasonLevel ?? last?.level ?? null;
+  const roleNow = retired || anim ? null : g.seasonRole ?? last?.role ?? g.contract?.role ?? null;
   // 프로 연차 — 1군·2군을 가리지 않고 프로에서 보낸 시즌 수 (진행 중인 시즌 포함)
   const proSeasons = g.seasons.filter((r) => r.level === "KBO" || r.level === "MINOR" || r.level === "ARMY").length;
   const proYears = retired ? proSeasons : g.contract ? proSeasons + (g.seasonLevel ? 1 : 0) : 0;

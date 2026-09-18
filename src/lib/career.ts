@@ -1419,14 +1419,17 @@ function playHalf(
       if (s.contract) s.contract.role = move.role;
       const toLabel = `${s.seasonLevel === "KBO" ? "1군" : "2군"} ${move.role}`;
 
-      // 1군에 처음 등록되면 그 해 연봉이 조정된다 (시즌당 1회)
-      let salary: number | undefined;
-      if (move.type === "UP" && !s.calledUpThisSeason && s.contract) {
-        s.calledUpThisSeason = true;
-        const next = clamp(Math.round((s.contract.salary * 1.3) / 100) * 100, MIN_SALARY, MAX_SALARY);
-        if (next > s.contract.salary) { salary = next; s.contract.salary = next; }
-      }
-      entry.move = { type: move.type, role: move.role, salary };
+      /**
+       * **연봉은 시즌 중에 바뀌지 않는다.**
+       *
+       * 실제 KBO는 시즌 전에 연봉을 확정하고 한 해 동안 그대로 간다 —
+       * 1군에 올라가든 2군에 내려가든 통장에 찍히는 액수는 같다.
+       * (일당이 달라지는 건 메이저리그의 마이너 계약 이야기다)
+       * 콜업의 값은 그해 연봉이 아니라 **이듬해 협상**에서 돌아온다 —
+       * 1군에서 쌓은 기록이 제시액을 끌어올린다.
+       */
+      if (move.type === "UP") s.calledUpThisSeason = true;
+      entry.move = { type: move.type, role: move.role };
 
       const promoted = move.type === "UP" || (move.type === "ROLE" && roleTier(move.role) > roleTier(role));
       const title = move.type === "UP" ? "1군 콜업"
@@ -1434,7 +1437,6 @@ function playHalf(
           : promoted ? "보직 상승" : "보직 하락";
       const body = move.type === "UP"
         ? `${m.label}을 마치고 1군 엔트리에 등록되었습니다. ${move.role}(으)로 출발합니다.`
-          + (salary ? ` 1군 등록으로 연봉이 ${formatMoney(salary)}(으)로 조정되었습니다.` : "")
         : move.type === "DOWN"
           ? `${m.label}까지의 부진으로 1군 엔트리에서 말소되었습니다.`
           : promoted

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { fmt2, fmt3, fmtIP } from "./stats";
 import { isHitterLine, mergeLines } from "@/lib/sim";
 import { TOURNAMENTS, clutchGameIndex } from "@/lib/national";
-import { formatMoney } from "@/lib/career";
+
 import { roleTier } from "@/lib/roles";
 import { RNG } from "@/lib/rng";
 import type { Clutch, ClutchResult } from "@/lib/clutch";
@@ -189,12 +189,18 @@ function buildSteps(g: GameState, kind: BroadcastKind): Step[] {
     });
     // 그 달이 끝나고 엔트리가 바뀌었다면 바로 이어서 통보한다
     if (m.move) {
-      const next = months[i + 1];
+      /**
+       * 옮겨 간 자리는 **이동 종류가 말한다** — 다음 달 기록이 아니라.
+       * 반기 마지막 달에 콜업되면 다음 달이 없어 `m.level`로 되돌아가,
+       * "1군 엔트리 등록"이라고 써놓고 그 아래에 "2군 불펜 → 2군 추격조"가
+       * 찍혔다. (실제로 겪음)
+       */
+      const toLevel = m.move.type === "UP" ? "KBO" : m.move.type === "DOWN" ? "MINOR" : m.level;
       steps.push({
         kind: "move", move: m.move, month: m.label, teamName,
         fromRole: m.role,
         fromLabel: `${m.level === "KBO" ? "1군" : "2군"} ${m.role}`,
-        toLabel: `${(next?.level ?? m.level) === "KBO" ? "1군" : "2군"} ${m.move.role}`,
+        toLabel: `${toLevel === "KBO" ? "1군" : "2군"} ${m.move.role}`,
       });
     }
   }
@@ -665,11 +671,6 @@ function MovePanel({ step }: { step: Extract<Step, { kind: "move" }> }) {
         <span className="opacity-50">→</span>
         <span>{step.toLabel}</span>
       </div>
-      {step.move.salary !== undefined && (
-        <div className="mt-2 text-[12px] font-bold" style={{ color: "#e3c07a" }}>
-          1군 등록으로 연봉 조정 · {formatMoney(step.move.salary)}
-        </div>
-      )}
     </div>
   );
 }
