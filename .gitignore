@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# editor
+.idea/
+.vscode/
+
+# 브라우저로 화면을 확인할 때 쓰는 임시 산출물
+.playwright-mcp/
