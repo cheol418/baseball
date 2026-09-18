@@ -13,10 +13,29 @@ for (let i = 0; i < 40; i++) {
   const seen: string[] = [];
   const ev: string[] = [];
   let prev: GameState | null = null;
+  /**
+   * 같은 승부처를 두 번 세지 않는다.
+   * `onStep`은 한 상태를 여러 번 훑으므로, 그대로 밀어 넣으면 한 커리어가
+   * 200번 넘게 마주친 것으로 찍힌다 — 실제로는 쉰 번 안팎이다. (실제로 겪음)
+   * 그 해·그 달의 승부처 하나를 한 번만 센다.
+   */
+  const counted = new Set<string>();
   autoPlay(newGame(p, "DAG", i * 23), {
     onStep: (g: GameState) => {
-      for (const m of g.monthLines ?? []) if (m.clutchSituation) seen.push(m.clutchSituation.title);
-      if (g.allStarGame?.clutchSituation) seen.push(g.allStarGame.clutchSituation.title);
+      const take = (key: string, title: string) => {
+        if (counted.has(key)) return;
+        counted.add(key); seen.push(title);
+      };
+      for (const m of g.monthLines ?? []) {
+        if (m.clutchSituation) take(`M${g.year}${m.label}`, m.clutchSituation.title);
+      }
+      if (g.allStarGame?.clutchSituation) take(`AS${g.year}`, g.allStarGame.clutchSituation.title);
+      if (g.postseason?.clutchSituation) take(`PS${g.year}`, g.postseason.clutchSituation.title);
+      for (const r of g.intlResults) {
+        if (r.clutchSituation) take(`IN${r.year}`, r.clutchSituation.title);
+      }
+      const rec = g.seasons[g.lastSeasonIndex ?? -1];
+      if (rec?.clutchSituation) take(`AM${rec.year}`, rec.clutchSituation.title);
       if (g.pendingEvent && g.pendingEvent.title !== prev?.pendingEvent?.title) ev.push(g.pendingEvent.title);
       prev = g;
     },
