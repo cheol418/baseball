@@ -230,6 +230,10 @@ UI는 `src/app/page.tsx`(홈) · `create/page.tsx`(4단계 생성) · `play/[id]
 | 에이징 낙폭 | 같은 선수 기준 35세 −5 · 38세 −9 · 40세 −12 (실제 곡선과 일치) |
 | 은퇴 권고 거부 | 그해 협상은 100% 삭감(평균 −67%) · 재협상 성공률 42%→14% |
 | 결장·소속 표기 | **경기 수로 말한다** — 비율로 쓰면 분모가 달라 모순으로 읽힌다 |
+| 부상의 갈래 | 넷이다 — ① 시즌 부상(`rollInjury`, 개막 때 굴린다) ② 스프링캠프 부상(훈련 위험 5% · 지옥 2.2배) ③ 이벤트 체인(이듬해 가동률 0.75로 이월) ④ 가동률 0.6 미만이면 **개막부터 2군 말소** |
+| 부상 실측 | 1군 시즌당 30%(경미 18 · 중간 9 · 심각 3) · **한 달 이상 이탈 14% · 반 시즌 이상 3.3%** · 규정타석 도달 61%. 나이별 19~26세 26% → 34~36세 40% → 37세+ 47% (`scripts/injurybal.ts`) |
+| 부상의 무게 | 같은 선수 안에서 짝지어 보면 부상 시즌 WAR 3.68 → **2.47**(−1.21), **이듬해 3.69로 완전 회복**. 반 시즌 부상은 이듬해 2군행을 1% → 4%로 올린다. 심각 부상은 내구성을 영구히 깎아 이후 부상률이 21% → 38%가 된다 |
+| 부상 측정 주의 | **부상 횟수로 커리어를 나누면 거꾸로 나온다** — 여섯 번 다치려면 열여섯 시즌을 뛰어야 하므로 좋은 커리어가 통째로 '부상 많음'에 몰린다(실제로 겪음: 부상 6회+ 커리어가 통산 WAR 56.4로 0~1회의 53.5보다 높게 나왔다). 시즌당 부상률로 정규화하고, 같은 선수의 앞뒤 시즌과 짝지어 잰다 |
 | 부상은 달력 위에 놓는다 | 가동률을 모든 달에 곱하면 113경기 결장한 선수가 일곱 달 내내 6이닝씩 던진 걸로 찍힌다. `monthAvail`로 **연속된 달을 통째로 비운다** — 다친 시즌 0인 달 평균 2.7개 / 건강한 시즌 0개 (`injurymonth.ts`) |
 | 누적 차분의 기준 | `playHalf`의 cume는 달력이 아니라 **건강 가중 누적**이다. 가중 합이 그대로라 시즌 총량은 안 변한다 |
 | `kboShare`의 뜻 | **1군 등록 기간**이지 출장 경기 수가 아니다 — "뛰었습니다"로 쓰면 "113경기 결장"과 정면으로 부딪힌다 |
@@ -329,7 +333,7 @@ UI는 `src/app/page.tsx`(홈) · `create/page.tsx`(4단계 생성) · `play/[id]
 `rookiestat`(신인 성적·훈련 상승폭), `sangmu`(상무 지원), `notices`(통보 발생),
 `hellcheck`(지옥 훈련 도박 균형), `transferodds`(표기 확률 ↔ 실제 성사율),
 `service`(복무 기간·복귀 시점), `school`(학교 전력 효과),
-`titles`(성적 대비 수상), `titlebar`(부문별 기준선·수상률), `nego`(협상 도박 균형), `negotext`(협상 통보 문구), `integrity`(기록 불변식), `valuecheck`(값의 범위), `goaltext`(목표 표기↔판정), `campreport`(훈련 몫 ↔ 나이 몫), `logic`(칸 사이의 모순), `ceiling`(천장·훈련 몫), `headroom`(성장 여지), `traincover`(훈련 방향의 덮개), `traingrade`(훈련 성과 분포), `agency`(선택의 무게), `decisions`(결정 밀도), `repeat`(장면 반복), `oddscheck`(표기 확률 검수), `rivals`(동기 분포·타이틀 중복), `fame`(인지도 눈금), `leagueavg`(리그 평균 기준), `injurymonth`(부상의 달력 배치), `wish`(희망 구단의 무게), `park`(구장 효과 크기), `scenefit`(장면↔자리 일치), `service2`(복무 방침의 값), `wl`(투수 승패), `randomcreate`(랜덤 조합 정합성), `agelimit`(AG 연령 제한), `wl`(투수 승패), `ipfmt`(이닝 표기), `titlebar`(부문별 기준선), `asscore`(올스타 스코어↔승패), `asorder`(올스타 정보 유출), `textcheck`(문구 빈칸),
+`titles`(성적 대비 수상), `titlebar`(부문별 기준선·수상률), `nego`(협상 도박 균형), `negotext`(협상 통보 문구), `integrity`(기록 불변식), `valuecheck`(값의 범위), `goaltext`(목표 표기↔판정), `campreport`(훈련 몫 ↔ 나이 몫), `logic`(칸 사이의 모순), `ceiling`(천장·훈련 몫), `headroom`(성장 여지), `traincover`(훈련 방향의 덮개), `injurybal`(부상 빈도·무게), `earlygame`(초반 여덟 시즌), `rolebar`(OVR ↔ 보직), `traingrade`(훈련 성과 분포), `agency`(선택의 무게), `decisions`(결정 밀도), `repeat`(장면 반복), `oddscheck`(표기 확률 검수), `rivals`(동기 분포·타이틀 중복), `fame`(인지도 눈금), `leagueavg`(리그 평균 기준), `injurymonth`(부상의 달력 배치), `wish`(희망 구단의 무게), `park`(구장 효과 크기), `scenefit`(장면↔자리 일치), `service2`(복무 방침의 값), `wl`(투수 승패), `randomcreate`(랜덤 조합 정합성), `agelimit`(AG 연령 제한), `wl`(투수 승패), `ipfmt`(이닝 표기), `titlebar`(부문별 기준선), `asscore`(올스타 스코어↔승패), `asorder`(올스타 정보 유출), `textcheck`(문구 빈칸),
 `service_fa`(서비스타임 ↔ FA 도달), `titlemark`(타이틀↔기록 대응),
 `monthform`(월별 단계 분포·이달의 선수), `mvppay`(성적 대비 제시액),
 `clutch`(승부처 선택지 균형), `clutchwin`(승부처 문구 ↔ 경기 결과), `clutchgame`(승부처 ↔ 출장 기록), `clutchseat`(장면 ↔ 그 달의 자리), `fagate`(FA를 막는 조건),
