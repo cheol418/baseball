@@ -279,13 +279,18 @@ function LoadingPanel({ title, subtitle, rows, tail }: {
  * 경기 카드만 넘어가면 "지금 몇 라운드인지, 올라가고 있는지"가 안 보인다.
  * 조별리그는 전적으로, 녹아웃은 대진으로 진행 상황을 계속 띄워둔다.
  */
-function TourneyBoard({ games, upto }: { games: IntlGame[]; upto: number }) {
-  const played = games.slice(0, upto + 1);
+/**
+ * `done`은 **결과가 이미 공개된 경기 수**, `current`는 지금 카드에 떠 있는 경기다.
+ * 둘을 합쳐 세면 현황판이 아래 카드보다 먼저 승패를 말한다 —
+ * "1승 0패"를 읽고 나서 그 1차전 카드를 보게 된다. (실제로 겪음)
+ */
+function TourneyBoard({ games, done, current }: { games: IntlGame[]; done: number; current: number }) {
   const group = games.filter((x) => x.stage === "GROUP" || x.stage === "SUPER");
   const knock = games.filter((x) => x.stage === "KNOCKOUT" || x.stage === "FINAL");
-  const gW = group.filter((x, i) => x.won && i <= upto).length;
-  const gL = group.filter((x, i) => !x.won && i <= upto).length;
-  const groupDone = played.length > group.length;
+  const gW = group.filter((x) => games.indexOf(x) < done && x.won).length;
+  const gL = group.filter((x) => games.indexOf(x) < done && !x.won).length;
+  // 조별리그를 다 치렀고 녹아웃이 있으면 그때부터 "통과" — 결과를 미리 말하는 게 아니다
+  const groupDone = done >= group.length && knock.length > 0;
 
   return (
     <div className="mb-3 rounded-xl bg-black/25 px-3 py-2.5">
@@ -298,16 +303,21 @@ function TourneyBoard({ games, upto }: { games: IntlGame[]; upto: number }) {
             {gW}승 {gL}패
           </span>
           <span className="ml-auto flex gap-1">
-            {group.map((x, i) => (
-              <span
-                key={x.round}
-                className="h-2 w-2 rounded-full"
-                style={{
-                  background: i > upto ? "rgba(255,255,255,0.18)"
-                    : x.won ? "#8cc79a" : "#cf8d7f",
-                }}
-              />
-            ))}
+            {group.map((x) => {
+              const idx = games.indexOf(x);
+              return (
+                <span
+                  key={x.round}
+                  // 지금 치르는 경기는 흰 점 — 아직 결과를 말하지 않는다
+                  className={`h-2 w-2 rounded-full ${idx === current ? "animate-pulse" : ""}`}
+                  style={{
+                    background: idx === current ? "rgba(255,255,255,0.85)"
+                      : idx >= done ? "rgba(255,255,255,0.18)"
+                        : x.won ? "#8cc79a" : "#cf8d7f",
+                  }}
+                />
+              );
+            })}
           </span>
           {groupDone && <span className="ml-1 text-[10px] font-bold opacity-70">통과</span>}
         </div>
@@ -316,14 +326,14 @@ function TourneyBoard({ games, upto }: { games: IntlGame[]; upto: number }) {
         <div className="mt-2 flex items-center gap-1">
           {knock.map((x) => {
             const idx = games.indexOf(x);
-            const done = idx <= upto;
-            const now = idx === upto;
+            const shown = idx < done;
+            const now = idx === current;
             return (
               <span key={x.round} className="flex flex-1 items-center gap-1">
                 <span
                   className={`flex-1 truncate rounded-md px-1.5 py-1 text-center text-[9.5px] font-extrabold transition ${
                     now ? "bg-white/25"
-                      : done ? (x.won ? "bg-[#8cc79a]/25" : "bg-[#cf8d7f]/25")
+                      : shown ? (x.won ? "bg-[#8cc79a]/25" : "bg-[#cf8d7f]/25")
                         : "bg-white/8 opacity-45"
                   }`}
                 >
@@ -471,6 +481,8 @@ export function Broadcast({ g, kind, onDone, onAction, busy = false }: {
    * 재생한다** — 같은 장면이 두 번 뜬 것처럼 보인다. (실제로 겪음)
    */
   const cur = Math.min(i, steps.length - 1);
+  /** 결과가 이미 공개된 경기 수 — 현황판은 지금 카드보다 앞서 가면 안 된다 */
+  const gamesShown = steps.slice(0, cur).filter((x) => x.kind === "game").length;
   const flushing = i >= steps.length;
   const step = steps[cur];
   if (!step) return null;
@@ -529,7 +541,10 @@ export function Broadcast({ g, kind, onDone, onAction, busy = false }: {
           {!warmup && kind === "INTL" && intlOfYear && (
             <TourneyBoard
               games={intlOfYear.games}
-              upto={Math.max(0, steps.slice(0, cur + 1).filter((x) => x.kind === "game").length - 1)}
+              // 지금 카드 **앞까지** 센다 — 현황판이 카드보다 먼저 결과를 말하면 안 된다
+              done={gamesShown}
+              // 승부처는 그 경기 안에서 일어난다 — 그 경기를 '지금'으로 표시한다
+              current={step.kind === "game" || step.kind === "clutch" ? gamesShown : -1}
             />
           )}
           {warmup && loading && <LoadingPanel key="warm" {...loading} />}

@@ -2507,17 +2507,30 @@ export function advance(prev: GameState, action: Action): GameState {
         // 구단이 삭감을 제시한 해에는 협상에 성공해도 작년보다 적을 수 있다.
         // "성공인데 마이너스"로 읽히지 않게 무엇이 달라졌는지 밝힌다.
         const cut = success && diff < 0;
-        const title = opt.id === "accept" ? "연봉 계약 완료"
-          : success ? (cut ? `${opt.label} — 삭감 폭 축소` : `${opt.label} 성공`)
+        /**
+         * "삭감 폭을 줄였다"는 **제시액보다 끌어올렸을 때만** 할 수 있는 말이다.
+         * 수용(accept)은 제시액을 그대로 받는 것이라 `next === nego.offer`인데,
+         * 삭감 제안을 수용하면 이 가지에 걸려
+         * "구단이 5억원까지 깎으려 했지만 5억원으로 막았습니다"가 됐다. (실제로 겪음)
+         */
+        const pushedBack = cut && next > nego.offer;
+        const title = opt.id === "accept" ? (cut ? "연봉 삭감 수용" : "연봉 계약 완료")
+          : success
+            ? pushedBack ? `${opt.label} — 삭감 폭 축소`
+              : cut ? `${opt.label} 성공 — 삭감은 그대로` : `${opt.label} 성공`
             : `${opt.label} 결렬`;
-        const icon = opt.id === "accept" ? "✍️" : success ? (cut ? "🩹" : "📈") : "📉";
-        const body = success
-          ? cut
-            ? `구단이 ${formatMoney(nego.offer)}까지 깎으려 했지만 ${formatMoney(next)}으로 막았습니다.`
-            : opt.id === "accept"
-              ? "구단이 제시한 금액에 그대로 사인했습니다."
-              : "성적을 근거로 한 요구가 받아들여졌습니다."
-          : `요구가 받아들여지지 않아 제시액(${formatMoney(nego.offer)})보다 낮은 금액에 사인했습니다.`;
+        const icon = opt.id === "accept" ? (cut ? "📉" : "✍️") : success ? (cut ? "🩹" : "📈") : "📉";
+        const body = !success
+          ? `요구가 받아들여지지 않아 제시액(${formatMoney(nego.offer)})보다 낮은 금액에 사인했습니다.`
+          : opt.id === "accept"
+            ? cut
+              ? "구단이 내민 삭감안을 그대로 받아들였습니다."
+              : "구단이 제시한 금액에 그대로 사인했습니다."
+            : pushedBack
+              ? `구단이 ${formatMoney(nego.offer)}까지 깎으려 했지만 ${formatMoney(next)}으로 막았습니다.`
+              : cut
+                ? "요구는 통했지만 삭감 자체를 되돌리지는 못했습니다."
+                : "성적을 근거로 한 요구가 받아들여졌습니다.";
 
         log(s, {
           icon, title,
