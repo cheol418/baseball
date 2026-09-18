@@ -1132,9 +1132,28 @@ function shouldForceRetire(s: GameState): string | null {
   const ovr = overall(p);
   if (p.age >= 43) return "마흔을 넘긴 몸이 더 이상 버텨주지 않았습니다.";
 
+  /**
+   * 보장 계약이 남아 있는가.
+   *
+   * 3년 FA 계약을 맺은 이듬해에 "재계약 대상에서 제외되었습니다"가 떴다 —
+   * **재계약할 것이 없는데 제외될 수가 없다.** (실제로 겪음)
+   *
+   * 두 가지를 나눠서 다룬다.
+   *  · 2군에서 두 시즌을 보냈다고 잘라내는 것은 **계약 중엔 하지 않는다** —
+   *    남은 연봉을 다 줘야 하므로 구단은 그냥 2군에 두고 계약을 채우게 한다.
+   *  · 기량이 바닥나면 **돈을 떠안고 방출**하는 일은 실제로도 있다.
+   *    문턱은 그대로 두되, 그때는 문구가 그렇게 말해야 한다.
+   *
+   * 계약을 아예 방패로 쓰면 은퇴가 한 살 늦어지고 서른아홉 주전이 흔해진다 —
+   * 막는 것은 "말이 안 되는 사유"뿐이다.
+   */
+  const underContract = (s.contract?.remaining ?? 0) > 0;
+
   const recent = s.seasons.slice(-2);
   const minorOnly = recent.length === 2 && recent.every((r) => r.level === "MINOR");
-  if (p.age >= 29 && minorOnly) return "두 시즌 연속 1군의 부름을 받지 못하고 방출 통보를 받았습니다.";
+  if (p.age >= 29 && minorOnly && !underContract) {
+    return "두 시즌 연속 1군의 부름을 받지 못하고 방출 통보를 받았습니다.";
+  }
 
   /**
    * 방출 문턱.
@@ -1147,6 +1166,8 @@ function shouldForceRetire(s: GameState): string | null {
   const releaseBar = p.age >= 40 ? 82 : p.age >= 38 ? 79 : p.age >= 36 ? 75
     : p.age >= 34 ? 71 : p.age >= 32 ? 66 : 0;
   if (releaseBar && ovr < releaseBar) {
+    // 계약이 남았는데 내보낸다면, 구단이 남은 돈을 떠안았다는 뜻이다
+    if (underContract) return "구단이 남은 계약을 떠안고 방출을 결정했습니다.";
     return p.age >= 36 ? "재계약 대상에서 제외되었습니다." : "기량 저하가 뚜렷해져 구단에서 방출되었습니다.";
   }
 
@@ -1222,7 +1243,17 @@ export function computeHof(s: GameState) {
   const tier =
     score >= 420 ? "레전드 (전설)" : score >= 300 ? "명예의 전당" : score >= 200 ? "프랜차이즈 스타"
     : score >= 120 ? "리그 주전급" : score >= 55 ? "1군 백업" : "짧은 도전";
-  return { score, tier, war: Math.round(war * 10) / 10, awards, mvp, rings, seasons: kbo.length, medals, feats };
+  /**
+   * 통산 연봉 — **프로에서 번 돈 전부**다.
+   * 2군에서 보낸 해도, 복무한 해도 연봉은 나왔으므로 1군 시즌만 세지 않는다.
+   */
+  const earned = s.seasons
+    .filter((x) => x.level === "KBO" || x.level === "MINOR" || x.level === "ARMY")
+    .reduce((a, r) => a + (r.salary ?? 0), 0);
+  return {
+    score, tier, war: Math.round(war * 10) / 10, awards, mvp, rings,
+    seasons: kbo.length, medals, feats, earned,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -1432,6 +1463,27 @@ function playHalf(
       entry.move = { type: move.type, role: move.role };
 
       const promoted = move.type === "UP" || (move.type === "ROLE" && roleTier(move.role) > roleTier(role));
+      /**
+       * 1군↔2군은 **중계를 건너뛰면 놓친다.**
+       * 중계 안에도 카드가 서지만 건너뛰기를 누르면 그대로 지나가므로,
+       * 커리어가 꺾이는 이 순간만은 오버레이로 한 번 더 확인을 받는다.
+       * (중계 쪽 카드는 확인을 요구하지 않고 흐르게 두어 두 번 멈추지 않는다)
+       */
+      if (move.type !== "ROLE") {
+        notify(s, {
+          icon: move.type === "UP" ? "⬆️" : "⬇️",
+          eyebrow: "Roster", title: move.type === "UP" ? "1군 엔트리 등록" : "2군 이동 통보",
+          tone: move.type === "UP" ? "epic" : "bad",
+          body: move.type === "UP"
+            ? `${m.label}을 마치고 1군에 올라갑니다. ${move.role}(으)로 출발합니다.`
+            : `${m.label}까지의 부진으로 1군 엔트리에서 말소되었습니다.`,
+          change: [{
+            label: "소속",
+            from: `${level === "KBO" ? "1군" : "2군"} ${role}`,
+            to: `${move.type === "UP" ? "1군" : "2군"} ${move.role}`,
+          }],
+        });
+      }
       const title = move.type === "UP" ? "1군 콜업"
         : move.type === "DOWN" ? "2군 이동 통보"
           : promoted ? "보직 상승" : "보직 하락";
@@ -2091,6 +2143,16 @@ export function advance(prev: GameState, action: Action): GameState {
         log(s, {
           icon: "🔀", title: "유형 변화", tone: "good",
           body: `${styleBefore.name} → ${styleAfter.name}. ${styleAfter.desc}`,
+        });
+        /**
+         * 유형이 바뀌는 건 **커리어의 방향이 바뀌는 일**이다.
+         * 로그에만 남기면 겨울을 몇 번 넘기는 사이 조용히 다른 선수가 되어 있다 —
+         * 무엇이 언제 바뀌었는지 모른 채 넘어간다. 확인을 받는다.
+         */
+        notify(s, {
+          icon: "🔀", eyebrow: "Style", title: "유형 변화", tone: "epic",
+          body: `${styleAfter.desc} 겨울을 거듭하며 몸이 다른 선수가 됐습니다.`,
+          change: [{ label: "선수 유형", from: styleBefore.name, to: styleAfter.name }],
         });
       }
       /**

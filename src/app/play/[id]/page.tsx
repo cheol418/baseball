@@ -1251,6 +1251,11 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
               <SumCell label="메달" value={hof.medals} />
               <SumCell label="대기록" value={hof.feats} />
             </div>
+            {/* 야구로 번 돈 — 커리어를 갈무리할 때 궁금해지는 숫자다 */}
+            <div className="mt-2 rounded-xl bg-[var(--surface-2)] px-4 py-2.5">
+              <div className="eyebrow">통산 연봉</div>
+              <div className="num text-[19px] font-black text-[var(--ink)]">{formatMoney(hof.earned)}</div>
+            </div>
             {allTimeRanks(g.seasons, p.kind).slice(0, 3).length > 0 && (
               <div className="mt-3 flex flex-wrap justify-center gap-1.5">
                 {allTimeRanks(g.seasons, p.kind).slice(0, 3).map((r) => (

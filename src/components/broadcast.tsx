@@ -488,10 +488,17 @@ export function Broadcast({ g, kind, onDone, onAction, busy = false }: {
       const t = setTimeout(onDone, 450);
       return () => clearTimeout(t);
     }
-    // 엔트리 이동은 그 달이 끝난 자리에서 확인을 받는다 —
-    // 중계가 다 끝난 뒤에 알려주면 "언제 바뀐 건지" 알 수 없다
-    // 승부처는 유저가 직접 고른 결과다 — 지나가버리면 고른 의미가 없다
-    if (steps[i].kind === "move" || steps[i].kind === "clutch") return;
+    /**
+     * 승부처는 유저가 직접 고른 결과다 — 지나가버리면 고른 의미가 없다.
+     *
+     * 엔트리 이동은 **그 달 자리에 카드로 세우되 멈추지는 않는다.**
+     * 1군↔2군은 중계가 끝난 뒤 오버레이로 다시 확인을 받으므로, 여기서도
+     * 멈추면 같은 소식에 두 번 확인을 누르게 된다.
+     * 보직만 바뀌는 이동(ROLE)은 오버레이가 없으니 여기서 확인을 받는다.
+     */
+    const st = steps[i];
+    if (st.kind === "clutch") return;
+    if (st.kind === "move" && st.move.type === "ROLE") return;
     const dur = steps[i].kind === "month" ? MONTH_MS : CARD_MS;
     const t = setTimeout(() => setI((v) => v + 1), dur);
     return () => clearTimeout(t);
@@ -626,11 +633,14 @@ export function Broadcast({ g, kind, onDone, onAction, busy = false }: {
           {!warmup && step.kind === "move" && (
             <div key={`v${cur}`}>
               <MovePanel step={step} />
-              <button
-                onClick={() => setI((v) => v + 1)}
-                className="mt-4 w-full rounded-xl bg-white/90 py-2.5 text-[13px] font-extrabold text-[#0e2a4d] transition hover:bg-white">
-                확인
-              </button>
+              {/* 1군↔2군은 중계 뒤 오버레이가 확인을 받는다 — 여기서 또 멈추지 않는다 */}
+              {step.move.type === "ROLE" && (
+                <button
+                  onClick={() => setI((v) => v + 1)}
+                  className="mt-4 w-full rounded-xl bg-white/90 py-2.5 text-[13px] font-extrabold text-[#0e2a4d] transition hover:bg-white">
+                  확인
+                </button>
+              )}
             </div>
           )}
         </div>
