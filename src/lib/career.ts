@@ -1929,8 +1929,10 @@ export function advance(prev: GameState, action: Action): GameState {
         const devRate = developmentRate(prev?.level ?? null, prev?.role ?? null, prev?.age ?? s.player.age);
         // 지난 시즌의 각오가 이 겨울의 성장으로 돌아온다 (몸을 만든 해는 크게 자란다)
         const RG = resolveEffect(s);
-        const { deltas } = grow(s.player, rng, opt, devRate * RG.growth, hellMul,
+        const ovrBefore = overall(s.player);
+        const { deltas, gains, aging } = grow(s.player, rng, opt, devRate * RG.growth, hellMul,
           { breakMul: RG.breakMul, declineGuard: RG.declineGuard });
+        const ovrAfter = overall(s.player);
         /**
          * 오른 것만 보여주면 화면이 거짓말을 한다.
          *
@@ -1938,13 +1940,20 @@ export function advance(prev: GameState, action: Action): GameState {
          * 0 근처**가 된다. 오른 항목만 세면 "훈련이 잘 풀렸다 · 성장 없음"이
          * 되어 앞뒤가 안 맞는다. 실제로는 구속 +2, 스태미나 −3처럼
          * 오르내림이 같이 있었다. (실제로 겪음)
-         * 내려간 것도 같이 적고, 나이가 들어 방어가 성과인 때는 그렇게 말한다.
+         *
+         * 그렇다고 합쳐진 값을 "훈련 결과"라고 적으면 이번엔 반대로 거짓말이
+         * 된다 — **훈련은 능력치를 깎지 않는다.** 깎은 건 나이다.
+         * 훈련이 보탠 몫(`gains`)과 세월이 가져간 몫(`aging`)을 따로 적는다.
          */
-        const moves = (Object.entries(deltas) as [string, number][])
-          .filter(([, v]) => v !== 0)
-          .sort((a, b) => b[1] - a[1]);
+        const pick = (src: Partial<Record<string, number>>, keep: (v: number) => boolean) =>
+          (Object.entries(src) as [string, number][])
+            .filter(([, v]) => keep(v))
+            .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+        const moves = pick(deltas, (v) => v !== 0).sort((a, b) => b[1] - a[1]);
         const ups = moves.filter(([, v]) => v > 0);
         const downs = moves.filter(([, v]) => v < 0);
+        const trained = pick(gains, (v) => v > 0);
+        const aged = pick(aging, (v) => v < 0);
         const fmtMove = (list: [string, number][]) =>
           list.map(([k, v]) => `${ABILITY_LABEL[k] ?? k} ${v > 0 ? "+" : "−"}${Math.abs(v)}`).join(", ");
         const gainText = moves.length
@@ -1955,6 +1964,20 @@ export function advance(prev: GameState, action: Action): GameState {
             : "눈에 띄는 성장은 없었습니다.");
         // 나이가 들어 하락을 막은 해는 "성장 없음"이 아니라 "방어"다
         const defended = s.player.age >= 31 && !ups.length && downs.length > 0;
+        /** 훈련은 제 몫을 했는데 나이가 그보다 크게 가져간 겨울 */
+        const outrun = trained.length > 0 && ovrAfter < ovrBefore;
+        /** 통보에 올릴 두 줄 — 훈련이 보탠 것과 세월이 가져간 것 */
+        const campRows = [
+          {
+            label: "훈련으로 얻은 것", from: "—",
+            to: trained.length ? fmtMove(trained.slice(0, 4)) : "이번 겨울은 소득이 없었습니다",
+          },
+          // 스무 살의 하락은 나이 탓이 아니라 그해가 안 풀린 것이다 — 말을 나눈다
+          ...(aged.length
+            ? [{ label: s.player.age >= 30 ? "나이로 잃은 것" : "내려간 것", from: "—", to: fmtMove(aged.slice(0, 4)) }]
+            : []),
+          { label: "OVR", from: String(ovrBefore), to: String(ovrAfter) },
+        ];
 
         if (hell) {
           const left = HELL_LIMIT - (s.hellUsed ?? 0);
@@ -1980,23 +2003,25 @@ export function advance(prev: GameState, action: Action): GameState {
               ? `${opt.name} — 몸을 갈아 넣은 겨울이 결실을 맺었습니다.`
               : `${opt.name} — 몸이 따라주지 않았습니다. 늘긴 했지만, 갈아 넣은 값은 못 했습니다.`,
             change: [
-              { label: "훈련 결과", from: "—", to: moves.length ? fmtMove(moves.slice(0, 4)) : "변화 없음" },
+              ...campRows,
               { label: "남은 기회", from: `${left + 1}회`, to: `${left}회` },
             ],
           });
         } else if (grade) {
           log(s, {
             icon: grade.icon, title: `${opt.name} — ${grade.label}`, tone: grade.tone,
-            body: `${defended ? "나이를 이길 수는 없지만, 갈아 넣은 만큼 덜 빠졌습니다." : grade.note} ${gainText}`,
+            body: `${defended || outrun ? "나이를 이길 수는 없지만, 갈아 넣은 만큼 덜 빠졌습니다." : grade.note} ${gainText}`,
           });
           // 훈련은 선수가 직접 고른 선택이다 — 결과를 로그에만 남기면
           // 무엇이 달라졌는지 모른 채 시즌으로 넘어간다. 오버레이로 띄운다.
           notify(s, {
             icon: grade.icon, eyebrow: "Spring Camp", title: grade.label, tone: grade.tone,
-            body: `${opt.name} — ${grade.note}`,
+            body: outrun
+              ? `${opt.name} — ${grade.note} 훈련은 제 몫을 했지만, 나이가 그보다 더 가져갔습니다.`
+              : `${opt.name} — ${grade.note}`,
             change: [
               { label: "훈련 방향", from: "—", to: opt.name },
-              { label: "능력치", from: "—", to: moves.length ? fmtMove(moves.slice(0, 4)) : (s.player.age >= 31 ? "지켜냈다" : "변화 없음") },
+              ...campRows,
             ],
           });
         }

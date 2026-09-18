@@ -604,6 +604,18 @@ export const DEV_RATE_LABEL = (rate: number) =>
   rate >= 1.25 ? "매우 빠름" : rate >= 1.08 ? "빠름" : rate >= 0.95 ? "보통" : "더딤";
 
 /** 오프시즌 성장 처리 */
+/**
+ * 한 겨울의 결과.
+ *  · `deltas` 실제로 움직인 값 (훈련 + 세월)
+ *  · `gains`  훈련이 보탠 몫 — **늘 0 이상이다**
+ *  · `aging`  훈련이 없었다면 움직였을 값
+ */
+export interface GrowResult {
+  deltas: Partial<Record<string, number>>;
+  gains: Partial<Record<string, number>>;
+  aging: Partial<Record<string, number>>;
+}
+
 export function grow(
   p: Player, rng: RNG, focus: TrainingOption | null, devRate = 1,
   /** 집중 훈련분에 곱하는 배수 — 지옥 훈련(성공 2.3 · 실패 0.42)과 훈련 성과 등급이 함께 실린다 */
@@ -615,10 +627,12 @@ export function grow(
    *  · `declineGuard` 노쇠 낙폭 배수 — "무리하지 않는다"가 사는 것은 결국 시간이다.
    */
   extra: { breakMul?: number; declineGuard?: number } = {},
-): { deltas: Partial<Record<string, number>> } {
+): GrowResult {
   const keys = abilityKeys(p.kind);
   const effBonus = p.trait === "hardworker" ? 1.2 : 1;
   const deltas: Record<string, number> = {};
+  const gains: Record<string, number> = {};
+  const aging: Record<string, number> = {};
 
   /**
    * 한계 돌파 — 잠재력은 스카우트의 추정일 뿐 진짜 천장이 아니다.
@@ -653,14 +667,20 @@ export function grow(
       : (focus.main ?? focus.targets).includes(k) ? 1
         : focus.targets.includes(k) ? 0.5 : 0;
     const focused = (focus?.gain ?? 0) * share * hellMul;
-    let d: number;
+    /**
+     * **훈련이 준 몫과 세월이 가져간 몫을 따로 센다.**
+     *
+     * 둘을 합친 값 하나만 돌려주면 화면이 "훈련 결과 −3"이라고 적는다.
+     * 훈련은 능력치를 내리지 않는다(`dTrain`은 늘 0 이상) — 내린 건 나이다.
+     * 서른다섯의 겨울은 "훈련 +5 · 노쇠 −7 · 합계 −2"라고 말해야 맞다.
+     */
+    let dNat: number, dTrain: number;
     if (af > 0) {
       // 성장기: 포텐셜에 가까울수록 둔화
       // 어릴수록·전성기일수록 훈련 효과가 크다 (30세를 넘기면 효율이 떨어진다)
       const trainBoost = p.age <= 23 ? 1.28 : p.age <= 27 ? 1.14 : p.age <= 29 ? 1.0 : 0.82;
-      d = (af * (1.0 + headroom * 1.8) * (0.72 + p.talent * 0.42)
-        + focused * effBonus * trainBoost * (0.45 + headroom * 0.7)) * devRate;
-      d += rng.normal() * 1.3;
+      dNat = af * (1.0 + headroom * 1.8) * (0.72 + p.talent * 0.42) * devRate + rng.normal() * 1.3;
+      dTrain = focused * effBonus * trainBoost * (0.45 + headroom * 0.7) * devRate;
     } else {
       // 노쇠기: 하락 폭은 "가진 만큼" 비례한다.
       // 원래 빠른 선수가 잃을 주력도 많고, 이미 느린 선수는 더 느려질 여지가 적다.
@@ -668,20 +688,28 @@ export function grow(
       // 훈련으로 하락을 방어한다. 서른 전에는 방어를 넘어 아직 끌어올릴 수 있다 —
       // 실제 피크는 26~29세인데, 27세에 성장이 통째로 끊기면 절벽처럼 느껴진다.
       const guard = p.age <= 28 ? 0.95 : p.age <= 30 ? 0.6 : 0.32;
-      d = af * rng.float(0.7, 1.5) * floorScale * (extra.declineGuard ?? 1)
-        + focused * effBonus * guard * (pot > cur ? 1 : 0.45);
-      d += rng.normal() * 0.7;
+      dNat = af * rng.float(0.7, 1.5) * floorScale * (extra.declineGuard ?? 1) + rng.normal() * 0.7;
+      dTrain = focused * effBonus * guard * (pot > cur ? 1 : 0.45);
     }
+    const d = dNat + dTrain;
     // 한 오프시즌에 능력치가 +20씩 뛰면 성장이 아니라 순간이동이다.
     // 실제로는 한 해에 한 항목이 크게 좋아져도 그 폭이 제한적이다.
     // 지옥 훈련이 성공하면 평소 상한을 넘어설 수 있다
     const capUp = share === 0 ? 5 : Math.round((share === 1 ? 8 : 6) * clamp(hellMul, 1, 1.7));
-    const capped = clamp(d, -12, capUp);
-    const next = clamp(Math.round(cur + capped), 15, af > 0 ? pot : ABILITY_MAX);
+    const ceil = af > 0 ? pot : ABILITY_MAX;
+    const land = (v: number) => clamp(Math.round(cur + clamp(v, -12, capUp)), 15, ceil);
+    const next = land(d);
+    /**
+     * 훈련이 없었다면 어디까지 갔을까 — **같은 주사위**로 굴린 값과 견준다.
+     * 상한·반올림이 단조라 `next ≥ natNext`가 보장된다(훈련은 깎지 않는다).
+     */
+    const natNext = land(dNat);
     if (next !== cur) deltas[k] = next - cur;
+    if (natNext !== cur) aging[k] = natNext - cur;
+    if (next !== natNext) gains[k] = next - natNext;
     setAb(p.abilities, k, next);
   }
-  return { deltas };
+  return { deltas, gains, aging };
 }
 
 /**
