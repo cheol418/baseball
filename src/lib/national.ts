@@ -52,8 +52,13 @@ export function tournamentOf(year: number): Tournament | null {
  * 값이 클수록 뽑히기 쉽다.
  */
 const POS_SLOTS: Record<string, number> = {
-  // 선발 로테이션과 불펜을 합쳐 가장 많이 뽑는다
-  SP: 6, RP: 3, CP: 2,
+  /**
+   * 투수는 가장 많이 뽑고, 그중 **불펜이 선발보다 많다.**
+   * 국제대회는 단기전이라 선발은 네댓, 구원은 예닐곱을 데려간다 —
+   * 실제로도 오승환·정우람·고우석 같은 마무리가 대표팀 단골이었다.
+   * 마무리를 2로 두면 정규시즌 WAR이 낮은 탓과 겹쳐 구조적으로 밀린다.
+   */
+  SP: 6, RP: 4, CP: 4,
   // 안방은 자리가 적지만 대체 자원도 적어 한 명은 반드시 들어간다
   C: 5,
   // 중앙 내야·외야는 수비 때문에 여러 명을 데려간다
@@ -95,7 +100,13 @@ export function isCalledUp(s: GameState, t: Tournament, rng: RNG): boolean {
     score += Math.max(0, l.hr - 18) * 0.34 + Math.max(0, l.rbi - 75) * 0.07
       + Math.max(0, (l.ops - 0.82) * 22);
   } else {
-    score += Math.max(0, l.w - 9) * 0.7 + Math.max(0, l.sv - 18) * 0.35
+    /**
+     * 구원의 눈에 보이는 성적은 **세이브와 홀드**다.
+     * 홀드를 빼두면 필승조는 이 항목에서 한 점도 못 받아, 서른 홀드를 해도
+     * 성적이 없는 것처럼 계산된다. (실제로 겪음)
+     */
+    score += Math.max(0, l.w - 9) * 0.7 + Math.max(0, l.sv - 15) * 0.35
+      + Math.max(0, l.hld - 15) * 0.25
       + Math.max(0, (3.9 - l.era) * 2.4) + Math.max(0, l.so - 120) * 0.02;
   }
   // 타이틀은 대표팀 선발의 가장 확실한 근거다
