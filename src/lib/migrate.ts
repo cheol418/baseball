@@ -40,6 +40,10 @@ export function migrateSave(raw: unknown): GameState | null {
   def("rivals", []);
   // 달별 가동률 — 없으면 전 달 만근으로 본다
   def("monthAvail", null);
+  // 특수능력 — 구버전 세이브는 빈 채로 시작하고 조건을 만족하면 그때 붙는다
+  def("perks", []);
+  def("perkYears", {});
+  def("clutchTally", {});
   def("seasonRoleGames", null);
   def("liveHalf", null);
   def("retireRefusedYear", null);

@@ -393,6 +393,12 @@ export interface GameState {
   resolveHistory?: string[];
   /** 드래프트 동기 — 같이 늙어가며 타이틀과 순위를 다툰다 */
   rivals?: import("./rivals").Rival[];
+  /** 특수능력 — 커리어 중에 얻고 잃는다 (`ability.ts`) */
+  perks?: string[];
+  /** 능력을 얻은 해 (화면 표시용) */
+  perkYears?: Record<string, number>;
+  /** 승부처 태그·선택지별 성패 누적 — 특수능력 획득 조건의 유일한 새 통계 */
+  clutchTally?: Record<string, { win: number; lose: number }>;
 
   /* --- 시즌 진행 --- */
   /** 직전에 치른 반기의 월별 성적 (중계 재생용) */

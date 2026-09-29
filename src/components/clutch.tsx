@@ -9,6 +9,31 @@ import type { Clutch, ClutchOutcome, ClutchResult } from "@/lib/clutch";
  * 반기를 시작할 때 고르고, 무엇이 나왔는지는 중계가 그 달에 닿아야 안다.
  * 버튼 하나 누르고 지켜보기만 하던 자리에 판단을 하나 끼워 넣는다.
  */
+/**
+ * 이 확률에 무엇이 얹혔는지 그대로 적는다.
+ *
+ * 표기 확률에 이미 더해져 있으므로(`withPerks`), 여기서는 **근거만** 보여준다.
+ * 안 그러면 "왜 44%지?"가 되어, 애써 얻은 능력이 안 보인다.
+ */
+function PerkRow({ perks, dark }: { perks: { name: string; icon: string; delta: number }[]; dark?: boolean }) {
+  const total = perks[0]?.delta ?? 0;   // 상한을 적용한 실제 합계
+  return (
+    <span className="mt-1 flex flex-wrap items-center gap-1">
+      {perks.map((p) => (
+        <span key={p.name}
+          className={`rounded-full px-1.5 py-[1px] text-[9px] font-black ${
+            dark ? "bg-white/15" : "bg-[var(--gold)]/15 text-[var(--gold)]"}`}>
+          {p.icon} {p.name}
+        </span>
+      ))}
+      <span className={`tabular text-[9px] font-black ${
+        total >= 0 ? (dark ? "text-[#8ef0b0]" : "text-[var(--brand-2)]") : "text-[var(--danger)]"}`}>
+        {total >= 0 ? "+" : "−"}{Math.abs(Math.round(total * 100))}%p
+      </span>
+    </span>
+  );
+}
+
 export function ClutchCard({ clutch, onPick, busy, dark = false }: {
   clutch: Clutch; onPick: (id: string) => void; busy: boolean;
   /** 중계 화면(어두운 배경) 안에서 쓰는가 */
@@ -45,6 +70,7 @@ export function ClutchCard({ clutch, onPick, busy, dark = false }: {
                   <span className="ml-auto text-[9px] font-bold opacity-60">{o.leans}</span>
                 </span>
                 <span className="mt-0.5 block text-[10.5px] leading-relaxed opacity-70">{o.desc}</span>
+                {!!o.perks?.length && <PerkRow perks={o.perks} dark />}
               </button>
             );
           })}
@@ -92,6 +118,7 @@ export function ClutchCard({ clutch, onPick, busy, dark = false }: {
                   <span className="ml-auto text-[9.5px] font-bold text-[var(--ink-3)]">{o.leans}</span>
                 </span>
                 <span className="mt-0.5 block text-[11px] leading-relaxed text-[var(--ink-3)]">{o.desc}</span>
+                {!!o.perks?.length && <PerkRow perks={o.perks} />}
               </button>
             );
           })}

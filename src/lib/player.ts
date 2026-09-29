@@ -924,7 +924,7 @@ const TRAIN_GRADES: TrainGrade[] = [
  * **가중 기댓값은 1.0 근처로 맞춰 둔다.** 여기를 건드리면 성장 곡선 전체가
  * 같이 움직이므로 `scripts/training.ts`·`balance.ts`를 다시 돌린다.
  */
-export function rollTrainGrade(p: Player, rng: RNG): TrainGrade {
+export function rollTrainGrade(p: Player, rng: RNG, perkTilt = 0): TrainGrade {
   const mental = getAb(p.abilities, "mental" as AbilityKey);
   // −1 ~ +1 남짓. 기울면 확률이 위아래로 옮겨간다
   const tilt = clamp(
@@ -932,7 +932,8 @@ export function rollTrainGrade(p: Player, rng: RNG): TrainGrade {
     + (p.talent - 0.8) * 0.6
     + (p.condition - 70) * 0.008
     + (p.trait === "hardworker" ? 0.35 : p.trait === "coldblood" ? 0.2 : p.trait === "glass" ? -0.2 : 0)
-    + (p.age <= 23 ? 0.15 : p.age >= 32 ? -0.25 : 0),
+    + (p.age <= 23 ? 0.15 : p.age >= 32 ? -0.25 : 0)
+    + perkTilt,
     -1, 1,
   );
   const shift = tilt * 0.10;

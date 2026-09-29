@@ -27,6 +27,7 @@ import { isHitterLine, MAJOR_TITLES, subtractLine, titleOfStat } from "@/lib/sim
 import { RESOLVES } from "@/lib/resolve";
 import { myRankAmong } from "@/lib/rivals";
 import { monthsLeft, serviceOptions } from "@/lib/military";
+import { abilityById } from "@/lib/ability";
 import { saveGame, useGame } from "@/lib/storage";
 import { isFranchiseRole } from "@/lib/roles";
 import { teamById } from "@/lib/teams";
@@ -1909,6 +1910,32 @@ function PlayerTab({ g }: { g: GameState }) {
 
   return (
     <>
+      {!!g.perks?.length && (
+        <Section eyebrow="Specials" title="특수능력" >
+          <div className="flex flex-col gap-2">
+            {g.perks.map((id) => abilityById(id)).filter(Boolean).map((a) => (
+              <div key={a!.id} className="card flex items-start gap-2.5 px-3.5 py-2.5"
+                style={a!.blue ? { borderColor: "var(--danger)" } : undefined}>
+                <span className="text-[17px] leading-none">{a!.icon}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    <b className="text-[13px]" style={{ color: a!.blue ? "var(--danger)" : "var(--gold)" }}>{a!.name}</b>
+                    {g.perkYears?.[a!.id] && (
+                      <span className="num text-[9.5px] text-[var(--ink-3)]">{g.perkYears[a!.id]}년 획득</span>
+                    )}
+                  </span>
+                  <span className="mt-0.5 block text-[11.5px] leading-relaxed text-[var(--ink-2)]">{a!.desc}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-[var(--ink-3)]">
+            특수능력은 커리어 중에 <b>얻고 잃습니다.</b> 승부처에 걸리는 능력은 해당 상황의 성공률에
+            이미 반영되어 표시됩니다 (한 장면 최대 ±20%p).
+          </p>
+        </Section>
+      )}
+
       <Section eyebrow="Ability" title="능력치"
         action={
           <div className="flex gap-1.5">

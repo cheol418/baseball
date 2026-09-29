@@ -45,6 +45,8 @@ export interface SimInput {
   share?: number;
   /** 난이도 추가 보정 — 포스트시즌·국제대회처럼 상대가 강할 때 음수 */
   extraAdj?: number;
+  /** 특수능력이 만든 보정 (`ability.ts`의 mergeEffects) — 작게 건다 */
+  perk?: import("./ability").AbilityEffect;
   /** 최소 출장 경기 수 — 단일 경기(올스타전·국제대회)를 돌릴 때 1 */
   minGames?: number;
   /**
@@ -96,10 +98,11 @@ export function simHitter(inp: SimInput): HitterLine {
    * 특급만 정상으로 보인다. (실제로 겪음: 평균 타자 OPS .643 — 실제는 .733)
    * 절편 = 실제 리그 평균 · 기울기 = 최고 선수가 실제 1위 기록에 닿는 값.
    */
-  const bbRate = clamp(0.092 + 0.046 * n50(a("eye")) + 0.008 * n50(a("contact")) + rng.normal() * 0.011, 0.02, 0.23);
-  const kRate = clamp(0.185 - 0.08 * n50(a("contact")) + 0.032 * n50(a("power")) - 0.015 * n50(a("eye")) + rng.normal() * 0.018, 0.04, 0.42);
+  const PK = inp.perk ?? {};
+  const bbRate = clamp((PK.bbAdd ?? 0) + 0.092 + 0.046 * n50(a("eye")) + 0.008 * n50(a("contact")) + rng.normal() * 0.011, 0.02, 0.23);
+  const kRate = clamp((PK.soAdd ?? 0) + 0.185 - 0.08 * n50(a("contact")) + 0.032 * n50(a("power")) - 0.015 * n50(a("eye")) + rng.normal() * 0.018, 0.04, 0.42);
   const babip = clamp(
-    (0.318 + 0.026 * n50(a("contact")) * cond + 0.020 * n50(a("speed")) + rng.normal() * 0.017) * parkHit,
+    (0.318 + (PK.babipAdd ?? 0) + 0.026 * n50(a("contact")) * cond + 0.020 * n50(a("speed")) + rng.normal() * 0.017) * parkHit,
     0.21, 0.42,
   );
   /**
@@ -110,7 +113,7 @@ export function simHitter(inp: SimInput): HitterLine {
    * 컨택도 함께 본다.
    */
   const hrPerBall = clamp(
-    (0.033 + 0.058 * n50(a("power")) * cond + 0.010 * n50(a("contact")) + rng.normal() * 0.006) * parkHr,
+    (0.033 + 0.058 * n50(a("power")) * cond + 0.010 * n50(a("contact")) + rng.normal() * 0.006) * parkHr * (PK.hrMul ?? 1),
     0.001, 0.22,
   );
 
@@ -147,7 +150,7 @@ export function simHitter(inp: SimInput): HitterLine {
   const b3 = cnt(hIn - b2, clamp(0.015 + 0.035 * Math.max(0, n50(a("speed"))), 0, 0.07));
   const h = hIn + hr;
 
-  const sbAttempt = cnt(games, clamp(0.02 + 0.45 * Math.max(0, n50(a("speed"))), 0, 0.6));
+  const sbAttempt = cnt(games, clamp((0.02 + 0.45 * Math.max(0, n50(a("speed")))) * (PK.sbMul ?? 1), 0, 0.7));
   const sbSucc = clamp(0.62 + 0.18 * n50(a("speed")), 0.45, 0.92);
   const sb = Math.round(sbAttempt * sbSucc);
   const cs = Math.max(0, sbAttempt - sb);
@@ -178,7 +181,7 @@ export function simHitter(inp: SimInput): HitterLine {
   const fieldSkill = n50(getAb(p.abilities, "defense" as never)) * (1 - armW)
     + n50(getAb(p.abilities, "arm" as never)) * armW;
   // 계수 17 — 리그 최고 수비수가 한 시즌 +12런 안팎이 되도록 (FanGraphs 기준 +15~20)
-  const defRuns = fieldSkill * 17 * (pa / 600) * defW;
+  const defRuns = fieldSkill * 17 * (pa / 600) * defW * (PK.defMul ?? 1);
   const posAdj = (POS_ADJ[p.position] ?? 0) * (pa / 600);
   const repl = pa * 0.0335;
   const levelScale = level === "KBO" ? 1 : level === "MINOR" ? 0.7 : 0.45;
@@ -209,8 +212,9 @@ export function simPitcher(inp: SimInput): PitcherLine {
   const slot = armSlotById(p.armSlot);
   const edge = platoonEdge(p, role);
 
+  const PKP = inp.perk ?? {};
   const stuff = a("velocity") * 0.55 + a("breaking") * 0.45;
-  const k9 = clamp(
+  const k9 = clamp((PKP.k9Add ?? 0) + 
     (7.1 + 3.5 * n50(stuff) * cond + rng.normal() * 0.38) * slot.k9 * (1 + edge * 0.35),
     2.0, 14.5,
   );
@@ -221,7 +225,7 @@ export function simPitcher(inp: SimInput): PitcherLine {
   const parkHr = 1 + ((inp.park?.hr ?? 1) - 1) * 0.5;
   const hr9 = clamp(
     (1.02 - 0.45 * n50(a("movement")) - 0.28 * n50(a("velocity")) + rng.normal() * 0.11)
-      * slot.hr9 * (1 - edge * 0.8) * parkHr,
+      * slot.hr9 * (1 - edge * 0.8) * parkHr * (PKP.hr9Mul ?? 1),
     0.08, 2.8,
   );
   const babip = clamp(
@@ -236,7 +240,7 @@ export function simPitcher(inp: SimInput): PitcherLine {
   if (isSP) {
     gs = allocate(inp, 30 * availability);
     g = gs;
-    const ipPerStart = clamp(5.75 + 1.95 * n50(a("stamina")), 3.6, 7.4);
+    const ipPerStart = clamp(5.75 + 1.95 * n50(a("stamina")) + (PKP.ipPerStartAdd ?? 0), 3.6, 7.6);
     ip = Math.round(gs * ipPerStart * 10) / 10;
   } else if (isCP) {
     g = allocate(inp, 58 * availability);
@@ -449,8 +453,8 @@ export function judgeAwards(
     if (line.sb >= lead.sb) out.push("도루왕");
     if (line.obp >= lead.obp && qualified) out.push("출루율 1위");
     if (line.slg >= lead.slg && qualified) out.push("장타율 1위");
-    if (line.war >= 4.2 && rng.chance(0.6)) out.push("골든글러브");
-    if (line.war >= 5.5 && rng.chance(0.65)) out.push("정규시즌 MVP");
+    if (line.war >= 4.5 && rng.chance(0.6)) out.push("골든글러브");
+    if (line.war >= 5.9 && rng.chance(0.65)) out.push("정규시즌 MVP");
     if (isRookie && line.war >= 1.8 && rng.chance(0.75)) out.push("신인왕");
   } else {
     if (line.ip < 60 && line.sv + line.hld < 20) return out;
@@ -474,8 +478,8 @@ export function judgeAwards(
      * 값으로 쳐준다. 기록(WAR)은 건드리지 않는다.
      */
     const awardWar = line.war + line.sv * 0.045 + line.hld * 0.03;
-    if (awardWar >= 4.0 && rng.chance(0.42)) out.push("골든글러브");
-    if (awardWar >= 4.8 && rng.chance(0.65)) out.push("정규시즌 MVP");
+    if (awardWar >= 4.3 && rng.chance(0.42)) out.push("골든글러브");
+    if (awardWar >= 5.2 && rng.chance(0.65)) out.push("정규시즌 MVP");
     if (isRookie && line.war >= 1.8 && rng.chance(0.75)) out.push("신인왕");
   }
   // 중요한 상이 앞에 오도록 정렬

@@ -2,6 +2,7 @@ import { getAb, overall } from "./player";
 import { clamp, n50, RNG } from "./rng";
 import { isRotationRole } from "./roles";
 import type { GameState, HitterLine, PitcherLine, StatLine } from "./types";
+import { clutchBonus, type ClutchTag } from "./ability";
 
 /**
  * 승부처.
@@ -24,6 +25,8 @@ export interface ClutchOption {
   odds: number;
   /** 실패해도 얻는 것이 있는가 */
   safe?: boolean;
+  /** 이 확률에 얹힌 특수능력 (카드에 근거로 적는다) */
+  perks?: { name: string; icon: string; delta: number }[];
 }
 
 export interface ClutchOutcome {
@@ -70,6 +73,8 @@ export interface Clutch {
   opponent: string;
   /** 여기서 터지면 경기가 끝나는 자리인가 (우리 팀의 마지막 공격) */
   walkoff?: boolean;
+  /** 이 장면에 걸린 특수능력 태그 (끝내기는 walkoff에서 자동으로 붙는다) */
+  tags?: readonly ClutchTag[];
   /**
    * 이 승부처가 걸린 경기의 결과.
    * 결과 카드가 붙는 무대(올스타·국대·가을야구)에서만 정해진다 —
@@ -106,6 +111,8 @@ interface Scene {
   title: string;
   body: string;
   walkoff?: boolean;
+  /** 특수능력이 걸리는 자리 (`ability.ts`) — 만루·위기·원정·세이브·대기록 */
+  tags?: readonly ClutchTag[];
   /**
    * 그 달에만 말이 되는 장면.
    * "개막전 첫 타석"이 9월에 뜨거나 "시즌 최종전"이 4월에 뜨면 안 된다.
@@ -506,6 +513,47 @@ const STAGE_SCENES_P: Record<string, Scene[]> = {
   ],
 };
 
+
+
+/**
+ * 특수능력 보정을 **선택지에 미리 얹는다.**
+ *
+ * 화면에 뜨는 확률과 실제로 굴리는 확률은 같은 값이어야 한다(기존 원칙).
+ * 그래서 카드에 그릴 때 더하는 게 아니라 여기서 한 번에 얹고,
+ * 무엇이 얹혔는지(`perks`)도 같이 들려 보내 카드가 근거를 그대로 적게 한다.
+ */
+function withPerks(s: GameState, opts: ClutchOption[], tags: readonly ClutchTag[]): ClutchOption[] {
+  if (!s.perks?.length) return opts;
+  return opts.map((o) => {
+    const { bonus, from } = clutchBonus(s.perks, tags, o.id);
+    if (!bonus) return o;
+    return {
+      ...o,
+      odds: clamp(o.odds + bonus, 0.03, 0.95),
+      perks: from.map((a) => ({ name: a.name, icon: a.icon, delta: bonus })),
+    };
+  });
+}
+
+/**
+ * 장면에 태그를 붙인다.
+ *
+ * 장면마다 손으로 적어도 되지만 178종이라 빠뜨리기 쉽다 — 문구에서 뽑되,
+ * **명시한 `tags`가 있으면 그게 우선**이다. `끝내기`는 `walkoff`에서 온다.
+ */
+function sceneTags(sc: Scene): ClutchTag[] {
+  if (sc.tags) return [...sc.tags, ...(sc.walkoff ? (["끝내기"] as ClutchTag[]) : [])];
+  const t = `${sc.eyebrow} ${sc.title} ${sc.body}`;
+  const out: ClutchTag[] = [];
+  if (t.includes("만루")) out.push("만루");
+  if (sc.walkoff) out.push("끝내기");
+  if (/원정|야유|적지/.test(t)) out.push("원정");
+  if (/만루|[1-3]루|주자|위기|승계/.test(t)) out.push("위기");
+  if (/세이브|뒷문|1점 차 9회|9회 1점/.test(t)) out.push("세이브");
+  if (/노히트|완봉|완투|퍼펙트/.test(t)) out.push("대기록");
+  return out;
+}
+
 /**
  * 큰 무대에 걸리는 승부처.
  * 리그 경기보다 인지도가 크게 움직인다 — 보는 눈이 다르다.
@@ -530,8 +578,11 @@ export function rollStageClutch(
     opponent: stage === "INTL" ? rng.pick(["일본", "대만", "미국", "도미니카", "쿠바"]) : "",
     // 무대 장면은 경기를 끝내는 자리가 아니다 — 승패는 옆 카드가 말한다
     walkoff: false,
+    // 큰 무대는 그 자체가 태그다 — 올스타·국대·가을야구
+    tags: ["무대" as ClutchTag, ...sceneTags(scene).filter((t) => t !== "끝내기")],
     teamWon,
-    options: hitter ? hitterOptions(s) : pitcherOptions(s),
+    options: withPerks(s, hitter ? hitterOptions(s) : pitcherOptions(s),
+      ["무대" as ClutchTag, ...sceneTags(scene).filter((t) => t !== "끝내기")]),
   };
 }
 
@@ -612,7 +663,8 @@ export function rollClutch(
     opponent: rng.pick(["대구 라이온즈", "광주 타이거즈", "서울 트윈스", "부산 자이언츠", "인천 랜더스", "창원 다이노스"]),
     // 월별 중계에는 경기 결과 카드가 없다 — 장면이 허락하면 끝내기라고 말해도 된다
     walkoff: scene.walkoff ?? false,
-    options: hitter ? hitterOptions(s) : pitcherOptions(s),
+    tags: sceneTags(scene),
+    options: withPerks(s, hitter ? hitterOptions(s) : pitcherOptions(s), sceneTags(scene)),
   };
 }
 

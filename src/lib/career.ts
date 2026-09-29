@@ -17,6 +17,7 @@ import { applyClutchToLine, fitClutchScene, resolveClutch, rollClutch, rollStage
 import { judgeMonthForm, potmOdds } from "./form";
 import { RESOLVES, resolveEffect } from "./resolve";
 import { rollBarracks, serviceOptionById } from "./military";
+import { ABILITIES, abilityById, mergeEffects, type AbilityContext } from "./ability";
 import { advanceRivals, makeRivals, settleTitles } from "./rivals";
 import { PS_CUT, simPostseason } from "./postseason";
 import {
@@ -165,8 +166,10 @@ export function newGame(player: Player, wishTeamId: string, seed: number, school
  */
 function rollInjury(
   p: Player, rng: RNG, level: LevelTag = "KBO",
-  /** 올해의 각오에서 오는 부상 위험 배수 */
+  /** 올해의 각오·특수능력에서 오는 부상 위험 배수 */
   riskMul = 1,
+  /** 결장 기간 배수 — "회복력"이 짧게 만든다 */
+  missMul = 1,
 ): { availability: number; note: string | null } {
   let chance = clamp(0.30 - n50(getAb(p.abilities, "durability" as never)) * 0.2, 0.04, 0.55);
   if (p.trait === "glass") chance += 0.14;
@@ -175,8 +178,8 @@ function rollInjury(
   if (!rng.chance(chance)) return { availability: 1, note: null };
 
   const severity = rng.weighted(["경미", "중간", "심각"], [55, 32, 13]);
-  const miss = severity === "경미" ? rng.float(0.05, 0.18)
-    : severity === "중간" ? rng.float(0.2, 0.45) : rng.float(0.5, 0.85);
+  const miss = clamp((severity === "경미" ? rng.float(0.05, 0.18)
+    : severity === "중간" ? rng.float(0.2, 0.45) : rng.float(0.5, 0.85)) * missMul, 0.03, 0.9);
   const names = ["햄스트링 부상", "옆구리 통증", "손목 염좌", "어깨 염증", "무릎 통증", "피로 골절", "발목 인대 손상", "허리 디스크"];
   const inj = rng.pick(names);
   if (severity === "심각") {
@@ -880,7 +883,8 @@ function makeFaOffers(s: GameState, rng: RNG): Offer[] {
   const rest = rng.shuffle(pool.filter((t) => t.id !== wishTeam?.id));
   const candidates = (wishTeam ? [wishTeam, ...rest] : rest).slice(0, fa.suitors);
   const offers = candidates.map((t) => buildOffer(s, t, base * fa.discount, ageP, rng, false));
-  if (s.contract) offers.unshift(buildOffer(s, teamById(s.contract.teamId), base, ageP, rng, true));
+  // "팀의 얼굴"은 원소속팀이 더 크게 부른다
+  if (s.contract) offers.unshift(buildOffer(s, teamById(s.contract.teamId), base * (mergeEffects(s.perks).faHome ?? 1), ageP, rng, true));
   return offers;
 }
 
@@ -1006,7 +1010,8 @@ function openSeason(s: GameState, rng: RNG, campInjury = 0, availCap = 1) {
     s.trust = clamp(s.trust + 2, 0, 100);
     s.teammate = clamp(s.teammate + 2, 0, 100);
   }
-  const inj = rollInjury(s.player, rng, s.seasonLevel ?? "MINOR", resolveEffect(s).injury);
+  const PK = mergeEffects(s.perks);
+  const inj = rollInjury(s.player, rng, s.seasonLevel ?? "MINOR", resolveEffect(s).injury * (PK.injuryMul ?? 1), PK.missMul ?? 1);
   const carried = s.nextSeasonAvailability;
   s.seasonAvailability = clamp(
     inj.availability * (1 - campInjury) * carried * availCap, 0.05, 1,
@@ -1278,6 +1283,7 @@ function simPart(s: GameState, rng: RNG, from: number, to: number): StatLine {
     share: to - from,
     cume: [from, to] as const,
     extraAdj: R.adj,
+    perk: mergeEffects(s.perks),
   };
   return p.kind === "HITTER" ? simHitter(inp) : simPitcher(inp);
 }
@@ -1596,6 +1602,76 @@ function enoughToJudge(line: StatLine): boolean {
   return h.pa !== undefined ? h.pa >= 300 : p.ip >= 70;
 }
 
+
+/** 승부처 결과를 태그·선택지별로 쌓는다 — 특수능력 획득 조건의 유일한 새 통계 */
+function tallyClutch(s: GameState, c: Clutch, r: ClutchResult) {
+  const t = (s.clutchTally ??= {});
+  const put = (k: string) => {
+    const e = (t[k] ??= { win: 0, lose: 0 });
+    if (r.outcome.good) e.win++; else e.lose++;
+  };
+  for (const tag of c.tags ?? []) put(`tag:${tag}`);
+  put(`opt:${r.optionId}`);
+}
+
+/**
+ * 특수능력을 다시 판정한다 — 시즌이 닫힐 때 한 번.
+ *
+ * 얻는 것과 잃는 것을 같은 자리에서 본다. 조건은 전부 이미 세고 있는 것에서
+ * 뽑으므로(기록·상·로그·승부처 누적) 여기서 상태를 더 만들 일이 없다.
+ */
+function judgeAbilities(s: GameState) {
+  const kbo = s.seasons.filter((r) => r.level === "KBO");
+  const stay: Record<string, number> = {};
+  for (const r of kbo) stay[r.teamId] = (stay[r.teamId] ?? 0) + 1;
+  const tally = (k: string) => s.clutchTally?.[k] ?? { win: 0, lose: 0 };
+  const ctx: AbilityContext = {
+    s, kbo,
+    awards: (n) => kbo.filter((r) => r.awards.includes(n)).length,
+    seasons: (f) => kbo.filter(f).length,
+    tag: (t) => tally(`tag:${t}`),
+    opt: (id) => tally(`opt:${id}`),
+    ability: (k) => getAb(s.player.abilities, k as never),
+    longestStay: Math.max(0, ...Object.values(stay)),
+  };
+
+  const have = new Set(s.perks ?? []);
+  for (const a of ABILITIES) {
+    if (a.kind && a.kind !== s.player.kind) continue;
+    if (have.has(a.id)) {
+      if (a.lose?.(ctx)) {
+        have.delete(a.id);
+        log(s, {
+          icon: a.blue ? "🌤️" : "🍂", title: `특수능력 상실 — ${a.name}`,
+          tone: a.blue ? "good" : "bad", body: a.desc,
+        });
+        notify(s, {
+          icon: a.blue ? "🌤️" : "🍂", eyebrow: "Ability",
+          title: a.blue ? `${a.name}에서 벗어났다` : `${a.name}을(를) 잃었다`,
+          tone: a.blue ? "good" : "bad", body: a.desc,
+          change: [{ label: "특수능력", from: a.name, to: "없음" }],
+        });
+      }
+      continue;
+    }
+    if (!a.gain(ctx)) continue;
+    have.add(a.id);
+    (s.perkYears ??= {})[a.id] = s.year;
+    log(s, {
+      icon: a.icon, title: `특수능력 획득 — ${a.name}`,
+      tone: a.blue ? "bad" : "epic", body: `${a.desc} (${a.how})`,
+    });
+    notify(s, {
+      icon: a.icon, eyebrow: "Ability",
+      title: a.blue ? `${a.name}이(가) 붙었다` : `${a.name} 획득`,
+      tone: a.blue ? "bad" : "epic",
+      body: a.blue ? `${a.desc} 원치 않아도 따라붙는 꼬리표입니다.` : a.desc,
+      change: [{ label: "얻은 계기", from: "—", to: a.how }],
+    });
+  }
+  s.perks = [...have];
+}
+
 function closeSeason(s: GameState, rng: RNG) {
   const p = s.player;
   const team = s.contract ? teamById(s.contract.teamId) : null;
@@ -1699,6 +1775,9 @@ function closeSeason(s: GameState, rng: RNG) {
       });
     }
   }
+  // 특수능력은 그해 기록이 들어간 뒤에 다시 판정한다
+  judgeAbilities(s);
+
   // 그해의 대기록
   rec.feats = rollFeats(regular, level, rng);
   // 구단 목표
@@ -1747,13 +1826,19 @@ function closeSeason(s: GameState, rng: RNG) {
    */
   {
     const { target, floor } = deservedFame(s);
-    const pulled = p.fame + (target - p.fame) * 0.42;
+    // "언론 친화"는 올라가는 쪽만 빠르게 한다 — 내려가는 속도는 그대로
+    const pullRate = target > p.fame ? 0.42 * (mergeEffects(s.perks).fameMul ?? 1) : 0.42;
+    const pulled = p.fame + (target - p.fame) * clamp(pullRate, 0, 0.8);
     p.fame = clamp(Math.round(Math.max(pulled, floor)), 0, 100);
   }
 
   // 한 해를 어떤 마음으로 치렀는지는 구단이 본다 — 헌신은 자리로 돌아온다
   const R = resolveEffect(s);
   if (R.trust) s.trust = clamp(s.trust + R.trust, 0, 100);
+  // 특수능력이 매 시즌 얹는 것 (라커룸 리더)
+  const PKS = mergeEffects(s.perks);
+  if (PKS.trustPerSeason) s.trust = clamp(s.trust + PKS.trustPerSeason, 0, 100);
+  if (PKS.teammatePerSeason) s.teammate = clamp(s.teammate + PKS.teammatePerSeason, 0, 100);
   if (rec.awards.length) {
     log(s, { icon: "🏆", title: "수상", tone: "epic", body: `${rec.awards.join(", ")} 수상!` });
     p.fame = clamp(p.fame + rec.awards.length * 4, 0, 100);
@@ -2014,7 +2099,7 @@ export function advance(prev: GameState, action: Action): GameState {
       }
       // 평범한 겨울도 늘 같지는 않다 — 같은 메뉴를 골라도 잘 풀린 해와 헛돈 해가 갈린다.
       // 지옥 훈련은 성공/실패가 이미 드라마이므로 등급을 겹쳐 씌우지 않는다.
-      const grade = hell ? null : rollTrainGrade(s.player, rng);
+      const grade = hell ? null : rollTrainGrade(s.player, rng, mergeEffects(s.perks).trainTilt ?? 0);
       if (grade) hellMul *= grade.mul;
       if (opt) {
         // 부상 위험 자체는 낮다 — 지옥의 위험은 부상이 아니라 "헛수고"다
@@ -2333,6 +2418,7 @@ export function advance(prev: GameState, action: Action): GameState {
       ): GameState | null => {
         if (!situation) return null;
         const r = resolveClutch(situation, action.choice, s, rng);
+        tallyClutch(s, situation, r);
         put(r, applyClutchToLine(emptyLine(s.player.kind), r));
         s.player.fame = clamp(s.player.fame + Math.round(r.outcome.fame * fameScale), 0, 100);
         s.trust = clamp(s.trust + r.outcome.trust, 0, 100);
@@ -2399,6 +2485,7 @@ export function advance(prev: GameState, action: Action): GameState {
       if (!lines || mi < 0) return s;
       const m = lines[mi];
       const r = resolveClutch(m.clutchSituation!, action.choice, s, rng);
+      tallyClutch(s, m.clutchSituation!, r);
       m.line = applyClutchToLine(m.line, r);
       m.clutch = r;
       // 2군은 보는 눈이 적다 — 같은 활약이어도 이름이 덜 알려진다
