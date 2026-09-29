@@ -8,6 +8,7 @@ import {
 import { isHitterLine } from "../src/lib/sim";
 import { RESOLVES } from "../src/lib/resolve";
 import { serviceOptions } from "../src/lib/military";
+import { INTERVIEWS } from "../src/lib/media";
 import type { GameState, Hand, Kind } from "../src/lib/types";
 
 interface Issue { kind: string; detail: string }
@@ -101,7 +102,12 @@ function play(seed: number, opt: { college: boolean; military: "SANGMU" | "ACTIV
         case "MILITARY_CHOICE":
           act({ type: "ENLIST", option: canVolunteer(g) ? opt.military : "ACTIVE" });
           break;
-        case "MILITARY_SEASON": act({ type: "SERVE", optionId: serviceOptions(g.military)[rng.int(0, 2)]?.id }); break;
+        case "INTERVIEW": {
+        const q = INTERVIEWS.find((x) => x.id === g.pendingInterview);
+        act({ type: "ANSWER_INTERVIEW", optionId: q?.options[Math.floor(Math.random() * (q?.options.length ?? 1))]?.id ?? "" });
+        break;
+      }
+      case "MILITARY_SEASON": act({ type: "SERVE", optionId: serviceOptions(g.military)[rng.int(0, 2)]?.id }); break;
         case "EVENT": {
           const o = g.pendingEvent!.options;
           act({ type: "CHOOSE_EVENT", optionId: o[rng.int(0, o.length - 1)].id });
@@ -199,7 +205,7 @@ for (const g of finals) {
   void t;
 }
 
-const allPhases = ["EVENT","HS_SEASON","PATH_CHOICE","COLLEGE_SEASON","DRAFT","SPRING_CAMP","FIRST_HALF","ALL_STAR","POSTSEASON","SEASON_END","INTERNATIONAL","MILITARY_CHOICE","MILITARY_SEASON","NEGOTIATION","STOVE","FA","RETIRE_CHOICE","SECOND_LIFE","RETIRED"];
+const allPhases = ["EVENT","HS_SEASON","PATH_CHOICE","COLLEGE_SEASON","DRAFT","SPRING_CAMP","FIRST_HALF","ALL_STAR","POSTSEASON","SEASON_END","INTERNATIONAL","MILITARY_CHOICE","MILITARY_SEASON","INTERVIEW","NEGOTIATION","STOVE","FA","RETIRE_CHOICE","SECOND_LIFE","RETIRED"];
 
 /**
  * 승부처 선택.
@@ -213,7 +219,7 @@ function pickClutch(g: GameState, which = 0): string | undefined {
   return os[Math.min(which, os.length - 1)].id;
 }
 
-const allActions = ["TRADE_DECIDE","CHOOSE_EVENT","SIM_AMATEUR","CHOOSE_PATH","DO_DRAFT","TRAIN","PLAY_FIRST_HALF","PLAY_SECOND_HALF","FINISH_HALF","RESOLVE_CLUTCH","PLAY_POSTSEASON","FINISH_SEASON","JOIN_NATIONAL","ENLIST","SERVE","NEGOTIATE","REQUEST_TRANSFER","APPLY_SANGMU","SKIP_STOVE","ACCEPT_OFFER","DEFER_FA","RETIRE","KEEP_PLAYING","CHOOSE_SECOND_LIFE","HOF_BALLOT"];
+const allActions = ["TRADE_DECIDE","CHOOSE_EVENT","SIM_AMATEUR","CHOOSE_PATH","DO_DRAFT","TRAIN","PLAY_FIRST_HALF","PLAY_SECOND_HALF","FINISH_HALF","RESOLVE_CLUTCH","PLAY_POSTSEASON","FINISH_SEASON","ANSWER_INTERVIEW","JOIN_NATIONAL","ENLIST","SERVE","NEGOTIATE","REQUEST_TRANSFER","APPLY_SANGMU","SKIP_STOVE","ACCEPT_OFFER","DEFER_FA","RETIRE","KEEP_PLAYING","CHOOSE_SECOND_LIFE","HOF_BALLOT"];
 
 console.log(`■ 스트레스 테스트 — 커리어 ${finals.length}개, 예외 ${crashes}, 정지 ${stuck}\n`);
 console.log(`  거치지 않은 단계: ${allPhases.filter((p) => !phaseSeen.has(p) && p !== "RETIRED").join(", ") || "없음"}`);

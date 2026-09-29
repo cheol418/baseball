@@ -18,6 +18,7 @@ import { judgeMonthForm, potmOdds } from "./form";
 import { RESOLVES, resolveEffect } from "./resolve";
 import { rollBarracks, serviceOptionById } from "./military";
 import { ABILITIES, abilityById, mergeEffects, type AbilityContext } from "./ability";
+import { applyInterview, INTERVIEWS, mediaContext, pickInterview } from "./media";
 import { advanceRivals, makeRivals, settleTitles } from "./rivals";
 import { PS_CUT, simPostseason } from "./postseason";
 import {
@@ -1835,6 +1836,16 @@ function closeSeason(s: GameState, rng: RNG) {
   // 한 해를 어떤 마음으로 치렀는지는 구단이 본다 — 헌신은 자리로 돌아온다
   const R = resolveEffect(s);
   if (R.trust) s.trust = clamp(s.trust + R.trust, 0, 100);
+  /**
+   * 동료 관계는 가만두면 옅어진다.
+   *
+   * 올리는 일만 있고 내리는 일이 없어 30%가 100에 붙어 있었다 —
+   * 인지도와 같은 포화다. 눈금이 꽉 차 있으면 인터뷰에서 "팀 덕분입니다"를
+   * 골라도 아무 일도 안 일어난다. 해마다 조금씩 60 쪽으로 당겨,
+   * 라커룸을 챙기는 일이 **매년 값을 하게** 한다.
+   */
+  s.teammate = clamp(Math.round(s.teammate + (60 - s.teammate) * 0.12), 0, 100);
+
   // 특수능력이 매 시즌 얹는 것 (라커룸 리더)
   const PKS = mergeEffects(s.perks);
   if (PKS.trustPerSeason) s.trust = clamp(s.trust + PKS.trustPerSeason, 0, 100);
@@ -1873,7 +1884,22 @@ function closeSeason(s: GameState, rng: RNG) {
 }
 
 /** 시즌 종료 후 다음 단계 결정 */
-function routeAfterSeason(s: GameState, rng: RNG) {
+function routeAfterSeason(s: GameState, rng: RNG, interviewDone = false) {
+  /**
+   * 기자가 먼저 묻는다.
+   *
+   * 은퇴·갈림길보다 앞에 둔다 — 은퇴를 통보받은 뒤에 "좋은 한 해였습니다"를
+   * 물으면 그 해가 이미 닫힌 뒤가 된다. 1군 시즌에만 연다.
+   */
+  const last = s.seasons[s.lastSeasonIndex ?? -1];
+  // 답을 하고 돌아온 길에서는 다시 묻지 않는다 (안 그러면 여기서 무한루프)
+  if (!interviewDone && !s.pendingInterview && last && (last.level === "KBO" || last.level === "MINOR")) {
+    s.pendingInterview = pickInterview(mediaContext(s, last)).id;
+    s.phase = "INTERVIEW";
+    return;
+  }
+  s.pendingInterview = null;
+
   // 지난 선택의 결과가 돌아온다
   const due = s.chains.filter((c) => c.dueYear <= s.year);
   for (const c of due) {
@@ -1983,6 +2009,7 @@ export type Action =
   | { type: "PLAY_SECOND_HALF" }
   | { type: "PLAY_POSTSEASON" }
   | { type: "FINISH_SEASON" }
+  | { type: "ANSWER_INTERVIEW"; optionId: string }
   | { type: "JOIN_NATIONAL"; join: boolean }
   | { type: "ENLIST"; option: "SANGMU" | "ACTIVE" }
   | { type: "SERVE"; optionId?: string }
@@ -2532,6 +2559,48 @@ export function advance(prev: GameState, action: Action): GameState {
     /* ---- 시즌 총평 ---- */
     case "FINISH_SEASON": {
       routeAfterSeason(s, rng);
+      bump();
+      return s;
+    }
+
+    /* ---- 시즌 결산 인터뷰 ---- */
+    case "ANSWER_INTERVIEW": {
+      const rec = s.seasons[s.lastSeasonIndex ?? -1];
+      const q = INTERVIEWS.find((x) => x.id === s.pendingInterview);
+      if (q && rec) {
+        const ctx = mediaContext(s, rec);
+        const r = applyInterview(s, q, action.optionId, ctx);
+        const moved = [
+          r.trust ? `구단 신뢰 ${r.trust > 0 ? "+" : "−"}${Math.abs(r.trust)}` : "",
+          r.teammate ? `동료 관계 ${r.teammate > 0 ? "+" : "−"}${Math.abs(r.teammate)}` : "",
+          r.fame ? `인지도 ${r.fame > 0 ? "+" : "−"}${Math.abs(r.fame)}` : "",
+        ].filter(Boolean).join(" · ") || "아무 일도 일어나지 않았습니다";
+        log(s, {
+          icon: r.flop ? "🎙️" : "🎤", title: `인터뷰 — ${r.option.label}`,
+          tone: r.flop ? "bad" : r.fame >= 6 ? "good" : "neutral",
+          body: `${r.note ?? r.option.desc} ${moved}.`,
+        });
+        /**
+         * 오버레이는 **말이 빗나갔을 때만** 띄운다.
+         *
+         * 인터뷰 카드가 고르기 전에 이미 "구단 신뢰 +3 · 동료 +6"을 보여준다 —
+         * 그대로 된 걸 또 확인시키면 같은 소식에 두 번 멈추게 된다
+         * (커리어당 17회였다). 빗나간 것만 news다.
+         */
+        if (r.flop) {
+          notify(s, {
+            icon: "🎙️", eyebrow: "Media", title: "말이 앞섰다", tone: "bad",
+            body: `${q.question} — ${r.option.label} ${r.note ?? ""}`,
+            change: [
+              { label: "구단 신뢰", from: `${s.trust - r.trust}`, to: `${s.trust}` },
+              { label: "동료 관계", from: `${s.teammate - r.teammate}`, to: `${s.teammate}` },
+              { label: "인지도", from: `${s.player.fame - r.fame}`, to: `${s.player.fame}` },
+            ],
+          });
+        }
+      }
+      s.pendingInterview = null;
+      routeAfterSeason(s, rng, true);
       bump();
       return s;
     }

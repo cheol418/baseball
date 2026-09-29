@@ -2,6 +2,7 @@
 import { advance, canVolunteer, legacyContext, secondLifeOptions, type Action } from "../src/lib/career";
 import { HELL_LIMIT } from "../src/lib/player";
 import { serviceOptions } from "../src/lib/military";
+import { INTERVIEWS } from "../src/lib/media";
 import type { GameState } from "../src/lib/types";
 
 export interface AutoOptions {
@@ -26,6 +27,8 @@ export interface AutoOptions {
   resolve?: string;
   /** 복무 방침 */
   serviceOption?: string;
+  /** 인터뷰 태도 — humble(공을 돌린다) · bold(세게) · flat(말을 아낀다) */
+  interview?: "humble" | "bold" | "flat";
 }
 
 
@@ -127,6 +130,17 @@ export function autoPlay(start: GameState, opt: AutoOptions = {}): GameState {
       case "MILITARY_CHOICE":
         act({ type: "ENLIST", option: canVolunteer(g) ? military : "ACTIVE" });
         break;
+      case "INTERVIEW": {
+        const q = INTERVIEWS.find((x) => x.id === g.pendingInterview);
+        // 태도를 지정하면 그 결에 맞는 선택지를 고른다 (없으면 무작위)
+        const want = opt.interview;
+        const pick = want === "humble" ? (q?.options[0])
+          : want === "bold" ? (q?.options.find((o) => o.fame >= 6) ?? q?.options[q.options.length - 1])
+            : want === "flat" ? (q?.options.reduce((a, b) => (Math.abs(a.fame) + Math.abs(a.trust) < Math.abs(b.fame) + Math.abs(b.trust) ? a : b)))
+              : q?.options[Math.floor(Math.random() * (q?.options.length ?? 1))];
+        act({ type: "ANSWER_INTERVIEW", optionId: pick?.id ?? "" });
+        break;
+      }
       case "MILITARY_SEASON": act({ type: "SERVE", optionId: opt.serviceOption ?? serviceOptions(g.military)[Math.floor(Math.random() * 3)]?.id }); break;
       case "EVENT": {
         const o = g.pendingEvent?.options ?? [];

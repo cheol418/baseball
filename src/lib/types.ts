@@ -231,6 +231,8 @@ export type Phase =
   | "POSTSEASON"
   /** 시즌 총평 — 수상·팀 성적·능력치 변화 */
   | "SEASON_END"
+  /** 시즌 결산 인터뷰 — 대답으로 신뢰·동료·인지도가 갈린다 */
+  | "INTERVIEW"
   /** 국제대회 */
   | "INTERNATIONAL"
   /** 병역 선택 */
@@ -399,6 +401,8 @@ export interface GameState {
   perkYears?: Record<string, number>;
   /** 승부처 태그·선택지별 성패 누적 — 특수능력 획득 조건의 유일한 새 통계 */
   clutchTally?: Record<string, { win: number; lose: number }>;
+  /** 기다리는 인터뷰 (질문 id) */
+  pendingInterview?: string | null;
 
   /* --- 시즌 진행 --- */
   /** 직전에 치른 반기의 월별 성적 (중계 재생용) */

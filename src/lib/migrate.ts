@@ -44,6 +44,7 @@ export function migrateSave(raw: unknown): GameState | null {
   def("perks", []);
   def("perkYears", {});
   def("clutchTally", {});
+  def("pendingInterview", null);
   def("seasonRoleGames", null);
   def("liveHalf", null);
   def("retireRefusedYear", null);

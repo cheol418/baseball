@@ -80,6 +80,10 @@ npx tsx scripts/debut.ts       # 1군 데뷔·주전 정착 나이
 `STAY_OK`에도 넣는다. 안 넣으면 정상 흐름이 무한루프로 잡힌다. (실제로 겪음)
 현재 `STAY_OK`: `STOVE` `ALL_STAR` `HALF_REVIEW` `PATH_CHOICE` `SEASON_END`
 
+**같은 단계로 되돌아오는 길을 만들면 무한루프가 된다.** `ANSWER_INTERVIEW`가
+`routeAfterSeason`을 다시 부르는데 그 안에서 인터뷰를 또 걸어, 답할 때마다
+같은 화면으로 돌아왔다 (실제로 겪음). 되돌아오는 경로에는 플래그를 넘긴다.
+
 `scripts/autoplay.ts`와 `scripts/audit.ts`의 switch에 추가하지 않으면
 자동 플레이가 `default: RETIRE`로 빠져 **측정값이 전부 거짓이 된다.** (실제로 겪음)
 
@@ -152,6 +156,7 @@ stacking context를 만들어, 그 안에서 그린 `fixed`는 sticky 탭 바보
 | `records.ts` | 구단 목표·대기록·통산 이정표·역대 순위·별명 |
 | `amateur.ts` | 고교·대학 전국대회 |
 | `national.ts` | 국제대회·대표팀·병역 |
+| `media.ts` | **시즌 결산 인터뷰** — 대답으로 신뢰·동료·인지도가 갈린다 |
 | `military.ts` | **복무 방침·부대 소식** — 야구 밖의 18개월 |
 | `postseason.ts` | 가을야구 (시리즈별 개인 기록 포함) |
 | `roles.ts` | **1군 입지 티어** — 보직 판정의 단일 소스 |
@@ -316,6 +321,11 @@ UI는 `src/app/page.tsx`(홈) · `create/page.tsx`(4단계 생성) · `play/[id]
 | 복무 기간 | 18개월 = **복무 시즌 1개 + 이듬해 후반기 복귀** (복귀 시즌 120~145타석) |
 | 연봉 | 1군 시즌 중앙 3.4억 · 커리어 최고 중앙 6.8억 (상한 30억) |
 | ★ 연봉은 시즌 중에 안 바뀐다 | 실제 KBO는 시즌 전에 확정하고 한 해 동안 그대로 간다 — **1군에 올라가든 2군에 내려가든 통장에 찍히는 액수는 같다.** (일당이 달라지는 건 메이저리그의 마이너 계약 이야기다) 콜업의 값은 그해 연봉이 아니라 **이듬해 협상**에서 돌아온다. 예전엔 콜업 때 +30%를 얹어 "시즌 전에 협상했는데 왜 오르나"가 됐다 (실제로 겪음) |
+| 인터뷰 | 시즌이 끝나면 기자가 묻는다 — 질문 9종은 **그해에 일어난 일**에서 고른다(부상 25% · 타이틀 16% · 결산 26% · 우승 9% …). 세 숫자가 결과일 뿐이던 것을 플레이어의 것으로 만든다 |
+| 인터뷰의 무게 | 같은 시드에서 태도만 바꿔 짝지어 본 폭 — **구단 신뢰 11.3 · 동료 14.1 · 인지도 14.4**. 통산 WAR는 45.8~47.5로 거의 같다(인터뷰는 성적을 직접 바꾸지 않는다) (`media.ts` 스크립트) |
+| 인터뷰의 원칙 | **공짜 정답이 없다** — 셋을 다 올리는 선택지는 두지 않는다. 근거 없는 큰소리는 역효과다(`needsWar`) — 카드에 "올해 성적으로는 받아들여지지 않습니다"로 미리 알린다 |
+| 인터뷰 오버레이 | **빗나갔을 때만** 띄운다(커리어당 0.9회). 카드가 고르기 전에 이미 효과를 보여주므로, 그대로 된 걸 또 확인시키면 같은 소식에 두 번 멈춘다 (실제로 겪음: 17.1회였다) |
+| 동료 관계도 옅어진다 | 올리는 일만 있고 내리는 일이 없어 30%가 100에 붙어 있었다(인지도와 같은 포화). 해마다 60 쪽으로 12% 당겨, 라커룸을 챙기는 일이 **매년 값을 하게** 한다 — 겸손 95 ↔ 세게 73 |
 | 인지도 | 순수 누적이 아니다 — 시즌이 닫힐 때 **지금 받아 마땅한 값** 쪽으로 42% 당긴다. 쌓은 업적은 바닥(최대 88)을 만들어 레전드는 잊히지 않는다 |
 | 인지도 분포 | 은퇴 시 하위10% 38 · 중앙 67 · 상위10% 100 · 100 고정 12%. 통산 WAR 15~30 → 45 · 50+ → 89 (눈금이 실력을 구분한다) |
 | 인지도 주의 | 누적만 시키면 **은퇴 시 중앙 98로 포화돼 정보량이 0**이 된다. 가산을 줄이는 게 아니라 목표값으로 당겨야 한다 (실제로 겪음) |
@@ -367,7 +377,7 @@ UI는 `src/app/page.tsx`(홈) · `create/page.tsx`(4단계 생성) · `play/[id]
 `rookiestat`(신인 성적·훈련 상승폭), `sangmu`(상무 지원), `notices`(통보 발생),
 `hellcheck`(지옥 훈련 도박 균형), `transferodds`(표기 확률 ↔ 실제 성사율),
 `service`(복무 기간·복귀 시점), `school`(학교 전력 효과),
-`titles`(성적 대비 수상), `titlebar`(부문별 기준선·수상률), `nego`(협상 도박 균형), `negotext`(협상 통보 문구), `integrity`(기록 불변식), `valuecheck`(값의 범위), `goaltext`(목표 표기↔판정), `campreport`(훈련 몫 ↔ 나이 몫), `logic`(칸 사이의 모순), `ceiling`(천장·훈련 몫), `headroom`(성장 여지), `traincover`(훈련 방향의 덮개), `injurybal`(부상 빈도·무게), `earlygame`(초반 여덟 시즌), `rolebar`(OVR ↔ 보직), `fair`(자리만 바꿨을 때의 격차), `stylewar`(같은 OVR에서 유형의 값), `styledrift`(유형 격차가 어디서 오는가), `roleswitch`(보직·포지션 전환), `traingrade`(훈련 성과 분포), `agency`(선택의 무게), `decisions`(결정 밀도), `repeat`(장면 반복), `oddscheck`(표기 확률 검수), `rivals`(동기 분포·타이틀 중복), `fame`(인지도 눈금), `leagueavg`(리그 평균 기준), `injurymonth`(부상의 달력 배치), `wish`(희망 구단의 무게), `park`(구장 효과 크기), `scenefit`(장면↔자리 일치), `service2`(복무 방침의 값), `ability`(특수능력 보유·상실), `abilitysim`(구현 전 드라이런), `wl`(투수 승패), `randomcreate`(랜덤 조합 정합성), `agelimit`(AG 연령 제한), `wl`(투수 승패), `ipfmt`(이닝 표기), `titlebar`(부문별 기준선), `asscore`(올스타 스코어↔승패), `asorder`(올스타 정보 유출), `textcheck`(문구 빈칸),
+`titles`(성적 대비 수상), `titlebar`(부문별 기준선·수상률), `nego`(협상 도박 균형), `negotext`(협상 통보 문구), `integrity`(기록 불변식), `valuecheck`(값의 범위), `goaltext`(목표 표기↔판정), `campreport`(훈련 몫 ↔ 나이 몫), `logic`(칸 사이의 모순), `ceiling`(천장·훈련 몫), `headroom`(성장 여지), `traincover`(훈련 방향의 덮개), `injurybal`(부상 빈도·무게), `earlygame`(초반 여덟 시즌), `rolebar`(OVR ↔ 보직), `fair`(자리만 바꿨을 때의 격차), `stylewar`(같은 OVR에서 유형의 값), `styledrift`(유형 격차가 어디서 오는가), `roleswitch`(보직·포지션 전환), `traingrade`(훈련 성과 분포), `agency`(선택의 무게), `decisions`(결정 밀도), `repeat`(장면 반복), `oddscheck`(표기 확률 검수), `rivals`(동기 분포·타이틀 중복), `fame`(인지도 눈금), `leagueavg`(리그 평균 기준), `injurymonth`(부상의 달력 배치), `wish`(희망 구단의 무게), `park`(구장 효과 크기), `scenefit`(장면↔자리 일치), `service2`(복무 방침의 값), `ability`(특수능력 보유·상실), `abilitysim`(구현 전 드라이런), `media`(인터뷰의 무게), `wl`(투수 승패), `randomcreate`(랜덤 조합 정합성), `agelimit`(AG 연령 제한), `wl`(투수 승패), `ipfmt`(이닝 표기), `titlebar`(부문별 기준선), `asscore`(올스타 스코어↔승패), `asorder`(올스타 정보 유출), `textcheck`(문구 빈칸),
 `service_fa`(서비스타임 ↔ FA 도달), `titlemark`(타이틀↔기록 대응),
 `monthform`(월별 단계 분포·이달의 선수), `mvppay`(성적 대비 제시액),
 `clutch`(승부처 선택지 균형), `clutchwin`(승부처 문구 ↔ 경기 결과), `clutchgame`(승부처 ↔ 출장 기록), `clutchseat`(장면 ↔ 그 달의 자리), `fagate`(FA를 막는 조건),

@@ -28,6 +28,7 @@ import { RESOLVES } from "@/lib/resolve";
 import { myRankAmong } from "@/lib/rivals";
 import { monthsLeft, serviceOptions } from "@/lib/military";
 import { abilityById } from "@/lib/ability";
+import { answerOf, INTERVIEWS, mediaContext } from "@/lib/media";
 import { saveGame, useGame } from "@/lib/storage";
 import { isFranchiseRole } from "@/lib/roles";
 import { teamById } from "@/lib/teams";
@@ -947,6 +948,62 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
                 <div className="mt-1 text-[10.5px] font-bold text-[var(--brand-2)]">{o.trade}</div>
               </button>
             ))}
+          </div>
+        </Wrap>
+      );
+    }
+
+    case "INTERVIEW": {
+      const rec = g.seasons[g.lastSeasonIndex ?? -1];
+      const q = INTERVIEWS.find((x) => x.id === g.pendingInterview);
+      if (!q || !rec) return null;
+      const ctx = mediaContext(g, rec);
+      return (
+        <Wrap eyebrow="Media" title="시즌 결산 인터뷰"
+          desc="대답에 따라 구단 신뢰 · 동료 관계 · 인지도가 갈립니다.">
+          {/* 기자회견장 — 마이크 앞에 선 자리 */}
+          <div className="mb-3 overflow-hidden rounded-xl text-white"
+            style={{ background: "linear-gradient(150deg, #2b2f3a, #1b1e26 60%, #0d0f14)" }}>
+            <div className="px-4 pb-4 pt-3.5">
+              <div className="flex items-center gap-2">
+                <span className="text-[16px]">🎤</span>
+                <span className="text-[9.5px] font-black uppercase tracking-[0.18em] opacity-55">
+                  {q.eyebrow}
+                </span>
+              </div>
+              <p className="mt-1.5 text-[14.5px] font-extrabold leading-relaxed">{q.question}</p>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            {q.options.map((o) => {
+              const r = answerOf(q, o.id, ctx);
+              return (
+                <button key={o.id} onClick={() => run({ type: "ANSWER_INTERVIEW", optionId: o.id })} disabled={busy}
+                  className="card px-4 py-3 text-left transition hover:!border-[var(--brand)] disabled:opacity-50">
+                  <div className="text-[13.5px] font-extrabold">{o.label}</div>
+                  <div className="mt-0.5 text-[11.5px] leading-relaxed text-[var(--ink-3)]">{o.desc}</div>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    {([["구단 신뢰", r.trust], ["동료", r.teammate], ["인지도", r.fame]] as const)
+                      .filter(([, v]) => v !== 0).map(([k, v]) => (
+                        <span key={k} className="tabular rounded-full px-1.5 py-[1px] text-[9.5px] font-black"
+                          style={{
+                            background: v > 0 ? "var(--brand-2)18" : "var(--danger)18",
+                            color: v > 0 ? "var(--brand-2)" : "var(--danger)",
+                          }}>
+                          {k} {v > 0 ? "+" : "−"}{Math.abs(v)}
+                        </span>
+                      ))}
+                    {/* 근거 없는 큰소리는 역효과다 — 미리 알려준다 */}
+                    {r.flop && (
+                      <span className="text-[9.5px] font-bold text-[var(--danger)]">
+                        ⚠ 올해 성적으로는 받아들여지지 않습니다
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </Wrap>
       );
