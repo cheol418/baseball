@@ -45,6 +45,8 @@ export function migrateSave(raw: unknown): GameState | null {
   def("perkYears", {});
   def("clutchTally", {});
   def("pendingInterview", null);
+  // 저장 시각이 없던 세이브는 만든 시각을 쓴다 — 없는 것보다 낫다
+  def("savedAt", (g.createdAt as number) || Date.now());
   def("seasonRoleGames", null);
   def("liveHalf", null);
   def("retireRefusedYear", null);

@@ -90,6 +90,15 @@ npx tsx scripts/debut.ts       # 1군 데뷔·주전 정착 나이
 ### 4. 세이브 마이그레이션
 `GameState`에 필드를 추가하면 **반드시** `src/lib/migrate.ts`에 기본값을 넣는다.
 저장소 경계(`storage.ts`)에서 한 번 통과시키므로 여기만 지키면 구버전 세이브가 산다.
+**파일로 들여오는 세이브도 같은 길을 지난다**(`backup.ts`의 `parseBackup`) —
+경계를 둘로 만들지 않는다.
+
+`savedAt`은 **기기 사이에서 어느 쪽이 최신인가**를 가리는 단 하나의 기준이다.
+`saveGame`이 저장할 때마다 찍고, 가져오기·클라우드 동기화가 둘 다 이 값을 본다.
+
+세이브 하나가 은퇴까지 가면 **약 160KB**다(logs 240줄 + 동기 6명의 Player).
+localStorage 한도(5MB 안팎)로는 30개 남짓이 상한이고, 클라우드로 올릴 때도
+이 크기가 기준이 된다.
 
 ### 5. UI 스케일 · 한 열 레이아웃
 
@@ -168,6 +177,7 @@ stacking context를 만들어, 그 안에서 그린 `fixed`는 sticky 탭 바보
 | `legacy.ts` | 은퇴 후 — 명예의 전당 헌액 투표, 진로 7종 |
 | `flavor.ts` | 시즌 총평 헤드라인, 팬 반응 |
 | `migrate.ts` | 구버전 세이브 → 현재 구조 |
+| `backup.ts` | **세이브 내보내기·가져오기** — 나중에 클라우드 동기화가 그대로 쓴다 |
 | `storage.ts` | localStorage + `useSyncExternalStore` |
 
 UI는 `src/app/page.tsx`(홈) · `create/page.tsx`(4단계 생성) · `play/[id]/page.tsx`(본편 4탭) ·
@@ -377,7 +387,7 @@ UI는 `src/app/page.tsx`(홈) · `create/page.tsx`(4단계 생성) · `play/[id]
 `rookiestat`(신인 성적·훈련 상승폭), `sangmu`(상무 지원), `notices`(통보 발생),
 `hellcheck`(지옥 훈련 도박 균형), `transferodds`(표기 확률 ↔ 실제 성사율),
 `service`(복무 기간·복귀 시점), `school`(학교 전력 효과),
-`titles`(성적 대비 수상), `titlebar`(부문별 기준선·수상률), `nego`(협상 도박 균형), `negotext`(협상 통보 문구), `integrity`(기록 불변식), `valuecheck`(값의 범위), `goaltext`(목표 표기↔판정), `campreport`(훈련 몫 ↔ 나이 몫), `logic`(칸 사이의 모순), `ceiling`(천장·훈련 몫), `headroom`(성장 여지), `traincover`(훈련 방향의 덮개), `injurybal`(부상 빈도·무게), `earlygame`(초반 여덟 시즌), `rolebar`(OVR ↔ 보직), `fair`(자리만 바꿨을 때의 격차), `stylewar`(같은 OVR에서 유형의 값), `styledrift`(유형 격차가 어디서 오는가), `roleswitch`(보직·포지션 전환), `traingrade`(훈련 성과 분포), `agency`(선택의 무게), `decisions`(결정 밀도), `repeat`(장면 반복), `oddscheck`(표기 확률 검수), `rivals`(동기 분포·타이틀 중복), `fame`(인지도 눈금), `leagueavg`(리그 평균 기준), `injurymonth`(부상의 달력 배치), `wish`(희망 구단의 무게), `park`(구장 효과 크기), `scenefit`(장면↔자리 일치), `service2`(복무 방침의 값), `ability`(특수능력 보유·상실), `abilitysim`(구현 전 드라이런), `media`(인터뷰의 무게), `wl`(투수 승패), `randomcreate`(랜덤 조합 정합성), `agelimit`(AG 연령 제한), `wl`(투수 승패), `ipfmt`(이닝 표기), `titlebar`(부문별 기준선), `asscore`(올스타 스코어↔승패), `asorder`(올스타 정보 유출), `textcheck`(문구 빈칸),
+`titles`(성적 대비 수상), `titlebar`(부문별 기준선·수상률), `nego`(협상 도박 균형), `negotext`(협상 통보 문구), `integrity`(기록 불변식), `valuecheck`(값의 범위), `goaltext`(목표 표기↔판정), `campreport`(훈련 몫 ↔ 나이 몫), `logic`(칸 사이의 모순), `ceiling`(천장·훈련 몫), `headroom`(성장 여지), `traincover`(훈련 방향의 덮개), `injurybal`(부상 빈도·무게), `earlygame`(초반 여덟 시즌), `rolebar`(OVR ↔ 보직), `fair`(자리만 바꿨을 때의 격차), `stylewar`(같은 OVR에서 유형의 값), `styledrift`(유형 격차가 어디서 오는가), `roleswitch`(보직·포지션 전환), `traingrade`(훈련 성과 분포), `agency`(선택의 무게), `decisions`(결정 밀도), `repeat`(장면 반복), `oddscheck`(표기 확률 검수), `rivals`(동기 분포·타이틀 중복), `fame`(인지도 눈금), `leagueavg`(리그 평균 기준), `injurymonth`(부상의 달력 배치), `wish`(희망 구단의 무게), `park`(구장 효과 크기), `scenefit`(장면↔자리 일치), `service2`(복무 방침의 값), `ability`(특수능력 보유·상실), `abilitysim`(구현 전 드라이런), `media`(인터뷰의 무게), `backup`(내보내기 왕복·합치기 규칙), `wl`(투수 승패), `randomcreate`(랜덤 조합 정합성), `agelimit`(AG 연령 제한), `wl`(투수 승패), `ipfmt`(이닝 표기), `titlebar`(부문별 기준선), `asscore`(올스타 스코어↔승패), `asorder`(올스타 정보 유출), `textcheck`(문구 빈칸),
 `service_fa`(서비스타임 ↔ FA 도달), `titlemark`(타이틀↔기록 대응),
 `monthform`(월별 단계 분포·이달의 선수), `mvppay`(성적 대비 제시액),
 `clutch`(승부처 선택지 균형), `clutchwin`(승부처 문구 ↔ 경기 결과), `clutchgame`(승부처 ↔ 출장 기록), `clutchseat`(장면 ↔ 그 달의 자리), `fagate`(FA를 막는 조건),

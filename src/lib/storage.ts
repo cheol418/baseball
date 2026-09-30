@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { buildBackup, mergeSaves, type MergeMode, type MergePlan } from "./backup";
 import { migrateSave } from "./migrate";
 import type { GameState } from "./types";
 
@@ -55,11 +56,27 @@ function writeAll(list: GameState[]) {
 
 export function saveGame(s: GameState) {
   const list = getSnapshot().filter((g) => g.id !== s.id);
-  writeAll([s, ...list]);
+  // 저장할 때마다 시각을 찍는다 — 기기 간 최신 판정의 기준
+  writeAll([{ ...s, savedAt: Date.now() }, ...list]);
 }
 
 export function deleteGame(id: string) {
   writeAll(getSnapshot().filter((g) => g.id !== id));
+}
+
+/** 지금 가진 것 전부를 백업 파일 모양으로 */
+export function exportGames() {
+  return buildBackup(getSnapshot());
+}
+
+/**
+ * 들여온 세이브를 합쳐 저장한다.
+ * 합치는 규칙 자체는 `backup.ts`에 있다 — 클라우드도 같은 규칙을 쓴다.
+ */
+export function importGames(incoming: GameState[], mode: MergeMode = "newer"): MergePlan {
+  const plan = mergeSaves(getSnapshot(), incoming, mode);
+  writeAll(plan.result);
+  return plan;
 }
 
 /** 저장된 모든 선수. 첫 렌더(서버/하이드레이션)에는 빈 배열. */

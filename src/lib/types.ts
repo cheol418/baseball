@@ -355,6 +355,13 @@ export interface GameState {
   id: string;
   seed: number;
   createdAt: number;
+  /**
+   * 마지막으로 저장된 시각.
+   *
+   * 기기 사이를 오갈 때 **어느 쪽이 최신인가**를 가리는 단 하나의 기준이다.
+   * 가져오기·클라우드 동기화가 둘 다 이 값을 본다.
+   */
+  savedAt?: number;
   year: number;
   phase: Phase;
   player: Player;

@@ -7,6 +7,7 @@ import { gradeOf, overall, POSITION_LABEL } from "@/lib/player";
 import { deleteGame, useGames } from "@/lib/storage";
 import { teamById } from "@/lib/teams";
 import { Emblem } from "@/components/emblem";
+import { BackupPanel } from "@/components/backup";
 
 const PHASE_LABEL: Record<string, string> = {
   HS_SEASON: "고교 3학년", PATH_CHOICE: "진로 선택", COLLEGE_SEASON: "대학 시절",
@@ -144,6 +145,10 @@ export default function Home() {
             })}
           </ul>
         )}
+      </Section>
+
+      <Section eyebrow="Backup" title="기록 옮기기">
+        <BackupPanel />
       </Section>
 
       <Section eyebrow="How to play" title="게임 방법">
