@@ -414,6 +414,8 @@ export interface GameState {
   squad?: import("./squad").Mate[];
   /** 지금 스쿼드가 어느 팀의 것인가 (이적을 알아채는 열쇠) */
   squadTeamId?: string | null;
+  /** 지금 팀의 감독 — 바뀌면 쌓아 둔 신뢰가 흔들린다 */
+  manager?: import("./manager").Manager | null;
 
   /* --- 시즌 진행 --- */
   /** 직전에 치른 반기의 월별 성적 (중계 재생용) */

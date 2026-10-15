@@ -19,6 +19,7 @@ import { RESOLVES, resolveEffect } from "./resolve";
 import { rollBarracks, serviceOptionById } from "./military";
 import { ABILITIES, abilityById, mergeEffects, type AbilityContext } from "./ability";
 import { advanceSquad, blockerOf, competeAdjust, makeSquad } from "./squad";
+import { makeManager, managerFit, managerStyle, managerView, shouldReplace, trustOnChange } from "./manager";
 import { applyInterview, INTERVIEWS, mediaContext, pickInterview } from "./media";
 import { advanceRivals, makeRivals, settleTitles } from "./rivals";
 import { PS_CUT, simPostseason } from "./postseason";
@@ -995,6 +996,44 @@ function injuryCalendar(avail: number, rng: RNG): number[] {
 }
 
 /**
+ * 감독을 그해 상태로 맞춘다.
+ *
+ * 팀이 바뀌면 새 감독이고, 같은 팀이어도 성적이 나쁘면 갈린다.
+ * **바뀌면 쌓아 둔 신뢰가 흔들린다** — 그게 이 시스템이 만드는 사건이다.
+ */
+function refreshManager(s: GameState, rng: RNG, teamId: string) {
+  const cur = s.manager;
+  const moved = !cur || cur.teamId !== teamId;
+  const fired = !!cur && !moved && shouldReplace(cur, s, rng);
+  if (!moved && !fired) { if (cur) cur.seasons += 1; return; }
+
+  const next = makeManager(rng, teamId, s.year);
+  const before = s.trust;
+  s.manager = next;
+  // 이적으로 팀이 바뀐 해는 이미 모든 게 리셋이라 따로 흔들지 않는다
+  if (fired) s.trust = trustOnChange(s.trust, s);
+
+  const st = managerStyle(next.styleId);
+  log(s, {
+    icon: "🧢", title: `${next.name} 감독 부임`, tone: "neutral",
+    body: `${st.name} — ${st.desc}. ${managerView(next, s)}.`
+      + (fired ? ` 구단 신뢰 ${before} → ${s.trust}.` : ""),
+  });
+  if (fired) {
+    notify(s, {
+      icon: "🧢", eyebrow: "New Manager", title: `${next.name} 감독 부임`,
+      tone: s.trust >= before ? "neutral" : "bad",
+      body: `${cur?.name} 감독이 물러나고 ${next.name} 감독이 왔습니다. ${st.name} — ${st.desc}.`,
+      change: [
+        { label: "감독 성향", from: managerStyle(cur!.styleId).name, to: st.name },
+        { label: "구단 신뢰", from: `${before}`, to: `${s.trust}` },
+        { label: "나를 보는 눈", from: "—", to: managerView(next, s) },
+      ],
+    });
+  }
+}
+
+/**
  * 스쿼드를 그해 상태로 맞춘다.
  *
  * **팀이 바뀌면 통째로 새로 만든다** — 이적하면 아는 얼굴이 없는 게 맞다.
@@ -1067,13 +1106,14 @@ function competeOf(s: GameState, teamPower: number): number {
   const b = blockerOf(s.squad, me);
   const base = b ? competeAdjust(overall(b.player), teamPower) : 0;
   const captain = s.perks?.includes("leader") ? 1.5 : 0;
-  return base + captain;
+  // 감독이 나를 어떻게 보는가 — 성향은 반대되는 짝으로 둬 인구 평균이 0이다
+  return base + captain + managerFit(s.manager, s);
 }
 
 function openSeason(s: GameState, rng: RNG, campInjury = 0, availCap = 1) {
   const team = s.contract ? teamById(s.contract.teamId) : null;
-  // 스쿼드를 먼저 정리한다 — 자리 경쟁이 보직 판정에 들어가므로
-  if (team) refreshSquad(s, rng, team.id);
+  // 스쿼드와 감독을 먼저 정리한다 — 둘 다 보직 판정에 들어가므로
+  if (team) { refreshManager(s, rng, team.id); refreshSquad(s, rng, team.id); }
   if (s.contract?.role === "육성선수") {
     s.seasonLevel = "MINOR";
     s.seasonRole = defaultRole(s.player);

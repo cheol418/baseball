@@ -50,6 +50,8 @@ export function migrateSave(raw: unknown): GameState | null {
   // 스쿼드 — 없으면 다음 스프링캠프에서 만들어진다
   def("squad", []);
   def("squadTeamId", null);
+  // 감독 — 없으면 다음 스프링캠프에서 부임한다
+  def("manager", null);
   def("seasonRoleGames", null);
   def("liveHalf", null);
   def("retireRefusedYear", null);

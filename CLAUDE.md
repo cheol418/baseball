@@ -171,6 +171,7 @@ stacking context를 만들어, 그 안에서 그린 `fixed`는 sticky 탭 바보
 | `roles.ts` | **1군 입지 티어** — 보직 판정의 단일 소스 |
 | `ability.ts` | **특수능력** — 커리어 중에 얻고 잃는 27종 |
 | `resolve.ts` | **올해의 각오** — 한 시즌 내내 걸리는 4택 |
+| `manager.ts` | **감독** — 성향이 나를 다르게 보고, 바뀌면 신뢰가 흔들린다 |
 | `squad.ts` | **우리 팀 동료 8인** — 해마다 들고 나며, 내 자리를 두고 다툰다 |
 | `rivals.ts` | **드래프트 동기 6인** — 같이 늙고, 타이틀을 다투고, 먼저 은퇴한다 |
 | `form.ts` | **월별 컨디션 7단계** — 배지·문구·이달의 선수 판정의 단일 소스 |
@@ -296,6 +297,10 @@ UI는 `src/app/page.tsx`(홈) · `create/page.tsx`(4단계 생성) · `play/[id]
 | 타이틀 기준선 | 실제 KBO 숫자가 아니라 **우리 리그 분포의 상위 12% 지점**에서 뽑는다 — 부문별 수상률 0.9~3.4% (`titlebar.ts`) |
 | 국제대회 방식 | 실제 대회를 따른다 — WBC 조별 4경기+8강, 프리미어12 조별 5+슈퍼라운드, 올림픽 녹아웃·패자부활, AG 조별+슈퍼라운드 |
 | 3·4위전 | WBC만 없다(2023년 폐지) — 3위에게 동메달을 주지 않는다 |
+| 감독 | 엔티티가 없어 **`trust`가 커리어 내내 한 번도 재평가되지 않았다** — 열다섯 시즌을 같은 눈으로 평가받았다. 성향 5종이 나를 다르게 보고, 바뀌면 쌓아 둔 신뢰가 흔들린다 (`manager.ts`) |
+| ★ 감독 성향은 짝으로 둔다 | 보정의 **인구 평균이 0**이어야 입지 분포가 안 밀린다 — 육성 ↔ 노장을 **같은 나이(28세)를 축으로** 거울처럼 만든다. 26과 28로 어긋나게 뒀더니 −0.99 ↔ +0.64로 상쇄가 덜 됐다 (실제로 겪음). 성적 지상주의의 축도 우리 리그 실제 평균(recentWar 1.75)이어야 한다 |
+| 감독 실측 | 재임 평균 4.5시즌(중앙 4) · 커리어당 교체 3.0회 · 성향 보정 전체 평균 **−0.00** · 경질 시 신뢰 낙폭 평균 13 (`manager.ts` 스크립트) |
+| 감독 교체의 무게 | 신뢰를 **지우지 않고 중립(55) 쪽으로 당긴다** — 평판은 따라오니까. 성적으로 증명한 선수일수록 덜 흔들린다(지켜내는 비율 0.35~0.8) |
 | 스쿼드 | 우리 팀에 이름 있는 동료 **8명**(자리 경쟁 2 · 간판 1 · 베테랑 1 · 또래 2 · 신인 2). 동기와 달리 **해마다 바뀐다** — 커리어당 은퇴 5.6명 · FA/트레이드 4.5명 |
 | ★ 자리 경쟁의 기준점 | **`assignRole`의 `bar`가 이미 "평균적인 경쟁"을 품고 있다.** 내 기량과 경쟁자 기량의 **절대 차이**를 얹으면 같은 것을 두 번 세어 분포가 통째로 내려간다(2군 +5.5%p). 재는 것은 **"내 경쟁자가 이 팀의 보통 경쟁자보다 센가"** 하나뿐이다 |
 | `typicalRival` | `bar`는 **1군에 붙는 선**이지 자리 주인의 기량이 아니다(주전 = `bar+5`). 실측 경쟁자 OVR 중앙 80인데 기준점을 `bar`(73.9)로 두니 93%가 "보통보다 센 경쟁자"가 됐다 — `bar + 6.2`로 맞춘다 |
@@ -395,7 +400,7 @@ UI는 `src/app/page.tsx`(홈) · `create/page.tsx`(4단계 생성) · `play/[id]
 `rookiestat`(신인 성적·훈련 상승폭), `sangmu`(상무 지원), `notices`(통보 발생),
 `hellcheck`(지옥 훈련 도박 균형), `transferodds`(표기 확률 ↔ 실제 성사율),
 `service`(복무 기간·복귀 시점), `school`(학교 전력 효과),
-`titles`(성적 대비 수상), `titlebar`(부문별 기준선·수상률), `nego`(협상 도박 균형), `negotext`(협상 통보 문구), `integrity`(기록 불변식), `valuecheck`(값의 범위), `goaltext`(목표 표기↔판정), `campreport`(훈련 몫 ↔ 나이 몫), `logic`(칸 사이의 모순), `ceiling`(천장·훈련 몫), `headroom`(성장 여지), `traincover`(훈련 방향의 덮개), `injurybal`(부상 빈도·무게), `earlygame`(초반 여덟 시즌), `rolebar`(OVR ↔ 보직), `fair`(자리만 바꿨을 때의 격차), `stylewar`(같은 OVR에서 유형의 값), `styledrift`(유형 격차가 어디서 오는가), `roleswitch`(보직·포지션 전환), `traingrade`(훈련 성과 분포), `agency`(선택의 무게), `decisions`(결정 밀도), `repeat`(장면 반복), `oddscheck`(표기 확률 검수), `rivals`(동기 분포·타이틀 중복), `fame`(인지도 눈금), `leagueavg`(리그 평균 기준), `injurymonth`(부상의 달력 배치), `wish`(희망 구단의 무게), `park`(구장 효과 크기), `scenefit`(장면↔자리 일치), `service2`(복무 방침의 값), `ability`(특수능력 보유·상실), `abilitysim`(구현 전 드라이런), `media`(인터뷰의 무게), `backup`(내보내기 왕복·합치기 규칙), `squad`(동료 교체·자리 경쟁), `squadsim`(구현 전 드라이런), `wl`(투수 승패), `randomcreate`(랜덤 조합 정합성), `agelimit`(AG 연령 제한), `wl`(투수 승패), `ipfmt`(이닝 표기), `titlebar`(부문별 기준선), `asscore`(올스타 스코어↔승패), `asorder`(올스타 정보 유출), `textcheck`(문구 빈칸),
+`titles`(성적 대비 수상), `titlebar`(부문별 기준선·수상률), `nego`(협상 도박 균형), `negotext`(협상 통보 문구), `integrity`(기록 불변식), `valuecheck`(값의 범위), `goaltext`(목표 표기↔판정), `campreport`(훈련 몫 ↔ 나이 몫), `logic`(칸 사이의 모순), `ceiling`(천장·훈련 몫), `headroom`(성장 여지), `traincover`(훈련 방향의 덮개), `injurybal`(부상 빈도·무게), `earlygame`(초반 여덟 시즌), `rolebar`(OVR ↔ 보직), `fair`(자리만 바꿨을 때의 격차), `stylewar`(같은 OVR에서 유형의 값), `styledrift`(유형 격차가 어디서 오는가), `roleswitch`(보직·포지션 전환), `traingrade`(훈련 성과 분포), `agency`(선택의 무게), `decisions`(결정 밀도), `repeat`(장면 반복), `oddscheck`(표기 확률 검수), `rivals`(동기 분포·타이틀 중복), `fame`(인지도 눈금), `leagueavg`(리그 평균 기준), `injurymonth`(부상의 달력 배치), `wish`(희망 구단의 무게), `park`(구장 효과 크기), `scenefit`(장면↔자리 일치), `service2`(복무 방침의 값), `ability`(특수능력 보유·상실), `abilitysim`(구현 전 드라이런), `media`(인터뷰의 무게), `backup`(내보내기 왕복·합치기 규칙), `squad`(동료 교체·자리 경쟁), `squadsim`(구현 전 드라이런), `manager`(재임·성향 중립성), `wl`(투수 승패), `randomcreate`(랜덤 조합 정합성), `agelimit`(AG 연령 제한), `wl`(투수 승패), `ipfmt`(이닝 표기), `titlebar`(부문별 기준선), `asscore`(올스타 스코어↔승패), `asorder`(올스타 정보 유출), `textcheck`(문구 빈칸),
 `service_fa`(서비스타임 ↔ FA 도달), `titlemark`(타이틀↔기록 대응),
 `monthform`(월별 단계 분포·이달의 선수), `mvppay`(성적 대비 제시액),
 `clutch`(승부처 선택지 균형), `clutchwin`(승부처 문구 ↔ 경기 결과), `clutchgame`(승부처 ↔ 출장 기록), `clutchseat`(장면 ↔ 그 달의 자리), `fagate`(FA를 막는 조건),

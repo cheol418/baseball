@@ -29,6 +29,7 @@ import { myRankAmong } from "@/lib/rivals";
 import { monthsLeft, serviceOptions } from "@/lib/military";
 import { abilityById } from "@/lib/ability";
 import { blockerOf, competesWith, mateRole, SLOT_LABEL } from "@/lib/squad";
+import { managerFit, managerStyle, managerView } from "@/lib/manager";
 import { answerOf, INTERVIEWS, mediaContext } from "@/lib/media";
 import { saveGame, useGame } from "@/lib/storage";
 import { isFranchiseRole } from "@/lib/roles";
@@ -2030,6 +2031,31 @@ function PlayerTab({ g }: { g: GameState }) {
 
   return (
     <>
+      {g.manager && g.contract && (
+        <Section eyebrow="Manager" title="감독">
+          <div className="card flex items-center gap-3 px-4 py-3.5">
+            <span className="text-[20px]">🧢</span>
+            <span className="min-w-0 flex-1">
+              <span className="flex flex-wrap items-center gap-1.5">
+                <b className="text-[13.5px]">{g.manager.name}</b>
+                <Pill>{managerStyle(g.manager.styleId).name}</Pill>
+                <span className="num text-[9.5px] text-[var(--ink-3)]">부임 {g.manager.since}년 · {g.manager.seasons + 1}년차</span>
+              </span>
+              <span className="mt-0.5 block text-[11.5px] leading-relaxed text-[var(--ink-3)]">
+                {managerStyle(g.manager.styleId).desc}
+              </span>
+            </span>
+            <span className="shrink-0 text-right">
+              <span className="eyebrow">나를 보는 눈</span>
+              <span className="block text-[11.5px] font-extrabold"
+                style={{ color: managerFit(g.manager, g) >= 0.8 ? "var(--brand-2)" : managerFit(g.manager, g) <= -0.8 ? "var(--danger)" : undefined }}>
+                {managerView(g.manager, g)}
+              </span>
+            </span>
+          </div>
+        </Section>
+      )}
+
       {!!g.squad?.length && g.contract && (
         <Section eyebrow="Clubhouse" title="우리 팀">
           <Fold title="같이 뛰는 선수들" count={`${g.squad.length}명`}>
