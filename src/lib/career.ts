@@ -3,7 +3,7 @@ import { TEAMS, teamById } from "./teams";
 import {
   ABILITY_LABEL, ABILITY_MAX, abilityKeys, deriveStyle, developmentRate, getAb,
   grow, HELL_LIMIT, hellOdds, injuryRiskMultiplier, makeTrainingOptions, overall, reviseUpside, rollTrainGrade,
-  potentialOverall, setAb,
+  potentialOverall, POSITION_LABEL, setAb,
 } from "./player";
 import {
   emptyLine, HALF_SHARE, isHitterLine, judgeAllStar, judgeAwards, LEVEL_GAMES, leagueLeaders, MAJOR_TITLES, mergeLines, TITLE_STAT,
@@ -18,6 +18,7 @@ import { judgeMonthForm, potmOdds } from "./form";
 import { RESOLVES, resolveEffect } from "./resolve";
 import { rollBarracks, serviceOptionById } from "./military";
 import { ABILITIES, abilityById, mergeEffects, type AbilityContext } from "./ability";
+import { advanceSquad, blockerOf, competeAdjust, makeSquad } from "./squad";
 import { applyInterview, INTERVIEWS, mediaContext, pickInterview } from "./media";
 import { advanceRivals, makeRivals, settleTitles } from "./rivals";
 import { PS_CUT, simPostseason } from "./postseason";
@@ -195,6 +196,12 @@ function rollInjury(
 
 export function assignRole(
   p: Player, team: Team, serviceYears: number, trust: number, rng: RNG, proYears = 99,
+  /**
+   * 자리 경쟁 보정 (`squad.ts`의 `competeAdjust`).
+   * 내 경쟁자가 이 팀의 보통 경쟁자보다 센가 약한가 — **절대 기량 차이가 아니다.**
+   * `bar`가 이미 평균적인 경쟁을 품고 있어서, 절대 차이를 얹으면 두 번 센다.
+   */
+  compete = 0,
 ): { level: LevelTag; role: string } {
   const ovr = overall(p);
   const bar = 73 + (team.power - 65) * 0.2 - (team.youth - 55) * 0.06;
@@ -206,7 +213,7 @@ export function assignRole(
   // 나이가 어릴수록 천천히 키운다 (대졸은 이 감점이 없다)
   const youth = p.age <= 19 ? 4.4 : p.age <= 21 ? 2.5 : 0;
 
-  const v = ovr + bonus - unproven - youth + rng.float(-2, 2);
+  const v = ovr + bonus - unproven - youth + compete + rng.float(-2, 2);
 
   if (p.kind === "PITCHER") {
     if (p.position === "CP") {
@@ -987,15 +994,93 @@ function injuryCalendar(avail: number, rng: RNG): number[] {
   return out;
 }
 
+/**
+ * 스쿼드를 그해 상태로 맞춘다.
+ *
+ * **팀이 바뀌면 통째로 새로 만든다** — 이적하면 아는 얼굴이 없는 게 맞다.
+ * 같은 팀이면 한 해를 먹인다(성장·노쇠·은퇴·FA 이탈, 빈자리는 채운다).
+ */
+function refreshSquad(s: GameState, rng: RNG, teamId: string) {
+  const me = { kind: s.player.kind, position: s.player.position };
+  if (!s.squad?.length || s.squadTeamId !== teamId) {
+    s.squad = makeSquad(rng, me, s.year);
+    s.squadTeamId = teamId;
+    return;
+  }
+  const before = blockerOf(s.squad, me);
+  const { squad, left } = advanceSquad(s.squad, rng, s.year, me);
+  s.squad = squad;
+  for (const m of left) {
+    log(s, {
+      icon: m.gone?.why === "은퇴" ? "🎽" : "✈️",
+      title: `${m.name} ${m.gone?.why ?? "이탈"}`,
+      tone: "neutral",
+      body: `${m.player.age}세 ${POSITION_LABEL[m.position] ?? m.position}. ${
+        m.gone?.why === "은퇴" ? "한 시대가 끝났습니다." : "팀을 떠납니다."
+      } 그 자리를 누군가 채웁니다.`,
+    });
+  }
+
+  /**
+   * 내 자리를 막고 있던 사람이 바뀌었는가.
+   *
+   * 동료가 들고 나는 건 로그로 흘려보내지만, **내 자리가 걸린 변화**는
+   * 멈춰서 알린다 — 이게 이 시스템이 만드는 이야기의 전부다.
+   */
+  const after = blockerOf(s.squad, me);
+  if (before?.id !== after?.id) {
+    const myOvr = overall(s.player);
+    if (!after) {
+      notify(s, {
+        icon: "🚪", eyebrow: "Clubhouse", title: "자리가 비었다", tone: "epic",
+        body: `${before?.name ?? "경쟁자"}가 떠나며 ${POSITION_LABEL[s.player.position] ?? s.player.position} 자리를 다투는 사람이 없어졌습니다.`,
+        change: [{ label: "경쟁자", from: before?.name ?? "—", to: "없음" }],
+      });
+    } else if (before && overall(after.player) < overall(before.player)) {
+      notify(s, {
+        icon: "🚪", eyebrow: "Clubhouse", title: "앞사람이 비켰다", tone: "good",
+        body: `${before.name}가 빠지고 ${after.name}(${overall(after.player)})가 그 자리에 섰습니다. 전보다 넘기 쉬운 상대입니다.`,
+        change: [{ label: "경쟁자", from: `${before.name} ${overall(before.player)}`, to: `${after.name} ${overall(after.player)}` }],
+      });
+    } else if (overall(after.player) > myOvr) {
+      notify(s, {
+        icon: "🧱", eyebrow: "Clubhouse", title: "새 경쟁자", tone: "bad",
+        body: `${after.name}(${after.player.age}세 · OVR ${overall(after.player)})가 ${POSITION_LABEL[s.player.position] ?? s.player.position} 자리를 보고 있습니다. 지금 나보다 앞섭니다.`,
+        change: [{ label: "경쟁자", from: before?.name ?? "없음", to: after.name }, { label: "기량 차", from: `내 ${myOvr}`, to: `상대 ${overall(after.player)}` }],
+      });
+    }
+  }
+}
+
+/**
+ * 지금 내 자리를 막고 있는 사람에서 나온 보정.
+ *
+ * **신뢰를 여기서 또 더하지 않는다** — `assignRole`의 `bonus`가 이미
+ * `(trust − 55) × 0.075`로 세고 있다. 모르고 ±2를 얹었더니 신뢰가 높은
+ * 선수에게 늘 +1.7이 붙어 간판타자가 9% → 14%로 부풀었다 (실제로 겪음).
+ *
+ * 완장은 아직 어디에도 안 세므로 여기서 본다 — 구단이 주장에게 맡긴
+ * 자리를 쉽게 빼지는 않는다.
+ */
+function competeOf(s: GameState, teamPower: number): number {
+  const me = { kind: s.player.kind, position: s.player.position };
+  const b = blockerOf(s.squad, me);
+  const base = b ? competeAdjust(overall(b.player), teamPower) : 0;
+  const captain = s.perks?.includes("leader") ? 1.5 : 0;
+  return base + captain;
+}
+
 function openSeason(s: GameState, rng: RNG, campInjury = 0, availCap = 1) {
   const team = s.contract ? teamById(s.contract.teamId) : null;
+  // 스쿼드를 먼저 정리한다 — 자리 경쟁이 보직 판정에 들어가므로
+  if (team) refreshSquad(s, rng, team.id);
   if (s.contract?.role === "육성선수") {
     s.seasonLevel = "MINOR";
     s.seasonRole = defaultRole(s.player);
   } else if (team) {
     // 프로에서 보낸 해 (1군·2군 모두 포함)
     const proYears = s.seasons.filter((r) => r.level === "KBO" || r.level === "MINOR").length;
-    const { level, role } = assignRole(s.player, team, s.serviceYears, s.trust, rng, proYears);
+    const { level, role } = assignRole(s.player, team, s.serviceYears, s.trust, rng, proYears, competeOf(s, team.power));
     s.seasonLevel = level;
     s.seasonRole = role;
     s.contract!.role = role;

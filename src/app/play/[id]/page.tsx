@@ -28,6 +28,7 @@ import { RESOLVES } from "@/lib/resolve";
 import { myRankAmong } from "@/lib/rivals";
 import { monthsLeft, serviceOptions } from "@/lib/military";
 import { abilityById } from "@/lib/ability";
+import { blockerOf, competesWith, mateRole, SLOT_LABEL } from "@/lib/squad";
 import { answerOf, INTERVIEWS, mediaContext } from "@/lib/media";
 import { saveGame, useGame } from "@/lib/storage";
 import { isFranchiseRole } from "@/lib/roles";
@@ -1852,6 +1853,68 @@ function RivalBoard({ g, myWar }: { g: GameState; myWar: number }) {
   );
 }
 
+/**
+ * 우리 팀 — 이름 있는 동료들.
+ * **내 자리를 막고 있는 사람**을 맨 위에 띄운다 — 그게 지금 가장 중요한 정보다.
+ */
+function SquadBoard({ g }: { g: GameState }) {
+  const me = { kind: g.player.kind, position: g.player.position };
+  const blocker = blockerOf(g.squad, me);
+  const myOvr = overall(g.player);
+  const rows = (g.squad ?? []).slice().sort((a, b) => {
+    const ra = a.id === blocker?.id ? 0 : competesWith(me, a) ? 1 : 2;
+    const rb = b.id === blocker?.id ? 0 : competesWith(me, b) ? 1 : 2;
+    return ra - rb || overall(b.player) - overall(a.player);
+  });
+  return (
+    <div className="flex flex-col gap-1.5">
+      {rows.map((m) => {
+        const ovr = overall(m.player);
+        const isBlocker = m.id === blocker?.id;
+        const rival = competesWith(me, m);
+        return (
+          <div key={m.id} className="flex items-center gap-2 rounded-lg px-2.5 py-2"
+            style={{
+              // 나보다 센 경쟁자만 금색으로 세운다 — 내가 앞선 해까지 강조하면 늘 경고처럼 보인다
+              background: isBlocker && ovr > myOvr ? "var(--gold)18" : "var(--surface-2)",
+              boxShadow: isBlocker && ovr > myOvr ? "inset 0 0 0 1px var(--gold)" : undefined,
+            }}>
+            <span className="jersey shrink-0 text-[10px]">{m.player.number}</span>
+            <span className="min-w-0 flex-1">
+              <span className="flex flex-wrap items-center gap-1.5">
+                <b className="text-[12.5px]">{m.name}</b>
+                {rival && (
+                  <span className="rounded-full px-1.5 py-[1px] text-[9px] font-black"
+                    style={{ background: "var(--gold)22", color: "var(--gold)" }}>
+                    {isBlocker && ovr > myOvr ? "내 자리를 막고 있다" : isBlocker ? "내가 앞서 있다" : "자리 경쟁"}
+                  </span>
+                )}
+                {!rival && (
+                  <span className="text-[9.5px] font-bold text-[var(--ink-3)]">{SLOT_LABEL[m.slot]}</span>
+                )}
+              </span>
+              <span className="block text-[9.5px] text-[var(--ink-3)]">
+                {POSITION_LABEL[m.position] ?? m.position} · {m.player.age}세 · {mateRole(m)}
+              </span>
+            </span>
+            <span className="shrink-0 text-right">
+              <span className="num block text-[13px] font-black"
+                style={{ color: rival ? (ovr > myOvr ? "var(--danger)" : "var(--brand-2)") : undefined }}>
+                {ovr}
+              </span>
+              <span className="block text-[9px] text-[var(--ink-3)]">OVR</span>
+            </span>
+          </div>
+        );
+      })}
+      <p className="mt-1 text-[11px] leading-relaxed text-[var(--ink-3)]">
+        같은 자리를 보는 선수가 <b>이 팀의 보통 경쟁자보다 센지</b>가 내 보직에 반영됩니다.
+        동료는 해마다 은퇴하고, FA로 떠나고, 새로 들어옵니다.
+      </p>
+    </div>
+  );
+}
+
 function CareerTab({ g }: { g: GameState }) {
   const kbo = seasonsAtLevel(g.seasons, "KBO");
   // 1군을 오간 시즌은 2군 표에도 그 몫만 들어간다
@@ -1967,6 +2030,14 @@ function PlayerTab({ g }: { g: GameState }) {
 
   return (
     <>
+      {!!g.squad?.length && g.contract && (
+        <Section eyebrow="Clubhouse" title="우리 팀">
+          <Fold title="같이 뛰는 선수들" count={`${g.squad.length}명`}>
+            <SquadBoard g={g} />
+          </Fold>
+        </Section>
+      )}
+
       {!!g.perks?.length && (
         <Section eyebrow="Specials" title="특수능력" >
           <div className="flex flex-col gap-2">

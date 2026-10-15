@@ -47,6 +47,9 @@ export function migrateSave(raw: unknown): GameState | null {
   def("pendingInterview", null);
   // 저장 시각이 없던 세이브는 만든 시각을 쓴다 — 없는 것보다 낫다
   def("savedAt", (g.createdAt as number) || Date.now());
+  // 스쿼드 — 없으면 다음 스프링캠프에서 만들어진다
+  def("squad", []);
+  def("squadTeamId", null);
   def("seasonRoleGames", null);
   def("liveHalf", null);
   def("retireRefusedYear", null);

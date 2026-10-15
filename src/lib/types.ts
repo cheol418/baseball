@@ -410,6 +410,10 @@ export interface GameState {
   clutchTally?: Record<string, { win: number; lose: number }>;
   /** 기다리는 인터뷰 (질문 id) */
   pendingInterview?: string | null;
+  /** 우리 팀 동료들 — 해마다 바뀌고, 이적하면 통째로 새로 만들어진다 */
+  squad?: import("./squad").Mate[];
+  /** 지금 스쿼드가 어느 팀의 것인가 (이적을 알아채는 열쇠) */
+  squadTeamId?: string | null;
 
   /* --- 시즌 진행 --- */
   /** 직전에 치른 반기의 월별 성적 (중계 재생용) */
