@@ -1840,19 +1840,24 @@ function judgeAbilities(s: GameState) {
       }
       continue;
     }
-    if (!a.gain(ctx)) continue;
+    const got = a.gain(ctx);
+    if (!got) continue;
     have.add(a.id);
     (s.perkYears ??= {})[a.id] = s.year;
+    // 가지가 여럿인 조건은 **딴 가지**를 적는다 — 조건 목록을 그대로 쓰면
+    // 최다이닝으로 딴 사람에게 "180이닝 2시즌"이 같이 붙는다 (실제로 겪음)
+    const why = typeof got === "string" ? got : a.how;
+    (s.perkWhy ??= {})[a.id] = why;
     log(s, {
       icon: a.icon, title: `특수능력 획득 — ${a.name}`,
-      tone: a.blue ? "bad" : "epic", body: `${a.desc} (${a.how})`,
+      tone: a.blue ? "bad" : "epic", body: `${a.desc} (${why})`,
     });
     notify(s, {
       icon: a.icon, eyebrow: "Ability",
       title: a.blue ? `${a.name}이(가) 붙었다` : `${a.name} 획득`,
       tone: a.blue ? "bad" : "epic",
       body: a.blue ? `${a.desc} 원치 않아도 따라붙는 꼬리표입니다.` : a.desc,
-      change: [{ label: "얻은 계기", from: "—", to: a.how }],
+      change: [{ label: "얻은 계기", from: "—", to: why }],
     });
   }
   s.perks = [...have];

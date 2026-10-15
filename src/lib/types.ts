@@ -406,6 +406,8 @@ export interface GameState {
   perks?: string[];
   /** 능력을 얻은 해 (화면 표시용) */
   perkYears?: Record<string, number>;
+  /** **무엇으로 얻었는가** — 조건 목록이 아니라 실제로 넘은 가지 */
+  perkWhy?: Record<string, string>;
   /** 승부처 태그·선택지별 성패 누적 — 특수능력 획득 조건의 유일한 새 통계 */
   clutchTally?: Record<string, { win: number; lose: number }>;
   /** 기다리는 인터뷰 (질문 id) */

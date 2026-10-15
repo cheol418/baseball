@@ -43,6 +43,7 @@ export function migrateSave(raw: unknown): GameState | null {
   // 특수능력 — 구버전 세이브는 빈 채로 시작하고 조건을 만족하면 그때 붙는다
   def("perks", []);
   def("perkYears", {});
+  def("perkWhy", {});
   def("clutchTally", {});
   def("pendingInterview", null);
   // 저장 시각이 없던 세이브는 만든 시각을 쓴다 — 없는 것보다 낫다

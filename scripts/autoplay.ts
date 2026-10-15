@@ -1,5 +1,6 @@
 /** 테스트용 자동 플레이 — 새 상태 머신 전 구간을 통과시킨다 */
 import { advance, canVolunteer, legacyContext, secondLifeOptions, type Action } from "../src/lib/career";
+import { RNG } from "../src/lib/rng";
 import { HELL_LIMIT } from "../src/lib/player";
 import { serviceOptions } from "../src/lib/military";
 import { INTERVIEWS } from "../src/lib/media";
@@ -52,6 +53,17 @@ export function autoPlay(start: GameState, opt: AutoOptions = {}): GameState {
   let g = start;
   let guard = 0;
 
+  /*
+   * 하네스의 선택도 **시드에서 나와야 한다.**
+   * `Math.random()`으로 이벤트·인터뷰·복무 방침을 고르면 같은 시드가 매번
+   * 다른 커리어가 되어, "같은 시드에서 짝지어 잰다"는 측정이 성립하지 않는다
+   * (실측: 같은 시드로 두 번 돌려 통산 WAR 82.8 ↔ 77.0). 엔진 시드 흐름과
+   * 섞이지 않도록 따로 굴린다.
+   */
+  const pick = new RNG((start.seed ^ 0x5bf03635) >>> 0);
+  const roll = () => pick.float(0, 1);
+  const among = (n: number) => pick.int(0, Math.max(0, n - 1));
+
   const act = (a: Action) => { g = advance(g, a); };
 
   let refusedRetirement = false;
@@ -78,7 +90,7 @@ export function autoPlay(start: GameState, opt: AutoOptions = {}): GameState {
         // 지옥 훈련은 커리어 2회 — 쓸 수 있으면 쓴다 (두 경로를 모두 거치게)
         act({
           type: "TRAIN",
-          optionId: opts[Math.floor(Math.random() * opts.length)]?.id ?? opts[0].id,
+          optionId: opts[among(opts.length)]?.id ?? opts[0].id,
           hell: (g.hellUsed ?? 0) < HELL_LIMIT,
           resolveId: opt.resolve ?? "team",
         });
@@ -93,7 +105,7 @@ export function autoPlay(start: GameState, opt: AutoOptions = {}): GameState {
           act({ type: "RESOLVE_CLUTCH", choice: os[Math.min(clutchPick, os.length - 1)].id, where: "AS" });
           break;
         }
-        if (g.pendingTrade) act({ type: "TRADE_DECIDE", accept: Math.random() < 0.5 });
+        if (g.pendingTrade) act({ type: "TRADE_DECIDE", accept: roll() < 0.5 });
         else act({ type: "PLAY_SECOND_HALF" });
         break;
       }
@@ -137,14 +149,14 @@ export function autoPlay(start: GameState, opt: AutoOptions = {}): GameState {
         const pick = want === "humble" ? (q?.options[0])
           : want === "bold" ? (q?.options.find((o) => o.fame >= 6) ?? q?.options[q.options.length - 1])
             : want === "flat" ? (q?.options.reduce((a, b) => (Math.abs(a.fame) + Math.abs(a.trust) < Math.abs(b.fame) + Math.abs(b.trust) ? a : b)))
-              : q?.options[Math.floor(Math.random() * (q?.options.length ?? 1))];
+              : q?.options[among(q?.options.length ?? 1)];
         act({ type: "ANSWER_INTERVIEW", optionId: pick?.id ?? "" });
         break;
       }
-      case "MILITARY_SEASON": act({ type: "SERVE", optionId: opt.serviceOption ?? serviceOptions(g.military)[Math.floor(Math.random() * 3)]?.id }); break;
+      case "MILITARY_SEASON": act({ type: "SERVE", optionId: opt.serviceOption ?? serviceOptions(g.military)[among(3)]?.id }); break;
       case "EVENT": {
         const o = g.pendingEvent?.options ?? [];
-        if (o.length) act({ type: "CHOOSE_EVENT", optionId: o[Math.floor(Math.random() * o.length)].id });
+        if (o.length) act({ type: "CHOOSE_EVENT", optionId: o[among(o.length)].id });
         else act({ type: "RETIRE" });
         break;
       }
@@ -156,7 +168,7 @@ export function autoPlay(start: GameState, opt: AutoOptions = {}): GameState {
           break;
         }
         const targets = g.pendingTransfers ?? [];
-        if (!g.transferRequested && targets.length && Math.random() < transferChance) {
+        if (!g.transferRequested && targets.length && roll() < transferChance) {
           act({ type: "REQUEST_TRANSFER", teamId: targets[0].teamId });
         } else act({ type: "SKIP_STOVE" });
         break;

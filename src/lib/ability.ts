@@ -70,7 +70,13 @@ export interface AbilityDef {
   /** 얻는 조건 — 화면 설명 */
   how: string;
   /** 얻는 조건 — 판정 */
-  gain: (c: AbilityContext) => boolean;
+  /**
+   * 얻었는가 — **어느 가지로 얻었는지**를 글로 돌려줄 수 있다.
+   * 가지가 여럿인 조건(`180이닝 2시즌 또는 최다이닝`)에서 `how`를 그대로 통보에
+   * 적으면, 최다이닝으로 딴 사람에게도 "180이닝 2시즌"이 같이 붙어
+   * **안 한 일을 했다고 적는다** (실제로 겪음).
+   */
+  gain: (c: AbilityContext) => boolean | string;
   /** 잃는 조건 (없으면 평생 간다) */
   lose?: (c: AbilityContext) => boolean;
 }
@@ -136,7 +142,7 @@ export const ABILITIES: AbilityDef[] = [
     id: "good_eye", name: "선구안의 대가", icon: "🔥", kind: "HITTER",
     desc: "`끝까지 골라낸다` +8%p · 볼넷률 +0.6%p", how: "그 선택으로 5승 또는 출루율 1위",
     effect: { clutchOption: { patient: 0.08 }, bbAdd: 0.006 },
-    gain: (c) => c.opt("patient").win >= 5 || c.awards("출루율 1위") > 0,
+    gain: (c) => c.awards("출루율 1위") > 0 ? "출루율 1위" : c.opt("patient").win >= 5 && `끝까지 골라내 ${c.opt("patient").win}번 살아나감`,
   },
   {
     id: "escape", name: "위기 관리", icon: "🔥", kind: "PITCHER",
@@ -148,7 +154,7 @@ export const ABILITIES: AbilityDef[] = [
     id: "closer_mind", name: "뒷문의 주인", icon: "🔥", kind: "PITCHER",
     desc: "세이브 상황에서 +10%p", how: "세이브왕·홀드왕 또는 세이브 승부처 3승",
     effect: { clutchTag: { 세이브: 0.10 } },
-    gain: (c) => c.awards("세이브왕") > 0 || c.awards("홀드왕") > 0 || c.tag("세이브").win >= 3,
+    gain: (c) => c.awards("세이브왕") > 0 ? "세이브왕" : c.awards("홀드왕") > 0 ? "홀드왕" : c.tag("세이브").win >= 3 && `세이브 승부처 ${c.tag("세이브").win}승`,
   },
   {
     id: "choker", name: "새가슴", icon: "💧", blue: true,
@@ -170,13 +176,13 @@ export const ABILITIES: AbilityDef[] = [
     id: "power_hitter", name: "한 방이 있다", icon: "🔥", kind: "HITTER",
     desc: "홈런이 6% 더 나온다", how: "28홈런 2시즌 또는 홈런왕",
     effect: { hrMul: 1.06 },
-    gain: (c) => c.seasons((r) => H(r).hr >= 28) >= 2 || c.awards("홈런왕") > 0,
+    gain: (c) => c.awards("홈런왕") > 0 ? "홈런왕" : c.seasons((r) => H(r).hr >= 28) >= 2 && `28홈런 ${c.seasons((r) => H(r).hr >= 28)}시즌`,
   },
   {
     id: "hit_machine", name: "안타 제조기", icon: "🔥", kind: "HITTER",
     desc: "인플레이 타구가 더 안타가 된다", how: "165안타 2시즌 또는 타격왕",
     effect: { babipAdd: 0.008 },
-    gain: (c) => c.seasons((r) => H(r).h >= 165) >= 2 || c.awards("타격왕") > 0,
+    gain: (c) => c.awards("타격왕") > 0 ? "타격왕" : c.seasons((r) => H(r).h >= 165) >= 2 && `165안타 ${c.seasons((r) => H(r).h >= 165)}시즌`,
   },
   {
     id: "burner", name: "대도", icon: "🔥", kind: "HITTER",
@@ -196,7 +202,7 @@ export const ABILITIES: AbilityDef[] = [
     id: "k_machine", name: "탈삼진 머신", icon: "🔥", kind: "PITCHER",
     desc: "9이닝당 탈삼진 +0.4", how: "탈삼진왕 또는 180K 2시즌",
     effect: { k9Add: 0.4 },
-    gain: (c) => c.awards("탈삼진왕") > 0 || c.seasons((r) => P(r).so >= 180) >= 2,
+    gain: (c) => c.awards("탈삼진왕") > 0 ? "탈삼진왕" : c.seasons((r) => P(r).so >= 180) >= 2 && `180탈삼진 ${c.seasons((r) => P(r).so >= 180)}시즌`,
   },
   {
     id: "grounder", name: "땅볼 유도", icon: "🔥", kind: "PITCHER",
@@ -208,7 +214,7 @@ export const ABILITIES: AbilityDef[] = [
     id: "workhorse", name: "이닝이터", icon: "🔥", kind: "PITCHER",
     desc: "등판마다 0.25이닝을 더 던진다", how: "180이닝 2시즌 또는 최다이닝",
     effect: { ipPerStartAdd: 0.25 },
-    gain: (c) => c.awards("최다이닝") > 0 || c.seasons((r) => P(r).ip >= 180) >= 2,
+    gain: (c) => c.awards("최다이닝") > 0 ? "최다이닝" : c.seasons((r) => P(r).ip >= 180) >= 2 && `180이닝 ${c.seasons((r) => P(r).ip >= 180)}시즌`,
     lose: (c) => c.ability("stamina") < 70,
   },
   {

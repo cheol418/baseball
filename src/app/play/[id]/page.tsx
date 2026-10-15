@@ -2108,7 +2108,10 @@ function PlayerTab({ g }: { g: GameState }) {
                   <span className="flex flex-wrap items-center gap-1.5">
                     <b className="text-[13px]" style={{ color: a!.blue ? "var(--danger)" : "var(--gold)" }}>{a!.name}</b>
                     {g.perkYears?.[a!.id] && (
-                      <span className="num text-[9.5px] text-[var(--ink-3)]">{g.perkYears[a!.id]}년 획득</span>
+                      <span className="text-[9.5px] text-[var(--ink-3)]">
+                        <span className="num">{g.perkYears[a!.id]}</span>년 획득
+                        {g.perkWhy?.[a!.id] ? ` · ${g.perkWhy[a!.id]}` : ""}
+                      </span>
                     )}
                   </span>
                   <span className="mt-0.5 block text-[11.5px] leading-relaxed text-[var(--ink-2)]">{a!.desc}</span>

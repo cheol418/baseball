@@ -104,7 +104,7 @@ function play(seed: number, opt: { college: boolean; military: "SANGMU" | "ACTIV
           break;
         case "INTERVIEW": {
         const q = INTERVIEWS.find((x) => x.id === g.pendingInterview);
-        act({ type: "ANSWER_INTERVIEW", optionId: q?.options[Math.floor(Math.random() * (q?.options.length ?? 1))]?.id ?? "" });
+        act({ type: "ANSWER_INTERVIEW", optionId: q?.options[rng.int(0, (q?.options.length ?? 1) - 1)]?.id ?? "" });
         break;
       }
       case "MILITARY_SEASON": act({ type: "SERVE", optionId: serviceOptions(g.military)[rng.int(0, 2)]?.id }); break;

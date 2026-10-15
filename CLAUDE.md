@@ -232,6 +232,7 @@ UI는 `src/app/page.tsx`(홈) · `create/page.tsx`(4단계 생성) · `play/[id]
 | 특수능력 실측 | 커리어당 획득 4.8개 · 은퇴 시 보유 4.9개(금 4.2 · 파란 0.7) · 상실 1.8회 · 보유율 1~53% (`ability.ts` 스크립트) |
 | 승부처 보정 | 한 장면 **±20%p 상한**(`CLUTCH_CAP`) — 실측 57%의 장면에 붙고, 붙으면 중앙 +10%p, 상한에 걸리는 장면 1.8%. 상한은 안전망이지 상시 제약이 아니다 |
 | 표기 = 실제 | 보정은 **선택지 확률에 미리 얹는다**(`withPerks`) — 카드에서 따로 더하면 표기와 실제가 갈린다. 카드는 근거(무슨 능력이 몇 %p)만 적는다. 검수 오차 ±1.2%p |
+| ★ 통보는 **딴 가지**를 적는다 | 조건이 "180이닝 2시즌 **또는** 최다이닝"인데 통보에 `how`를 그대로 적으면, 최다이닝으로 딴 사람에게도 "180이닝 2시즌"이 붙어 **안 한 일을 했다고 적는다** (실제로 겪음). `gain`이 `boolean | string`을 돌려줘 넘은 가지를 말하고(`최다이닝` · `180이닝 3시즌`), `perkWhy`에 저장해 목록에서도 그 말을 한다. 가지가 여럿인 능력 6종 — `abilitygate.ts` 0건 |
 | 획득 조건의 출처 | **이미 세고 있는 것에서만** 뽑는다 — 새 통계는 승부처 태그별 누적(`clutchTally`) 하나뿐이다 |
 | 특수능력 측정 주의 | 자동 플레이는 승부처에서 **늘 같은 선택지**를 고르므로(clutchPick 고정) 그대로 재면 1번 선택지 능력만 50%로 찍힌다. 선택지를 3분할하고 보직을 여섯 유형으로 섞어야 한다 (실제로 겪음) |
 | 획득 ≠ 보유 | **얻었다 잃는 능력이 있다**(철벽 수비 24% → 13%, 이닝이터 11% → 6%). 은퇴 시점만 보면 조건이 너무 빡빡한 줄 알고 엉뚱한 쪽을 손댄다 |
@@ -403,6 +404,18 @@ UI는 `src/app/page.tsx`(홈) · `create/page.tsx`(4단계 생성) · `play/[id]
 
 | 명예의 전당 | 레전드 100%(1차) · 명전급 89%(평균 3.2차) · 그 아래 0% |
 
+### 측정의 전제 — 같은 시드는 같은 커리어다
+
+측정이 거의 전부 **같은 시드에서 짝지어 재는 것**이다(`agency` · `styledrift` · `campreport`).
+하네스가 시드 밖에서 고르면 짝이 안 맞아, 그 차이가 전부 선택의 몫으로 잘못 돌아간다.
+
+`autoplay.ts`가 이벤트·인터뷰·복무 방침·트레이드를 `Math.random()`으로 골라
+**같은 시드로 두 번 돌린 통산 WAR이 82.8 ↔ 77.0이었다** (실제로 겪음).
+하네스의 선택도 시드에서 파생한 RNG로 굴린다 — 엔진 시드 흐름(`advance`의 `bump`)과
+섞지 않도록 따로 둔다. `scripts/determinism.ts`가 60커리어를 두 번 돌려 지킨다.
+
+`national.ts`·`ipfmt.ts`의 `Math.random()`은 커리어 재현이 아니라 자기 표본을 뽑는 것이라 그대로 둔다.
+
 ### 측정 스크립트
 
 `audit.ts`(전체 감사) 외에 `transfersweep`(이적), `salary`(연봉), `goals`(시즌 목표),
@@ -416,7 +429,7 @@ UI는 `src/app/page.tsx`(홈) · `create/page.tsx`(4단계 생성) · `play/[id]
 `titles`(성적 대비 수상), `titlebar`(부문별 기준선·수상률), `nego`(협상 도박 균형), `negotext`(협상 통보 문구), `integrity`(기록 불변식), `valuecheck`(값의 범위), `goaltext`(목표 표기↔판정), `campreport`(훈련 몫 ↔ 나이 몫), `logic`(칸 사이의 모순), `ceiling`(천장·훈련 몫), `headroom`(성장 여지), `traincover`(훈련 방향의 덮개), `injurybal`(부상 빈도·무게), `earlygame`(초반 여덟 시즌), `rolebar`(OVR ↔ 보직), `fair`(자리만 바꿨을 때의 격차), `stylewar`(같은 OVR에서 유형의 값), `styledrift`(유형 격차가 어디서 오는가), `roleswitch`(보직·포지션 전환), `traingrade`(훈련 성과 분포), `agency`(선택의 무게), `decisions`(결정 밀도), `repeat`(장면 반복), `oddscheck`(표기 확률 검수), `rivals`(동기 분포·타이틀 중복), `fame`(인지도 눈금), `leagueavg`(리그 평균 기준), `injurymonth`(부상의 달력 배치), `wish`(희망 구단의 무게), `park`(구장 효과 크기), `scenefit`(장면↔자리 일치), `service2`(복무 방침의 값), `ability`(특수능력 보유·상실), `abilitysim`(구현 전 드라이런), `media`(인터뷰의 무게), `backup`(내보내기 왕복·합치기 규칙), `squad`(동료 교체·자리 경쟁), `squadsim`(구현 전 드라이런), `manager`(재임·성향 중립성), `league`(판도 변화·평균 고정), `powerfit`(전력 ↔ 보직), `worldcheck`(동료·감독·리그의 상태 모순), `wl`(투수 승패), `randomcreate`(랜덤 조합 정합성), `agelimit`(AG 연령 제한), `wl`(투수 승패), `ipfmt`(이닝 표기), `titlebar`(부문별 기준선), `asscore`(올스타 스코어↔승패), `asorder`(올스타 정보 유출), `textcheck`(문구 빈칸),
 `service_fa`(서비스타임 ↔ FA 도달), `titlemark`(타이틀↔기록 대응),
 `monthform`(월별 단계 분포·이달의 선수), `mvppay`(성적 대비 제시액),
-`clutch`(승부처 선택지 균형), `clutchwin`(승부처 문구 ↔ 경기 결과), `clutchgame`(승부처 ↔ 출장 기록), `clutchseat`(장면 ↔ 그 달의 자리), `fagate`(FA를 막는 조건),
+`determinism`(같은 시드 ↔ 같은 커리어), `abilitygate`(특수능력 조건 ↔ 통보 문구), `clutch`(승부처 선택지 균형), `clutchwin`(승부처 문구 ↔ 경기 결과), `clutchgame`(승부처 ↔ 출장 기록), `clutchseat`(장면 ↔ 그 달의 자리), `fagate`(FA를 막는 조건),
 `aging2`·`aging3`(나이별 기록·OVR 낙폭), `refused`(은퇴 권고 거부 후 협상),
 `games2`(입지별 출전 경기)를 쓴다.
 
