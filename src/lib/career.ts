@@ -2281,7 +2281,7 @@ export function advance(prev: GameState, action: Action): GameState {
       runDraft(s, rng);
       if (s.phase !== "PATH_CHOICE") {
         // 같은 해에 지명받은 동기들 — 여기서부터 같이 늙는다
-        s.rivals = makeRivals(rng, s.contract?.teamId ?? "DAG", s.player.age + 1, s.player.kind);
+        s.rivals = makeRivals(rng, s.contract?.teamId ?? "DAG", s.player.age + 1, s.player.kind, s.draftPick?.overall);
         // 지명을 받은 뒤 한 해를 넘겨 프로 첫 캠프에 합류한다 (가을 지명 → 이듬해 봄 입단)
         s.player.age += 1;
         s.year += 1;

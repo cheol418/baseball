@@ -991,7 +991,7 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
                       .filter(([, v]) => v !== 0).map(([k, v]) => (
                         <span key={k} className="tabular rounded-full px-1.5 py-[1px] text-[9.5px] font-black"
                           style={{
-                            background: v > 0 ? "var(--brand-2)18" : "var(--danger)18",
+                            background: v > 0 ? "color-mix(in srgb, var(--brand-2) 9%, transparent)" : "color-mix(in srgb, var(--danger) 9%, transparent)",
                             color: v > 0 ? "var(--brand-2)" : "var(--danger)",
                           }}>
                           {k} {v > 0 ? "+" : "−"}{Math.abs(v)}
@@ -1878,7 +1878,7 @@ function SquadBoard({ g }: { g: GameState }) {
           <div key={m.id} className="flex items-center gap-2 rounded-lg px-2.5 py-2"
             style={{
               // 나보다 센 경쟁자만 금색으로 세운다 — 내가 앞선 해까지 강조하면 늘 경고처럼 보인다
-              background: isBlocker && ovr > myOvr ? "var(--gold)18" : "var(--surface-2)",
+              background: isBlocker && ovr > myOvr ? "color-mix(in srgb, var(--gold) 9%, transparent)" : "var(--surface-2)",
               boxShadow: isBlocker && ovr > myOvr ? "inset 0 0 0 1px var(--gold)" : undefined,
             }}>
             <span className="jersey shrink-0 text-[10px]">{m.player.number}</span>
@@ -1887,7 +1887,7 @@ function SquadBoard({ g }: { g: GameState }) {
                 <b className="text-[12.5px]">{m.name}</b>
                 {rival && (
                   <span className="rounded-full px-1.5 py-[1px] text-[9px] font-black"
-                    style={{ background: "var(--gold)22", color: "var(--gold)" }}>
+                    style={{ background: "color-mix(in srgb, var(--gold) 13%, transparent)", color: "var(--gold)" }}>
                     {isBlocker && ovr > myOvr ? "내 자리를 막고 있다" : isBlocker ? "내가 앞서 있다" : "자리 경쟁"}
                   </span>
                 )}

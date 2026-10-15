@@ -312,7 +312,7 @@ const newPitch: ChainDef = {
     body: "투수코치가 새 변화구를 권합니다. 손에 붙기까지 한 시즌은 헤맬 각오를 해야 합니다.",
     options: [
       { id: "learn", label: "새 구종을 익힌다", desc: "당장은 제구가 흔들리지만, 붙으면 상대가 노리기 어려워진다.", risky: true },
-      { id: "sharpen", label: "쓰던 공을 벼린다", desc: "가진 무기를 더 날카롭게. 확실하지만 한계도 분명하다." },
+      { id: "sharpen", label: "주무기를 갈고닦는다", desc: "가진 무기를 더 날카롭게. 확실하지만 한계도 분명하다." },
     ],
   }),
   apply: (s, choice, rng, log) => {
@@ -321,7 +321,7 @@ const newPitch: ChainDef = {
       log({ icon: "🌀", title: "새 구종 연습", tone: "neutral", body: "캠프 내내 새 그립을 잡았습니다. 아직 원하는 곳에 가지 않습니다." });
     } else {
       bump(s, "control", rng.int(1, 3));
-      log({ icon: "🎯", title: "주무기를 벼린다", tone: "good", body: "쓰던 공의 완성도를 끌어올렸습니다." });
+      log({ icon: "🎯", title: "주무기를 갈고닦았다", tone: "good", body: "쓰던 공의 완성도를 끌어올렸습니다." });
     }
   },
   resolve: (s, choice, rng, log) => {

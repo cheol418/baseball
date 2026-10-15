@@ -79,7 +79,7 @@ const TIERS: { bias: number; talent: number; pick: [number, number] }[] = [
   { bias: -1, talent: 0.74, pick: [25, 50] },
 ];
 
-export function makeRivals(rng: RNG, playerTeamId: string, debutAge: number, myKind?: Kind): Rival[] {
+export function makeRivals(rng: RNG, playerTeamId: string, debutAge: number, myKind?: Kind, myPick?: number): Rival[] {
   const names = new Set<string>();
   const pickName = () => {
     for (let i = 0; i < 40; i++) {
@@ -90,7 +90,7 @@ export function makeRivals(rng: RNG, playerTeamId: string, debutAge: number, myK
   };
   const teams = TEAMS.filter((t) => t.id !== playerTeamId);
 
-  return TIERS.map((t, i) => {
+  const list = TIERS.map((t, i) => {
     // 최상위 동기만은 플레이어와 같은 구분으로 만든다 —
     // 타자와 투수는 다투는 부문이 겹치지 않아, 전부 엇갈리면 "라이벌"이 없다
     const kind: Kind = i === 0 && myKind ? myKind : rng.chance(0.58) ? "HITTER" : "PITCHER";
@@ -119,6 +119,21 @@ export function makeRivals(rng: RNG, playerTeamId: string, debutAge: number, myK
       best: null, lastAwards: [], retiredYear: null, epitaph: null,
     };
   }).sort((a, b) => a.pick - b.pick);
+
+  /*
+   * 한 순번에는 한 명만 선다 — 층마다 따로 뽑으므로 그냥 두면
+   * "27순위 남세훈 / 27순위 윤태호"가 네 커리어에 한 번 나온다 (실측 23.7%).
+   * 나와 겹치는 것도 막는다. **난수를 더 쓰지 않는다** —
+   * 호출 순서가 바뀌면 같은 시드가 다른 커리어가 된다.
+   */
+  const taken = new Set<number>(myPick && myPick > 0 ? [myPick] : []);
+  for (const r of list) {
+    let n = r.pick;
+    while (taken.has(n)) n += 1;   // 오름차순이라 밀어 올려도 순서가 유지된다
+    taken.add(n);
+    r.pick = n;
+  }
+  return list;
 }
 
 /** 기량에 맞는 자리 — 플레이어의 `assignRole`을 흉내 내되 훨씬 단순하게 */
