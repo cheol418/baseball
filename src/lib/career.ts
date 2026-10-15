@@ -3060,14 +3060,18 @@ export function advance(prev: GameState, action: Action): GameState {
         } else {
           s.trust = clamp(s.trust - rng.int(5, 12), 0, 100);
           const to = teamById(target.teamId);
+          /**
+           * 무산은 **로그로만** 남긴다.
+           *
+           * 내가 신청해서 안 된 일이라 이미 알고 있는 소식인데, 커리어당
+           * 5.7회나 화면을 멈춰 세우고 있었다. 대신 오버레이가 들고 있던
+           * 정보(신뢰가 얼마나 떨어졌는지)를 로그 문장에 옮긴다 —
+           * 멈추는 걸 없앤다고 알려주던 것까지 잃으면 안 된다.
+           */
           log(s, {
             icon: "🚫", title: "이적 무산", tone: "bad",
-            body: `${to.name}와의 협상이 결렬되었습니다. 구단 신뢰가 떨어졌습니다.`,
-          });
-          notify(s, {
-            icon: "🚫", eyebrow: "Transfer", title: "이적 무산", tone: "bad",
-            body: `${to.name}가 영입을 포기했습니다. 신청 사실이 알려져 원소속팀과의 관계가 나빠졌습니다.`,
-            change: [{ label: "구단 신뢰", from: String(Math.round(before)), to: String(Math.round(s.trust)) }],
+            body: `${to.name}가 영입을 포기했습니다. 신청 사실이 알려져 원소속팀과의 관계가 나빠졌습니다.`
+              + ` 구단 신뢰 ${Math.round(before)} → ${Math.round(s.trust)}.`,
           });
         }
         s.pendingTransfers = makeTransferTargets(s, rng);
