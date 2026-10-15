@@ -113,7 +113,14 @@ function born(
     p.age += 1;
     grow(p, rng, opt[rng.int(0, opt.length - 1)] ?? null, 1.05);
   }
-  return { id: `m${year}-${idx}`, name: opts.name, kind, position, slot, player: p, since: year };
+  /**
+   * id는 **해와 순번만으로 만들면 겹친다.**
+   * 복무로 밀린 해를 따라잡을 때 `advanceSquad`가 같은 해에 여러 번 돌고,
+   * 그때마다 순번이 0부터 다시 센다 (실제로 겪음: id 중복 714건).
+   * 난수를 섞어 한 번에 끝낸다.
+   */
+  const tag = rng.int(0, 46655).toString(36).padStart(3, "0");
+  return { id: `m${year}-${idx}-${tag}`, name: opts.name, kind, position, slot, player: p, since: year };
 }
 
 /** 내 자리와 겹치게 둘지, 흩뿌릴지 */
@@ -209,8 +216,15 @@ export function advanceSquad(
    */
   let idx = 0;
   for (const g of left) {
+    /**
+     * 안에서 올린다 — 다만 **자리에 맞는 나이**여야 한다.
+     * 나이를 안 보고 올렸더니 스물여섯이 "베테랑"으로 찍혔다 (실제로 겪음).
+     */
+    const MIN_AGE: Partial<Record<SquadSlot, number>> = { veteran: 31, star: 24, peer: 22 };
     const promote = (from: SquadSlot, to: SquadSlot) => {
-      const c = kept.filter((m) => m.slot === from).sort((a, b) => b.player.age - a.player.age)[0];
+      const c = kept
+        .filter((m) => m.slot === from && m.player.age >= (MIN_AGE[to] ?? 0))
+        .sort((a, b) => b.player.age - a.player.age)[0];
       if (!c) return false;
       c.slot = to;
       return true;
@@ -226,6 +240,19 @@ export function advanceSquad(
     kept.push(born(rng, used, need, rng.int(def.age[0], def.age[1]), def.talent, def.bias, spot.kind, spot.position, year, idx++));
   }
   return { squad: kept, left };
+}
+
+/**
+ * 화면에 쓸 자리 이름.
+ *
+ * `slot`은 **만들 때·채울 때 쓰는 꼬리표**지 지금의 모습이 아니다.
+ * 신인 자리에 들어온 스무 살이 열 해를 눌러앉으면 서른이 되는데도
+ * "신인"으로 찍혔다 (실제로 겪음: 신인 31세). 나이로 보는 셋은 나이에서 끌어온다.
+ * 경쟁자·간판은 나이가 아니라 **역할**이라 그대로 둔다.
+ */
+export function mateLabel(m: Mate): SquadSlot {
+  if (m.slot === "rival" || m.slot === "star") return m.slot;
+  return m.player.age >= 31 ? "veteran" : m.player.age <= 23 ? "rookie" : "peer";
 }
 
 /** 화면에 쓸 한 줄 — 지금 그 선수의 자리 */

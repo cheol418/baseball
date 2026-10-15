@@ -1041,6 +1041,20 @@ function refreshLeague(s: GameState, rng: RNG): number {
  * 팀이 바뀌면 새 감독이고, 같은 팀이어도 성적이 나쁘면 갈린다.
  * **바뀌면 쌓아 둔 신뢰가 흔들린다** — 그게 이 시스템이 만드는 사건이다.
  */
+/**
+ * 팀이 바뀌면 감독과 동료를 **그 자리에서 비운다.**
+ *
+ * 둘 다 스프링캠프(`openSeason`)에서만 정리되는데, 이적은 스토브리그에
+ * 일어난다 — 그 사이 몇 화면 동안 **새 팀인데 옛 팀 감독과 동료가 떠 있었다**
+ * (실제로 겪음: 감독 소속 불일치 1016건). 비워 두면 화면도 안 그리고,
+ * 다음 캠프에서 새 팀 것으로 만들어진다.
+ */
+function leaveTeam(s: GameState) {
+  s.manager = null;
+  s.squad = [];
+  s.squadTeamId = null;
+}
+
 function refreshManager(s: GameState, rng: RNG, teamId: string, years = 1) {
   const cur = s.manager;
   const moved = !cur || cur.teamId !== teamId;
@@ -3040,6 +3054,7 @@ export function advance(prev: GameState, action: Action): GameState {
         if (rng.chance(target.odds)) {
           const from = teamById(s.contract.teamId);
           s.contract.teamId = target.teamId;
+          leaveTeam(s);   // 새 팀에는 아는 얼굴도, 나를 아는 감독도 없다
           s.contract.role = target.role;
           s.trust = clamp(55 + rng.int(-5, 10), 0, 100);
           s.teammate = clamp(45 + rng.int(-5, 10), 0, 100);
@@ -3099,7 +3114,7 @@ export function advance(prev: GameState, action: Action): GameState {
         };
         s.faUsed += 1;
         s.player.fame = clamp(s.player.fame + 5, 0, 100);
-        if (moved) { s.trust = 55; s.teammate = clamp(s.teammate - 10, 0, 100); }
+        if (moved) { s.trust = 55; s.teammate = clamp(s.teammate - 10, 0, 100); leaveTeam(s); }
         log(s, {
           icon: "✍️", title: "FA 계약", tone: "epic",
           body: `${teamById(offer.teamId).name}와 ${offer.years}년 총액 ${formatMoney(offer.total)} 계약 체결! `
@@ -3120,6 +3135,7 @@ export function advance(prev: GameState, action: Action): GameState {
           const from = teamById(s.contract.teamId);
           const to = teamById(offer.teamId);
           s.contract.teamId = offer.teamId;
+          leaveTeam(s);   // 새 팀에는 아는 얼굴도, 나를 아는 감독도 없다
           s.contract.role = offer.role;
           s.seasonRole = offer.role;
           s.trust = clamp(55 + rng.int(-5, 10), 0, 100);

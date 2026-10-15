@@ -28,7 +28,7 @@ import { RESOLVES } from "@/lib/resolve";
 import { myRankAmong } from "@/lib/rivals";
 import { monthsLeft, serviceOptions } from "@/lib/military";
 import { abilityById } from "@/lib/ability";
-import { blockerOf, competesWith, mateRole, SLOT_LABEL } from "@/lib/squad";
+import { blockerOf, competesWith, mateLabel, mateRole, SLOT_LABEL } from "@/lib/squad";
 import { managerFit, managerStyle, managerView } from "@/lib/manager";
 import { powerOf, powerTrend, projectedRanks, rankOf, teamPhase } from "@/lib/league";
 import { answerOf, INTERVIEWS, mediaContext } from "@/lib/media";
@@ -1892,7 +1892,7 @@ function SquadBoard({ g }: { g: GameState }) {
                   </span>
                 )}
                 {!rival && (
-                  <span className="text-[9.5px] font-bold text-[var(--ink-3)]">{SLOT_LABEL[m.slot]}</span>
+                  <span className="text-[9.5px] font-bold text-[var(--ink-3)]">{SLOT_LABEL[mateLabel(m)]}</span>
                 )}
               </span>
               <span className="block text-[9.5px] text-[var(--ink-3)]">
