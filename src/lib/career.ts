@@ -18,7 +18,7 @@ import { judgeMonthForm, potmOdds } from "./form";
 import { RESOLVES, resolveEffect } from "./resolve";
 import { rollBarracks, serviceOptionById } from "./military";
 import { ABILITIES, abilityById, mergeEffects, type AbilityContext } from "./ability";
-import { advanceSquad, blockerOf, competeAdjust, makeSquad } from "./squad";
+import { advanceSquad, blockerOf, competeAdjust, makeSquad, type Mate } from "./squad";
 import { makeManager, managerFit, managerStyle, managerView, shouldReplace, trustOnChange } from "./manager";
 import { advanceLeague, newLeague, powerOf, projectedRanks, teamPhase } from "./league";
 import { applyInterview, INTERVIEWS, mediaContext, pickInterview } from "./media";
@@ -1006,19 +1006,25 @@ function injuryCalendar(avail: number, rng: RNG): number[] {
  * 전력은 팀끼리 주고받는다 — **평균은 고정**이라 성적·입지·순위 기준선이
  * 밀리지 않는다. 내 팀이 크게 움직인 해는 알려준다.
  */
-function refreshLeague(s: GameState, rng: RNG) {
-  if (!s.league) { s.league = newLeague(s.year); return; }
-  if (s.league.year === s.year) return;
+function refreshLeague(s: GameState, rng: RNG): number {
+  if (!s.league) { s.league = newLeague(s.year); return 0; }
+  /**
+   * **밀린 해를 전부 따라잡는다.**
+   * `openSeason`은 복무 중에는 불리지 않는다 — 한 해만 넘기면 열여덟 달을
+   * 다녀온 뒤에도 리그가 한 살만 먹은 게 된다. (전역 화면에서 겪음)
+   */
+  const gap = Math.max(0, Math.min(s.year - s.league.year, 4));
+  if (gap === 0) return 0;
 
   const myId = s.contract?.teamId;
   const was = myId ? powerOf(s, myId) : 0;
-  s.league = advanceLeague(s.league, rng, s.year);
-  if (!myId) return;
+  for (let y = 1; y <= gap; y++) s.league = advanceLeague(s.league, rng, s.league.year + 1);
+  if (!myId) return gap;
 
   const now = powerOf(s, myId);
   const moved = now - was;
-  if (Math.abs(moved) < 3.5) return;
   const rank = projectedRanks(s).find((x) => x.id === myId)?.rank ?? 5;
+  if (Math.abs(moved) < 3.5) return gap;
   log(s, {
     icon: moved > 0 ? "📈" : "📉",
     title: moved > 0 ? "팀이 전력을 보강했다" : "팀이 약해졌다",
@@ -1026,6 +1032,7 @@ function refreshLeague(s: GameState, rng: RNG) {
     body: `${teamById(myId).short} 전력 ${was.toFixed(0)} → ${now.toFixed(0)}`
       + ` (리그 ${rank}위권 · ${teamPhase(s, myId)}).`,
   });
+  return gap;
 }
 
 /**
@@ -1034,11 +1041,11 @@ function refreshLeague(s: GameState, rng: RNG) {
  * 팀이 바뀌면 새 감독이고, 같은 팀이어도 성적이 나쁘면 갈린다.
  * **바뀌면 쌓아 둔 신뢰가 흔들린다** — 그게 이 시스템이 만드는 사건이다.
  */
-function refreshManager(s: GameState, rng: RNG, teamId: string) {
+function refreshManager(s: GameState, rng: RNG, teamId: string, years = 1) {
   const cur = s.manager;
   const moved = !cur || cur.teamId !== teamId;
   const fired = !!cur && !moved && shouldReplace(cur, s, rng);
-  if (!moved && !fired) { if (cur) cur.seasons += 1; return; }
+  if (!moved && !fired) { if (cur) cur.seasons += years; return; }
 
   const next = makeManager(rng, teamId, s.year);
   const before = s.trust;
@@ -1072,7 +1079,7 @@ function refreshManager(s: GameState, rng: RNG, teamId: string) {
  * **팀이 바뀌면 통째로 새로 만든다** — 이적하면 아는 얼굴이 없는 게 맞다.
  * 같은 팀이면 한 해를 먹인다(성장·노쇠·은퇴·FA 이탈, 빈자리는 채운다).
  */
-function refreshSquad(s: GameState, rng: RNG, teamId: string) {
+function refreshSquad(s: GameState, rng: RNG, teamId: string, years = 1) {
   const me = { kind: s.player.kind, position: s.player.position };
   if (!s.squad?.length || s.squadTeamId !== teamId) {
     s.squad = makeSquad(rng, me, s.year);
@@ -1080,8 +1087,13 @@ function refreshSquad(s: GameState, rng: RNG, teamId: string) {
     return;
   }
   const before = blockerOf(s.squad, me);
-  const { squad, left } = advanceSquad(s.squad, rng, s.year, me);
-  s.squad = squad;
+  // 복무로 비운 해만큼 동료도 같이 늙는다
+  const left: Mate[] = [];
+  for (let y = 0; y < years; y++) {
+    const step = advanceSquad(s.squad, rng, s.year, me);
+    s.squad = step.squad;
+    left.push(...step.left);
+  }
   for (const m of left) {
     log(s, {
       icon: m.gone?.why === "은퇴" ? "🎽" : "✈️",
@@ -1146,8 +1158,8 @@ function competeOf(s: GameState, teamPower: number): number {
 function openSeason(s: GameState, rng: RNG, campInjury = 0, availCap = 1) {
   const team = s.contract ? teamById(s.contract.teamId) : null;
   // 리그 → 감독 → 스쿼드 순으로 정리한다 — 뒤의 둘이 전력을 보기 때문
-  refreshLeague(s, rng);
-  if (team) { refreshManager(s, rng, team.id); refreshSquad(s, rng, team.id); }
+  const years = Math.max(1, refreshLeague(s, rng));
+  if (team) { refreshManager(s, rng, team.id, years); refreshSquad(s, rng, team.id, years); }
   if (s.contract?.role === "육성선수") {
     s.seasonLevel = "MINOR";
     s.seasonRole = defaultRole(s.player);

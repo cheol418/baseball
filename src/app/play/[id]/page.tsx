@@ -1172,7 +1172,7 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
                     <Emblem teamId={t.id} size={36} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[13.5px] font-extrabold">{t.name}</span>
-                      <span className="block truncate text-[11px] text-[var(--ink-3)]">{o.note} · 전력 {t.power}</span>
+                      <span className="block truncate text-[11px] text-[var(--ink-3)]">{o.note} · 전력 {Math.round(powerOf(g, t.id))}</span>
                     </span>
                     <span className="shrink-0 text-right">
                       <span className="num block text-[12px] font-bold text-[var(--ink-3)]">{o.years}년</span>
