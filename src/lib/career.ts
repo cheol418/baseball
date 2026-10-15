@@ -20,6 +20,7 @@ import { rollBarracks, serviceOptionById } from "./military";
 import { ABILITIES, abilityById, mergeEffects, type AbilityContext } from "./ability";
 import { advanceSquad, blockerOf, competeAdjust, makeSquad } from "./squad";
 import { makeManager, managerFit, managerStyle, managerView, shouldReplace, trustOnChange } from "./manager";
+import { advanceLeague, newLeague, powerOf, projectedRanks, teamPhase } from "./league";
 import { applyInterview, INTERVIEWS, mediaContext, pickInterview } from "./media";
 import { advanceRivals, makeRivals, settleTitles } from "./rivals";
 import { PS_CUT, simPostseason } from "./postseason";
@@ -203,9 +204,13 @@ export function assignRole(
    * `bar`가 이미 평균적인 경쟁을 품고 있어서, 절대 차이를 얹으면 두 번 센다.
    */
   compete = 0,
+  /** 올해 그 팀의 전력 (`powerOf`) — 안 주면 상수를 쓴다 */
+  livePower?: number,
 ): { level: LevelTag; role: string } {
   const ovr = overall(p);
-  const bar = 73 + (team.power - 65) * 0.2 - (team.youth - 55) * 0.06;
+  // 전력은 상수가 아니다 — 올해 값을 받아 쓴다 (`league.ts`)
+  const power = livePower ?? team.power;
+  const bar = 73 + (power - 65) * 0.2 - (team.youth - 55) * 0.06;
   const bonus = (serviceYears >= 3 ? 2.5 : 0) + (trust - 55) * 0.075;
 
   // 구단은 검증되지 않은 신인을 바로 1군에 올리지 않는다.
@@ -802,7 +807,7 @@ function buildOffer(s: GameState, t: Team, base: number, ageP: number, rng: RNG,
     guaranteed, total: guaranteed + incentive,
     role: homeTeam ? (s.contract?.role ?? defaultRole(s.player)) : defaultRole(s.player),
     note: homeTeam ? "원소속팀 잔류"
-      : t.power >= 72 ? "우승 도전권" : t.youth >= 70 ? "팀의 중심으로 기용" : "주전 보장",
+      : powerOf(s, t.id) >= 72 ? "우승 도전권" : t.youth >= 70 ? "팀의 중심으로 기용" : "주전 보장",
     styleNote: STYLE_NOTE[style],
     incentiveNote: incentive > 0
       ? incentiveTerms(s.player.kind, rng)
@@ -996,6 +1001,34 @@ function injuryCalendar(avail: number, rng: RNG): number[] {
 }
 
 /**
+ * 리그 판도를 그해로 넘긴다.
+ *
+ * 전력은 팀끼리 주고받는다 — **평균은 고정**이라 성적·입지·순위 기준선이
+ * 밀리지 않는다. 내 팀이 크게 움직인 해는 알려준다.
+ */
+function refreshLeague(s: GameState, rng: RNG) {
+  if (!s.league) { s.league = newLeague(s.year); return; }
+  if (s.league.year === s.year) return;
+
+  const myId = s.contract?.teamId;
+  const was = myId ? powerOf(s, myId) : 0;
+  s.league = advanceLeague(s.league, rng, s.year);
+  if (!myId) return;
+
+  const now = powerOf(s, myId);
+  const moved = now - was;
+  if (Math.abs(moved) < 3.5) return;
+  const rank = projectedRanks(s).find((x) => x.id === myId)?.rank ?? 5;
+  log(s, {
+    icon: moved > 0 ? "📈" : "📉",
+    title: moved > 0 ? "팀이 전력을 보강했다" : "팀이 약해졌다",
+    tone: moved > 0 ? "good" : "bad",
+    body: `${teamById(myId).short} 전력 ${was.toFixed(0)} → ${now.toFixed(0)}`
+      + ` (리그 ${rank}위권 · ${teamPhase(s, myId)}).`,
+  });
+}
+
+/**
  * 감독을 그해 상태로 맞춘다.
  *
  * 팀이 바뀌면 새 감독이고, 같은 팀이어도 성적이 나쁘면 갈린다.
@@ -1112,7 +1145,8 @@ function competeOf(s: GameState, teamPower: number): number {
 
 function openSeason(s: GameState, rng: RNG, campInjury = 0, availCap = 1) {
   const team = s.contract ? teamById(s.contract.teamId) : null;
-  // 스쿼드와 감독을 먼저 정리한다 — 둘 다 보직 판정에 들어가므로
+  // 리그 → 감독 → 스쿼드 순으로 정리한다 — 뒤의 둘이 전력을 보기 때문
+  refreshLeague(s, rng);
   if (team) { refreshManager(s, rng, team.id); refreshSquad(s, rng, team.id); }
   if (s.contract?.role === "육성선수") {
     s.seasonLevel = "MINOR";
@@ -1120,7 +1154,7 @@ function openSeason(s: GameState, rng: RNG, campInjury = 0, availCap = 1) {
   } else if (team) {
     // 프로에서 보낸 해 (1군·2군 모두 포함)
     const proYears = s.seasons.filter((r) => r.level === "KBO" || r.level === "MINOR").length;
-    const { level, role } = assignRole(s.player, team, s.serviceYears, s.trust, rng, proYears, competeOf(s, team.power));
+    const { level, role } = assignRole(s.player, team, s.serviceYears, s.trust, rng, proYears, competeOf(s, powerOf(s, team.id)), powerOf(s, team.id));
     s.seasonLevel = level;
     s.seasonRole = role;
     s.contract!.role = role;
@@ -1189,7 +1223,7 @@ export function makeTransferTargets(s: GameState, rng: RNG): TransferTarget[] {
   const ovr = overall(s.player);
   const age = s.player.age;
   // 전력 순으로 매긴 예상 순위 — 어느 팀에 가야 가을야구를 하는지 보여준다
-  const ranked = [...TEAMS].sort((a, b) => b.power - a.power);
+  const ranked = [...TEAMS].sort((a, b) => powerOf(s, b.id) - powerOf(s, a.id));
   const rankOf = (id: string) => ranked.findIndex((t) => t.id === id) + 1;
   const recent = s.seasons.filter((x) => x.level === "KBO").slice(-2);
   const recentWar = recent.reduce((a, b) => a + b.line.war, 0) / Math.max(1, recent.length);
@@ -1200,7 +1234,7 @@ export function makeTransferTargets(s: GameState, rng: RNG): TransferTarget[] {
     // 팀 성향: 육성 지향 구단은 기회를 주고, 자금력 있는 구단은 지갑을 연다
     const need = (t.youth - 55) * 0.28 + (t.money - 65) * 0.18;
     // 강팀은 확실한 전력감만 원한다 — 기량이 낮으면 오히려 관심이 식는다
-    const contendFit = (ovr - 78) * (t.power - 68) * 0.045;
+    const contendFit = (ovr - 78) * (powerOf(s, t.id) - 68) * 0.045;
     // 서른을 넘기면 남은 전성기가 짧다 — 시장은 그 값을 깎는다
     const ageAdj = age <= 25 ? 5 : age <= 28 ? 1 : age === 29 ? -3 : -(age - 28) * 6;
     // 수비 가치가 없는 자리일수록 방망이 하나로만 평가받는다
@@ -1236,12 +1270,12 @@ export function makeTransferTargets(s: GameState, rng: RNG): TransferTarget[] {
     // 관심이 확실할 때만 실제로 성사된다
     const odds = clamp(Math.pow(interest / 100, 2.1) * 1.35 * release * afford, 0.01, 0.85);
     const proYears = s.seasons.filter((r) => r.level === "KBO" || r.level === "MINOR").length;
-    const { role } = assignRole(s.player, t, s.serviceYears, 55, new RNG(s.seed + t.id.charCodeAt(0)), proYears);
+    const { role } = assignRole(s.player, t, s.serviceYears, 55, new RNG(s.seed + t.id.charCodeAt(0)), proYears, 0, powerOf(s, t.id));
 
     const projRank = rankOf(t.id);
     return {
       teamId: t.id, interest, odds, role,
-      power: t.power, projRank,
+      power: Math.round(powerOf(s, t.id)), projRank,
       outlook: projRank <= 3 ? "우승 도전권"
         : projRank <= 6 ? "가을야구 경쟁"
           : t.youth >= 70 ? "리빌딩 — 기회는 많다" : "중하위권",
@@ -1401,7 +1435,7 @@ function simPart(s: GameState, rng: RNG, from: number, to: number): StatLine {
   const R = resolveEffect(s);
   const inp = {
     player: p, level, role,
-    teamPower: team?.power ?? 62,
+    teamPower: team ? powerOf(s, team.id) : 62,
     park: team?.park,
     // 출장 배수는 **1을 넘지 않는다** — 한 시즌은 144경기가 전부다.
     // 1.05까지 허용했더니 선발이 232이닝을 던졌다. (실제로 겪음)
@@ -1445,7 +1479,7 @@ function reviewRoster(
   if (!s.contract || s.seasonLevel === "ARMY") return null;
   const team = teamById(s.contract.teamId);
   const proYears = s.seasons.filter((r) => r.level === "KBO" || r.level === "MINOR").length;
-  const proper = assignRole(s.player, team, s.serviceYears, s.trust, rng, proYears);
+  const proper = assignRole(s.player, team, s.serviceYears, s.trust, rng, proYears, competeOf(s, powerOf(s, team.id)), powerOf(s, team.id));
 
   if (s.seasonLevel === "MINOR") {
     const chance = clamp(0.06 + form * 0.42 + (proper.level === "KBO" ? 0.34 : 0), 0, 0.85);
@@ -2486,14 +2520,14 @@ export function advance(prev: GameState, action: Action): GameState {
         if (s.seasonLevel === "KBO" && s.contract && (s.contract.remaining ?? 0) > 0) {
           const home = teamById(s.contract.teamId);
           const value = s.halfLine?.war ?? 0;
-          const weak = home.power <= 66;
+          const weak = powerOf(s, home.id) <= 66;
           const chance = clamp((weak ? 0.18 : 0.05) + value * 0.07, 0, 0.45);
           if (rng.chance(chance)) {
-            const contenders = TEAMS.filter((t) => t.id !== home.id && t.power >= 70);
+            const contenders = TEAMS.filter((t) => t.id !== home.id && powerOf(s, t.id) >= 70);
             if (contenders.length) {
               const to = rng.pick(contenders);
               const proYears = s.seasons.filter((r) => r.level === "KBO" || r.level === "MINOR").length;
-              const { role } = assignRole(s.player, to, s.serviceYears, 55, rng, proYears);
+              const { role } = assignRole(s.player, to, s.serviceYears, 55, rng, proYears, 0, powerOf(s, to.id));
               s.pendingTrade = {
                 teamId: to.id, role,
                 note: `${to.name}가 우승에 도전하기 위해 ${s.player.name} 선수를 원합니다.`,
@@ -2540,7 +2574,7 @@ export function advance(prev: GameState, action: Action): GameState {
       runTournament(s, rng, "LATE");
       const team = s.contract ? teamById(s.contract.teamId) : null;
       if (s.seasonLevel === "KBO" && team && s.seasonLine) {
-        const strength = team.power + s.seasonLine.war * 0.8 + rng.normal() * 8;
+        const strength = powerOf(s, team.id) + s.seasonLine.war * 0.8 + rng.normal() * 8;
         s.teamRank = clamp(Math.round(11 - (strength - 50) * 0.26), 1, 10);
       } else {
         s.teamRank = null;
@@ -2663,7 +2697,7 @@ export function advance(prev: GameState, action: Action): GameState {
     case "PLAY_POSTSEASON": {
       const team = s.contract ? teamById(s.contract.teamId) : null;
       if (team && s.teamRank) {
-        s.postseason = simPostseason(s.player, team.id, s.teamRank, s.seasonAvailability, rng);
+        s.postseason = simPostseason(s.player, team.id, s.teamRank, s.seasonAvailability, rng, (id) => powerOf(s, id));
         const last = s.postseason.rounds[s.postseason.rounds.length - 1];
         // 승부처는 마지막 시리즈의 한 타석이다 — 그 시리즈의 결과에 말을 맞춘다
         s.postseason.clutchSituation = rollStageClutch("PS", s, rng, "가을야구", last?.win);

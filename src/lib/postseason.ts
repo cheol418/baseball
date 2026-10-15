@@ -22,8 +22,15 @@ export const PS_CUT = 5;
 
 export function simPostseason(
   p: Player, teamId: string, seed: number, availability: number, rng: RNG,
+  /**
+   * 올해 팀별 전력 (`league.ts`의 `powerOf`).
+   * **상수를 읽으면 안 된다** — 리그 판도가 해마다 바뀌므로, 올가을 상대가
+   * 누구인지도 올해 전력으로 정해져야 한다.
+   */
+  power: (id: string) => number = (id) => teamById(id).power,
 ): PostseasonResult {
   const myTeam = teamById(teamId);
+  const myPower = power(teamId);
   const rounds: PostseasonRound[] = [];
   const lines: StatLine[] = [];
   let alive = true;
@@ -31,7 +38,7 @@ export function simPostseason(
 
   const ladder = LADDER[clamp(seed, 1, 5)] ?? [];
   // 상대는 상위 시드일수록 강하다
-  const pool = TEAMS.filter((t) => t.id !== teamId).sort((a, b) => b.power - a.power);
+  const pool = TEAMS.filter((t) => t.id !== teamId).sort((a, b) => power(b.id) - power(a.id));
 
   for (let i = 0; i < ladder.length && alive; i++) {
     const name = ladder[i];
@@ -42,7 +49,7 @@ export function simPostseason(
     // 와일드카드는 4위가 1승 어드밴티지를 안고 시작한다
     let myWins = name === "와일드카드" && seed === 4 ? 1 : 0;
     let oppWins = 0;
-    const edge = clamp(0.5 + (myTeam.power - opp.power) * 0.011, 0.22, 0.78);
+    const edge = clamp(0.5 + (myPower - power(opp.id)) * 0.011, 0.22, 0.78);
     while (myWins < need && oppWins < need) {
       if (rng.chance(edge)) myWins++;
       else oppWins++;
@@ -52,7 +59,7 @@ export function simPostseason(
     const games = myWins + oppWins;
     const share = games / 144;
     const inp = {
-      player: p, level: "KBO" as const, role: "", teamPower: myTeam.power,
+      player: p, level: "KBO" as const, role: "", teamPower: myPower,
       park: myTeam.park,
       availability, rng, share, extraAdj: -5, // 가을에는 상대가 더 강하다
     };

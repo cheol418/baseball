@@ -30,6 +30,7 @@ import { monthsLeft, serviceOptions } from "@/lib/military";
 import { abilityById } from "@/lib/ability";
 import { blockerOf, competesWith, mateRole, SLOT_LABEL } from "@/lib/squad";
 import { managerFit, managerStyle, managerView } from "@/lib/manager";
+import { powerOf, powerTrend, projectedRanks, rankOf, teamPhase } from "@/lib/league";
 import { answerOf, INTERVIEWS, mediaContext } from "@/lib/media";
 import { saveGame, useGame } from "@/lib/storage";
 import { isFranchiseRole } from "@/lib/roles";
@@ -1437,7 +1438,7 @@ function SignModal({ g, onSign }: { g: GameState; onSign: () => void }) {
             <Row2 k="계약금" v={d.bonus > 0 ? formatMoney(d.bonus) : "없음"} big />
             <Row2 k="첫해 연봉" v={formatMoney(d.salary)} big />
             <Row2 k="보직" v={`${d.role}`} />
-            <Row2 k="구단" v={`전력 ${t.power} · ${t.park.name}`} />
+            <Row2 k="구단" v={`전력 ${Math.round(powerOf(g, t.id))} · ${t.park.name}`} />
           </div>
           {d.wish && (
             <p className="mt-2.5 text-center text-[11.5px] font-extrabold text-[var(--brand-2)]">
@@ -2031,6 +2032,38 @@ function PlayerTab({ g }: { g: GameState }) {
 
   return (
     <>
+      {g.league && g.contract && (
+        <Section eyebrow="League" title="리그 판도">
+          <Fold title="올해 구단 전력" count={`${teamById(g.contract.teamId).short} ${rankOf(g, g.contract.teamId)}위권`}>
+            <div className="flex flex-col gap-1">
+              {projectedRanks(g).map((r) => {
+                const t = teamById(r.id);
+                const mine = r.id === g.contract!.teamId;
+                const tr = powerTrend(g, r.id);
+                return (
+                  <div key={r.id} className="flex items-center gap-2 rounded-lg px-2.5 py-1.5"
+                    style={{ background: mine ? "var(--brand)" : "var(--surface-2)", color: mine ? "#fff" : undefined }}>
+                    <span className={`num w-[18px] shrink-0 text-center text-[11px] font-black ${mine ? "" : "text-[var(--ink-3)]"}`}>{r.rank}</span>
+                    <Emblem teamId={r.id} size={18} />
+                    <span className="min-w-0 flex-1 truncate text-[12px] font-bold">{t.short}</span>
+                    {/* 작년 대비 — 지금 뜨는 팀인지 지는 팀인지가 이적 판단의 전부다 */}
+                    <span className="num shrink-0 text-[10px] font-bold"
+                      style={{ color: mine ? "rgba(255,255,255,.75)" : tr >= 1 ? "var(--brand-2)" : tr <= -1 ? "var(--danger)" : "var(--ink-3)" }}>
+                      {tr >= 1 ? `▲${tr.toFixed(0)}` : tr <= -1 ? `▼${Math.abs(tr).toFixed(0)}` : "—"}
+                    </span>
+                    <span className="num w-[26px] shrink-0 text-right text-[12px] font-black">{Math.round(r.power)}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-[var(--ink-3)]">
+              구단 전력은 <b>해마다 움직입니다</b> — 리그 평균은 그대로이고 팀끼리 주고받습니다.
+              지금 우리 팀은 <b>{teamPhase(g, g.contract!.teamId)}</b>입니다.
+            </p>
+          </Fold>
+        </Section>
+      )}
+
       {g.manager && g.contract && (
         <Section eyebrow="Manager" title="감독">
           <div className="card flex items-center gap-3 px-4 py-3.5">
