@@ -94,7 +94,7 @@ export default function Home() {
                       </span>
                     )}
                   </div>
-                  <Link href={`/play/${g.id}`} className="min-w-0 flex-1">
+                  <Link href={`/play?id=${g.id}`} className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
                       <span className="truncate text-[14px] font-extrabold">{g.player.name}</span>
                       <Pill tone="brand">{gradeOf(ovr)} · {ovr}</Pill>
@@ -124,7 +124,7 @@ export default function Home() {
               const hof = computeHof(g);
               return (
                 <li key={g.id}>
-                  <Link href={`/play/${g.id}`} className="card flex items-center gap-3 px-3.5 py-3">
+                  <Link href={`/play?id=${g.id}`} className="card flex items-center gap-3 px-3.5 py-3">
                     <span className="w-6 text-center text-[14px] font-black text-[var(--gold)]">
                       {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}
                     </span>

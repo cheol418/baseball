@@ -2,6 +2,7 @@ import { RNG, clamp } from "./rng";
 import { getAb, overall } from "./player";
 import { isRotationRole } from "./roles";
 import type { GameState, Player, SeasonRecord } from "./types";
+import { ELDER_SURNAMES, GIVEN_ELDER, makeName } from "./names";
 
 /* ------------------------------------------------------------------ */
 /* 감독 — 나를 보는 눈                                                   */
@@ -89,20 +90,11 @@ export interface Manager {
   seasons: number;
 }
 
-const SURNAMES = [
-  "김", "이", "박", "최", "정", "강", "조", "윤", "장", "임",
-  "한", "오", "서", "신", "권", "황", "안", "송", "류", "홍",
-];
-/** 감독은 윗세대다 — 선수들과 다른 이름 결을 쓴다 */
-const GIVEN = [
-  "성한", "태석", "병규", "재훈", "길동", "원섭", "학수", "정길", "만호", "경수",
-  "동렬", "용철", "인식", "기태", "선우", "종범", "상일", "현배", "광현", "준혁",
-];
 
 export function makeManager(rng: RNG, teamId: string, year: number): Manager {
   const style = MANAGER_STYLES[rng.int(0, MANAGER_STYLES.length - 1)];
   return {
-    name: SURNAMES[rng.int(0, SURNAMES.length - 1)] + GIVEN[rng.int(0, GIVEN.length - 1)],
+    name: makeName(rng, GIVEN_ELDER, ELDER_SURNAMES),
     styleId: style.id, teamId, since: year, seasons: 0,
   };
 }

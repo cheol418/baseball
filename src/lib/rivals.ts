@@ -6,6 +6,7 @@ import {
 import { isHitterLine, judgeAwards, type LeagueLeaders, MAJOR_TITLES, mergeLines, simHitter, simPitcher } from "./sim";
 import { TEAMS } from "./teams";
 import type { HitterLine, Kind, PitcherLine, Player, Position, StatLine } from "./types";
+import { GIVEN_CLASS, SURNAMES, makeName } from "./names";
 
 /* ------------------------------------------------------------------ */
 /* 동기 — 같은 해에 지명받아 같이 늙어가는 선수들                          */
@@ -52,16 +53,6 @@ export interface Rival {
   epitaph: string | null;
 }
 
-const SURNAMES = [
-  "김", "이", "박", "최", "정", "강", "조", "윤", "장", "임",
-  "한", "오", "서", "신", "권", "황", "안", "송", "류", "홍",
-  "전", "고", "문", "손", "배", "백", "허", "남", "심", "노",
-];
-const GIVEN = [
-  "지완", "성현", "태호", "우빈", "다온", "현성", "민규", "재호", "승현", "찬우",
-  "예성", "도훈", "시윤", "한결", "정원", "기범", "상우", "영재", "준서", "민혁",
-  "세훈", "동주", "형우", "라온", "태준", "지호", "연우", "성찬", "우현", "재민",
-];
 
 /** 동기 몇 명을 만들 것인가 — 너무 많으면 이름이 흐려지고, 적으면 리그가 비어 보인다 */
 export const RIVAL_COUNT = 6;
@@ -81,13 +72,7 @@ const TIERS: { bias: number; talent: number; pick: [number, number] }[] = [
 
 export function makeRivals(rng: RNG, playerTeamId: string, debutAge: number, myKind?: Kind, myPick?: number): Rival[] {
   const names = new Set<string>();
-  const pickName = () => {
-    for (let i = 0; i < 40; i++) {
-      const n = SURNAMES[rng.int(0, SURNAMES.length - 1)] + GIVEN[rng.int(0, GIVEN.length - 1)];
-      if (!names.has(n)) { names.add(n); return n; }
-    }
-    return SURNAMES[rng.int(0, SURNAMES.length - 1)] + GIVEN[rng.int(0, GIVEN.length - 1)];
-  };
+  const pickName = () => makeName(rng, GIVEN_CLASS, SURNAMES, names);
   const teams = TEAMS.filter((t) => t.id !== playerTeamId);
 
   const list = TIERS.map((t, i) => {

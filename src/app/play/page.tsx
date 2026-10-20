@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import { AbilityBar, AppBar, Column, Container, Empty, Fold, Pill, Section, SeasonProgress } from "@/components/ui";
 import { Broadcast, type BroadcastKind } from "@/components/broadcast";
 import { KeyStats, SeasonTable, fmt2, fmt3, fmtIP } from "@/components/stats";
@@ -52,8 +52,22 @@ const CHAIN_LABEL: Record<string, string> = {
   TURNING_POINT: "커리어 전환점",
 };
 
+/*
+ * 세이브 id는 **쿼리로 받는다**(`/play?id=...`).
+ * 경로 매개변수(`/play/[id]`)로 두면 id가 런타임 생성이라 미리 알 수 없어
+ * 정적 빌드(`output: "export"`)가 만들 페이지가 없다 — 앱으로 감쌀 번들이 안 나온다.
+ * `useSearchParams`는 정적 렌더에서 Suspense 경계를 요구하므로 한 겹 두른다.
+ */
 export default function PlayPage() {
-  const { id } = useParams<{ id: string }>();
+  return (
+    <Suspense fallback={null}>
+      <PlayScreen />
+    </Suspense>
+  );
+}
+
+function PlayScreen() {
+  const id = useSearchParams().get("id") ?? "";
   const { game: g, hydrated } = useGame(id);
   const [tab, setTab] = useState<Tab>("season");
   const [busy, setBusy] = useState(false);

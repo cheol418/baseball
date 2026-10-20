@@ -5,6 +5,7 @@ import {
 } from "./player";
 import { isRotationRole } from "./roles";
 import type { Kind, Player, Position } from "./types";
+import { GIVEN_MATE, SURNAMES, makeName as pickName } from "./names";
 
 /* ------------------------------------------------------------------ */
 /* 우리 팀 — 이름 있는 동료들                                            */
@@ -42,16 +43,6 @@ export interface Mate {
   gone?: { year: number; why: string };
 }
 
-const SURNAMES = [
-  "김", "이", "박", "최", "정", "강", "조", "윤", "장", "임",
-  "한", "오", "서", "신", "권", "황", "안", "송", "류", "홍",
-  "전", "고", "문", "손", "배", "백", "허", "남", "심", "노",
-];
-const GIVEN = [
-  "현도", "준영", "시후", "은우", "지후", "유준", "선우", "민성", "하진", "도윤",
-  "재혁", "태윤", "경민", "수호", "진우", "성호", "영빈", "강민", "지환", "현석",
-  "동하", "병찬", "희수", "종현", "창민", "규현", "성준", "원재", "찬호", "민우",
-];
 
 /** 자리마다 몇 살에 들어오고 어느 정도 재능인가 */
 const SLOTS: { slot: SquadSlot; age: [number, number]; talent: number; bias: -1 | 0 | 1 }[] = [
@@ -67,13 +58,7 @@ const SLOTS: { slot: SquadSlot; age: [number, number]; talent: number; bias: -1 
 
 export const SQUAD_SIZE = SLOTS.length;
 
-function makeName(rng: RNG, used: Set<string>): string {
-  for (let i = 0; i < 40; i++) {
-    const n = SURNAMES[rng.int(0, SURNAMES.length - 1)] + GIVEN[rng.int(0, GIVEN.length - 1)];
-    if (!used.has(n)) { used.add(n); return n; }
-  }
-  return SURNAMES[rng.int(0, SURNAMES.length - 1)] + GIVEN[rng.int(0, GIVEN.length - 1)];
-}
+const makeName = (rng: RNG, used: Set<string>) => pickName(rng, GIVEN_MATE, SURNAMES, used);
 
 /**
  * 내 자리를 두고 다투는 사람인가.

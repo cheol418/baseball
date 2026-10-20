@@ -138,7 +138,7 @@ export default function CreatePage() {
     const c = candidates[picked];
     const g = newGame(c.player, wishTeam, new RNG(c.seed).int(1, 2 ** 30), school);
     saveGame(g);
-    router.push(`/play/${g.id}`);
+    router.push(`/play?id=${g.id}`);
   };
 
   /**

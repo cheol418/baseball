@@ -1,5 +1,6 @@
 import { RNG, clamp, n50 } from "./rng";
 import { roleTier } from "./roles";
+import { GIVEN_YOUNG, makeName } from "./names";
 import type {
   Abilities, AbilityKey, ArmSlot, Hand, Kind, LevelTag, Player, Position, TrainingOption,
 } from "./types";
@@ -331,17 +332,7 @@ export const GIFTED_ODDS = 0.07;
 /* 랜덤 생성                                                            */
 /* ------------------------------------------------------------------ */
 
-const SURNAMES = [
-  "김", "이", "박", "최", "정", "강", "조", "윤", "장", "임",
-  "한", "오", "서", "신", "권", "황", "안", "송", "류", "홍",
-  "전", "고", "문", "손", "배", "백", "허", "남", "심", "노",
-];
 
-const GIVEN = [
-  "준호", "서준", "도현", "민재", "지훈", "현우", "성민", "재윤", "태양", "우진",
-  "건우", "시우", "주원", "정후", "동현", "승우", "예준", "하준", "규민", "찬혁",
-  "인성", "태경", "상현", "영훈", "종민", "대호", "기현", "형준", "세영", "재원",
-];
 
 /** 학교 이름은 앞말 + 뒷말로 짓는다 — 실제 명문고는 이스터에그로 남겨 둔다 */
 const SCHOOL_HEAD = [
@@ -373,7 +364,7 @@ export function randomCreateOptions(rng: RNG): CreateOptions & { school: string 
     : rng.chance(0.34) ? "L" : rng.chance(0.06) ? "S" : "R";
 
   return {
-    name: SURNAMES[rng.int(0, SURNAMES.length - 1)] + GIVEN[rng.int(0, GIVEN.length - 1)],
+    name: makeName(rng, GIVEN_YOUNG),
     school: SCHOOL_HEAD[rng.int(0, SCHOOL_HEAD.length - 1)] + "고",
     number: rng.chance(0.5) ? rng.int(1, 30) : rng.int(31, 99),
     kind, position, bats, throws,
