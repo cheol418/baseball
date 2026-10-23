@@ -217,14 +217,19 @@ export function advanceSquad(
   let idx = 0;
   for (const g of left) {
     /**
-     * 안에서 올린다 — 다만 **자리에 맞는 나이**여야 한다.
-     * 나이를 안 보고 올렸더니 스물여섯이 "베테랑"으로 찍혔다 (실제로 겪음).
+     * 안에서 올린다 — **나이로 막지 않는다.**
+     *
+     * "스물여섯이 베테랑으로 찍힌다"를 고치려고 여기에 나이 문턱
+     * (`veteran` 31세 등)을 걸었더니, 올릴 사람이 없는 해에 승격이
+     * 통째로 실패해 **바깥에서 서른다섯이 새로 들어왔다** — 막으려던
+     * 러닝머신이 그대로 돌아왔다 (실제로 겪음: 커리어당 은퇴 6.1 → 10.8명).
+     *
+     * 화면에 찍히는 이름은 `slot`이 아니라 `mateLabel()`이 **나이에서**
+     * 끌어오므로, 스물여섯이 `veteran` 자리를 물려받아도 "또래"로 보인다.
+     * `slot`은 **자리를 잇는 꼬리표**일 뿐이니 여기서는 나이를 보지 않는다.
      */
-    const MIN_AGE: Partial<Record<SquadSlot, number>> = { veteran: 31, star: 24, peer: 22 };
     const promote = (from: SquadSlot, to: SquadSlot) => {
-      const c = kept
-        .filter((m) => m.slot === from && m.player.age >= (MIN_AGE[to] ?? 0))
-        .sort((a, b) => b.player.age - a.player.age)[0];
+      const c = kept.filter((m) => m.slot === from).sort((a, b) => b.player.age - a.player.age)[0];
       if (!c) return false;
       c.slot = to;
       return true;
