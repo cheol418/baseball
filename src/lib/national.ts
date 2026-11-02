@@ -193,7 +193,7 @@ const SCHEDULE: Record<TournamentId, Stage[]> = {
 };
 
 /** 3·4위전이 있는 대회 — WBC는 없다(2023년부터 폐지) */
-const HAS_BRONZE_GAME: Record<TournamentId, boolean> = {
+export const HAS_BRONZE_GAME: Record<TournamentId, boolean> = {
   ASIAN_GAMES: true, PREMIER12: true, OLYMPIC: true, WBC: false,
 };
 

@@ -181,6 +181,7 @@ stacking context를 만들어, 그 안에서 그린 `fixed`는 sticky 탭 바보
 | `legacy.ts` | 은퇴 후 — 명예의 전당 헌액 투표, 진로 7종 |
 | `flavor.ts` | 시즌 총평 헤드라인, 팬 반응 |
 | `migrate.ts` | 구버전 세이브 → 현재 구조 |
+| `codex.ts` | **도감** — 커리어가 끝나도 남는 127칸 (새로 세지 않고 세이브에서 뽑는다) |
 | `backup.ts` | **세이브 내보내기·가져오기** — 나중에 클라우드 동기화가 그대로 쓴다 |
 | `storage.ts` | localStorage + `useSyncExternalStore` |
 
@@ -404,6 +405,9 @@ UI는 `src/app/page.tsx`(홈) · `create/page.tsx`(4단계 생성) · `play/[id]
 | FA 편차 | 한 협상 안에서 총액 최대·최저가 59% 차이 · 연수 폭 2.8년 · 옵션 0~34% |
 | 서비스타임 | **1군 등록 비율만** 센다 — 가동률을 또 곱하지 않는다(이중 차감) |
 
+| ★ 도감은 세이브를 지워도 남는다 | 은퇴하면 전당 점수 하나가 나오고 끝이라, **한 판이 끝나도 쌓이는 게 없었다.** 특수능력·수상·통산 이정표·별명·국제대회·은퇴 후·명예 **127칸**. 저장소 한도가 서른 개쯤이라 세이브는 지우게 되므로 도감은 `slb:codex`로 따로 살고 **채운 칸을 빼지 않는다**. 새로 세는 것은 없다 — 전부 세이브에 이미 있는 것에서 뽑는다 |
+| 영영 못 채우는 칸을 두지 않는다 | WBC는 3·4위전이 폐지돼 **동메달 자체가 없는데** 도감에 칸을 뒀다 (실제로 겪음 — `scripts/codex.ts`가 잡았다). 어느 대회가 동메달을 주는지는 `national.ts`의 `HAS_BRONZE_GAME`이 단일 소스다. 별명 `이닝이터`는 `nickname()`이 **먼저 맞는 하나만** 돌려주는 탓에 대투수·닥터K에 가려 사실상 잘 안 나온다 |
+| 도감 실측 | 커리어 480개로 **122 / 127칸** · 한 커리어가 평균 22.7칸(최대 50). 남은 다섯은 극단적 빌드가 필요한 칸이다(300·400도루, 안타 제조기, 대도, 이닝이터). **자리·투구폼·좌우를 넓게 섞어 재야 한다** — 좁게 돌리면 '잠수함'이 안 채워지는 게 못 채우는 칸인지 안 가본 칸인지 구별이 안 된다 |
 | 명예의 전당 | 레전드 100%(1차) · 명전급 89%(평균 3.2차) · 그 아래 0% |
 
 ### 앱으로 감쌀 수 있게 둔다
@@ -443,7 +447,7 @@ UI는 `src/app/page.tsx`(홈) · `create/page.tsx`(4단계 생성) · `play/[id]
 `titles`(성적 대비 수상), `titlebar`(부문별 기준선·수상률), `nego`(협상 도박 균형), `negotext`(협상 통보 문구), `integrity`(기록 불변식), `valuecheck`(값의 범위), `goaltext`(목표 표기↔판정), `campreport`(훈련 몫 ↔ 나이 몫), `logic`(칸 사이의 모순), `ceiling`(천장·훈련 몫), `headroom`(성장 여지), `traincover`(훈련 방향의 덮개), `injurybal`(부상 빈도·무게), `earlygame`(초반 여덟 시즌), `rolebar`(OVR ↔ 보직), `fair`(자리만 바꿨을 때의 격차), `stylewar`(같은 OVR에서 유형의 값), `styledrift`(유형 격차가 어디서 오는가), `roleswitch`(보직·포지션 전환), `traingrade`(훈련 성과 분포), `agency`(선택의 무게), `decisions`(결정 밀도), `repeat`(장면 반복), `oddscheck`(표기 확률 검수), `rivals`(동기 분포·타이틀 중복), `fame`(인지도 눈금), `leagueavg`(리그 평균 기준), `injurymonth`(부상의 달력 배치), `wish`(희망 구단의 무게), `park`(구장 효과 크기), `scenefit`(장면↔자리 일치), `service2`(복무 방침의 값), `ability`(특수능력 보유·상실), `abilitysim`(구현 전 드라이런), `media`(인터뷰의 무게), `backup`(내보내기 왕복·합치기 규칙), `squad`(동료 교체·자리 경쟁), `squadsim`(구현 전 드라이런), `manager`(재임·성향 중립성), `league`(판도 변화·평균 고정), `powerfit`(전력 ↔ 보직), `worldcheck`(동료·감독·리그의 상태 모순), `wl`(투수 승패), `randomcreate`(랜덤 조합 정합성), `agelimit`(AG 연령 제한), `wl`(투수 승패), `ipfmt`(이닝 표기), `titlebar`(부문별 기준선), `asscore`(올스타 스코어↔승패), `asorder`(올스타 정보 유출), `textcheck`(문구 빈칸),
 `service_fa`(서비스타임 ↔ FA 도달), `titlemark`(타이틀↔기록 대응),
 `monthform`(월별 단계 분포·이달의 선수), `mvppay`(성적 대비 제시액),
-`determinism`(같은 시드 ↔ 같은 커리어), `namecheck`(실존 야구인 이름), `abilitygate`(특수능력 조건 ↔ 통보 문구), `clutch`(승부처 선택지 균형), `clutchwin`(승부처 문구 ↔ 경기 결과), `clutchgame`(승부처 ↔ 출장 기록), `clutchseat`(장면 ↔ 그 달의 자리), `fagate`(FA를 막는 조건),
+`determinism`(같은 시드 ↔ 같은 커리어), `namecheck`(실존 야구인 이름), `codex`(도감이 실제로 채워지는가), `abilitygate`(특수능력 조건 ↔ 통보 문구), `clutch`(승부처 선택지 균형), `clutchwin`(승부처 문구 ↔ 경기 결과), `clutchgame`(승부처 ↔ 출장 기록), `clutchseat`(장면 ↔ 그 달의 자리), `fagate`(FA를 막는 조건),
 `aging2`·`aging3`(나이별 기록·OVR 낙폭), `refused`(은퇴 권고 거부 후 협상),
 `games2`(입지별 출전 경기)를 쓴다.
 

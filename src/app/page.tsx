@@ -4,10 +4,11 @@ import Link from "next/link";
 import { AppBar, Column, Empty, Pill, Section } from "@/components/ui";
 import { computeHof, MILITARY_DEADLINE } from "@/lib/career";
 import { gradeOf, overall, POSITION_LABEL } from "@/lib/player";
-import { deleteGame, useGames } from "@/lib/storage";
+import { deleteGame, useCodex, useGames } from "@/lib/storage";
 import { teamById } from "@/lib/teams";
 import { Emblem } from "@/components/emblem";
 import { BackupPanel } from "@/components/backup";
+import { ALL_ENTRIES } from "@/lib/codex";
 
 const PHASE_LABEL: Record<string, string> = {
   HS_SEASON: "고교 3학년", PATH_CHOICE: "진로 선택", COLLEGE_SEASON: "대학 시절",
@@ -20,6 +21,7 @@ const PHASE_LABEL: Record<string, string> = {
 
 export default function Home() {
   const { games, hydrated } = useGames();
+  const codex = useCodex();
 
   const active = games.filter((g) => g.phase !== "RETIRED");
   const retired = games
@@ -68,6 +70,23 @@ export default function Home() {
       </div>
       <div className="seam-line" />
       <Column>
+
+      {/* 도감 — 커리어가 끝나도 남는 것. 홈에서 바로 보여야 모을 이유가 된다 */}
+      <Link href="/codex" className="card mt-3 flex items-center gap-3 px-3.5 py-3">
+        <span className="text-[19px] leading-none">📖</span>
+        <span className="min-w-0 flex-1">
+          <b className="block text-[13px]">도감</b>
+          <span className="block text-[10.5px] text-[var(--ink-3)]">
+            특수능력 · 수상 · 통산 이정표 · 별명 — 선수를 지워도 남습니다
+          </span>
+        </span>
+        <span className="shrink-0 text-right">
+          <span className="num block text-[13px] font-black" style={{ color: "var(--gold)" }}>
+            {codex.ids.length}
+          </span>
+          <span className="num block text-[9px] text-[var(--ink-3)]">/ {ALL_ENTRIES.length}</span>
+        </span>
+      </Link>
 
       <Section eyebrow="My Lives" title="나의 선수단">
         {!hydrated ? (
