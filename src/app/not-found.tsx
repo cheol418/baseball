@@ -12,7 +12,7 @@
  * 두 곳에서 똑같이 돈다.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { AppBar, Column, Container } from "@/components/ui";
 
@@ -22,19 +22,27 @@ const legacyPlayId = (path: string): string | null => {
   return m ? decodeURIComponent(m[1]) : null;
 };
 
+/** 마운트됐는가 — 이 프로젝트가 브라우저 값을 렌더에 쓸 때의 방식 그대로 */
+const subscribe = () => () => {};
+const onClient = () => true;
+const onServer = () => false;
+
 export default function NotFound() {
   /*
    * 주소는 **마운트된 뒤에** 읽는다. 렌더 중에 `location`을 보면
    * 서버가 만든 404.html과 값이 달라 hydration이 깨진다.
+   *
+   * effect 안에서 `setState`를 부르지 않는다 — 연쇄 렌더가 된다.
+   * 마운트 여부만 받아 **렌더 중에 계산**하고, effect는 옮기기만 한다.
    */
-  const [moving, setMoving] = useState(false);
+  const mounted = useSyncExternalStore(subscribe, onClient, onServer);
+  const legacy = mounted ? legacyPlayId(window.location.pathname) : null;
+  const moving = legacy !== null;
 
   useEffect(() => {
-    const id = legacyPlayId(window.location.pathname);
-    if (!id) return;
-    setMoving(true);
-    window.location.replace(`/play/?id=${encodeURIComponent(id)}`);
-  }, []);
+    if (legacy === null) return;
+    window.location.replace(`/play/?id=${encodeURIComponent(legacy)}`);
+  }, [legacy]);
 
   return (
     <Container>
