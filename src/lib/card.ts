@@ -20,9 +20,16 @@ import type { GameState } from "./types";
 /**
  * 공유 카드에 찍히는 주소 — **한 곳에서만 적는다.**
  * 이미지 바닥과 복사 텍스트 두 군데에 들어가므로 따로 두면 금방 갈라진다.
- * 도메인이 정해지면 여기만 고친다.
+ *
+ * **빈 값이면 아무 주소도 안 적는다.** 임시로 `baseball-nine.vercel.app`을
+ * 박아뒀더니 그게 남의 사이트(snubaseball.site)로 넘어가고 있었다 —
+ * 공유 카드는 밖으로 나가는 물건이라 **틀린 주소를 적느니 안 적는 게 낫다.**
+ *
+ * Vercel 기본 주소(`baseball-<해시>-levilee-s-projects.vercel.app`)도 쓰지 않는다.
+ * 계정 이름이 그대로 박혀 공개 이미지에 개인 정보가 실린다.
+ * 도메인이 정해지면 여기만 채운다.
  */
-export const SITE = "https://baseball-nine.vercel.app";
+export const SITE: string = "";
 
 export interface CardStat { label: string; value: string }
 
@@ -166,6 +173,6 @@ export function cardText(c: ShareCard, url: string): string {
   rows.push(`명예의 전당 점수 ${c.score} — ${c.tier}`);
   // 그림에는 안 넣는다 — 한 장에 다 담으면 빽빽해진다. 글에는 자리가 있다
   rows.push(`통산 연봉 ${c.earned}`);
-  rows.push(`\n야구는 9회말 2아웃부터\n${url}`);
+  rows.push(url ? `\n야구는 9회말 2아웃부터\n${url}` : "\n야구는 9회말 2아웃부터");
   return rows.join("\n");
 }

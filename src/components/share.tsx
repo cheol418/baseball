@@ -196,11 +196,13 @@ export function drawCard(cv: HTMLCanvasElement, c: ShareCard) {
   g.font = `700 26px ${F.body}`;
   g.fillText(`1군 ${c.seasons}시즌 · ${c.age}세 은퇴`, W - 100, by + 114);
 
-  // ── 바닥
-  g.textAlign = "center";
-  g.fillStyle = "rgba(255,255,255,0.42)";
-  g.font = `700 24px ${F.body}`;
-  g.fillText(SITE.replace("https://", ""), W / 2, H - 66);
+  // ── 바닥 — 주소가 정해지기 전에는 비워 둔다 (틀린 주소를 내보내지 않는다)
+  if (SITE) {
+    g.textAlign = "center";
+    g.fillStyle = "rgba(255,255,255,0.42)";
+    g.font = `700 24px ${F.body}`;
+    g.fillText(SITE.replace(/^https?:\/\//, ""), W / 2, H - 66);
+  }
 }
 
 /**
