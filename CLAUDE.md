@@ -426,6 +426,17 @@ UI는 `src/app/page.tsx`(홈) · `create/page.tsx`(4단계 생성) · `play/[id]
 **쿼리로 받는다**(`/play?id=...`) — `useSearchParams`는 정적 렌더에서 Suspense 경계를 요구한다.
 서버 상태도 API 라우트도 없으므로 이 둘만 지키면 정적 내보내기가 성립한다.
 
+**경로를 바꾸면 예전 링크가 끊긴다.** `/play/[id]` → `/play/?id=`로 옮기자
+그 전에 저장해 둔 주소가 전부 404가 됐다 (실제로 겪음).
+`vercel.json` 리다이렉트로 때우지 않는다 — **웹에서는 돌지만 앱 웹뷰에는 그 설정이 없다.**
+`src/app/not-found.tsx`가 `location.pathname`을 보고 직접 새 주소로 옮긴다
+(주소는 마운트 뒤에 읽는다 — 렌더 중에 보면 404.html과 값이 달라 hydration이 깨진다).
+
+공유 카드에 찍는 주소는 `card.ts`의 **`SITE` 한 곳**이다. 비어 있으면 아무것도 안 적는다 —
+임시로 박아둔 `baseball-nine.vercel.app`이 **남의 사이트로 넘어가고 있었다**.
+Vercel 기본 주소(`baseball-<해시>-levilee-s-projects`)도 쓰지 않는다: 계정 이름이
+공개 이미지에 그대로 실린다.
+
 **서버에 기대는 것을 새로 들이지 않는다** — API 라우트·서버 컴포넌트 데이터·이미지 최적화.
 하나라도 들어오면 앱 번들이 안 나온다.
 

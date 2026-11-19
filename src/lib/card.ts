@@ -29,7 +29,7 @@ import type { GameState } from "./types";
  * 계정 이름이 그대로 박혀 공개 이미지에 개인 정보가 실린다.
  * 도메인이 정해지면 여기만 채운다.
  */
-export const SITE: string = "";
+export const SITE: string = "https://baseball-livid.vercel.app";
 
 export interface CardStat { label: string; value: string }
 
