@@ -13,6 +13,8 @@ import {
   retirementHonors, type Action,
   faGradeOf,
 } from "@/lib/career";
+import { shareCard } from "@/lib/card";
+import { ShareCardBox } from "@/components/share";
 import { fanFeed, seasonHeadline } from "@/lib/flavor";
 import { HOF_CUT, HOF_WAIT, legacyContext, secondLifeOptions } from "@/lib/legacy";
 import { allTimeRanks, nickname } from "@/lib/records";
@@ -1358,7 +1360,19 @@ function ActionCard({ g, busy, run }: { g: GameState; busy: boolean; run: (a: Ac
 
             {vote && <HofVoteBox g={g} vote={vote} busy={busy} run={run} />}
 
-            <Link href="/create" className="btn btn-primary mt-4 w-full py-3 text-[14px]">새로운 인생 시작하기</Link>
+            {/*
+              밖으로 나가는 한 장 — 열다섯 시즌을 걸어놓고 보여줄 게
+              스크린샷뿐이면 아깝다. 서버가 없으므로 기기 안에서 그린다.
+            */}
+            <div className="mt-5 text-left">
+              <div className="eyebrow mb-1">성적표</div>
+              <p className="text-[11.5px] leading-relaxed text-[var(--ink-3)]">
+                한 장으로 정리했습니다. 저장하거나 그대로 공유할 수 있습니다.
+              </p>
+              <ShareCardBox card={shareCard(g)} />
+            </div>
+
+            <Link href="/create" className="btn btn-primary mt-5 w-full py-3 text-[14px]">새로운 인생 시작하기</Link>
           </div>
         </Section>
       );
