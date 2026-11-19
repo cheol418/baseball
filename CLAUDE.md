@@ -383,6 +383,7 @@ UI는 `src/app/page.tsx`(홈) · `create/page.tsx`(4단계 생성) · `play/[id]
 | 이벤트 체인 | **13종** · 커리어당 8.4회 / 7.0종 (4종일 때는 4.7회 / 3.1종) |
 | 자리는 한 방향으로만 흐르지 않는다 | 보직·포지션 전환이 **올라가는 쪽으로도** 있어야 한다. 예전엔 선발→불펜 하나뿐이라 중간계투로 시작하면 평생 중간계투였다 — 같은 기량인데 통산 WAR이 선발의 절반에 묶인다 |
 | 투수 보직 전환 | 몸이 정한다 — **스태미나·제구가 되면 선발**(`starterFit`), **구속·멘탈이 되면 마무리**(`closerFit`). 유형 이름이 아니라 능력치를 본다(유형은 능력치에서 나오므로 돌아가는 길이다). 노쇠한 선발도 구위가 남았으면 불펜이 아니라 뒷문으로 간다 |
+| ★ 옆으로 간 것은 옆으로 갔다고 적는다 | 보직 이동 판정이 `roleTier(새) > roleTier(옛)` **하나뿐**이면 같은 티어로 옮긴 이동이 전부 "하락"으로 떨어진다 — 1군 불펜 → 1군 5선발(둘 다 tier 3)에 "자리를 지키지 못했습니다"가 붙었다 (실제로 겪음). `roles.ts`의 **`roleShift()`가 단일 소스**로 UP/SIDE/DOWN 셋을 돌려주고, 중계·로그가 같은 말을 한다. 같은 무게의 자리 — tier 6 간판타자·에이스 / 5 핵심타자·1선발·마무리 / 4 주전·선발·필승조 / 3 준주전·5선발·불펜 / 2 백업·추격조. 실측 상승 72% · 변경 1.8% · 하락 26% (`roleshift.ts`) |
 | 전환 통보가 약속하면 안 되는 것 | **자리를 옮기는 것과 9회를 맡는 것은 다르다.** 보직은 이듬해 캠프에서 기량으로 다시 정해지므로(`assignRole`), "마무리 전환 — 9회를 맡습니다"라고 못 박으면 정작 필승조로 시작하는 해가 생긴다 (실제로 겪음: 서른일곱에 전환 통보가 뜨고 그해 보직은 필승조였다). "뒷문 쪽으로 간다 · 9회는 기량으로 따낸다"로 적는다 |
 | 수비 스펙트럼 | C → SS → 2B·3B·CF → LF·RF → 1B → DH 순으로 한 칸씩 내려간다. **포수는 넣지 않는다** — 안방은 아무나 볼 수 없어 수비가 떨어져도 마스크를 계속 쓴다 |
 | 거슬러 올라가는 전환 | 발이 빠른 젊은 선수(주력 78+ · 수비 70+ · 28세 이하)는 코너·1루·지명에서 **중견수로 올라간다**(`speedShift`). 포지션 가치가 올라 같은 방망이로 더 쳐준다 |
@@ -453,7 +454,7 @@ UI는 `src/app/page.tsx`(홈) · `create/page.tsx`(4단계 생성) · `play/[id]
 `titles`(성적 대비 수상), `titlebar`(부문별 기준선·수상률), `nego`(협상 도박 균형), `negotext`(협상 통보 문구), `integrity`(기록 불변식), `valuecheck`(값의 범위), `goaltext`(목표 표기↔판정), `campreport`(훈련 몫 ↔ 나이 몫), `logic`(칸 사이의 모순), `ceiling`(천장·훈련 몫), `headroom`(성장 여지), `traincover`(훈련 방향의 덮개), `injurybal`(부상 빈도·무게), `earlygame`(초반 여덟 시즌), `rolebar`(OVR ↔ 보직), `fair`(자리만 바꿨을 때의 격차), `stylewar`(같은 OVR에서 유형의 값), `styledrift`(유형 격차가 어디서 오는가), `roleswitch`(보직·포지션 전환), `traingrade`(훈련 성과 분포), `agency`(선택의 무게), `decisions`(결정 밀도), `repeat`(장면 반복), `oddscheck`(표기 확률 검수), `rivals`(동기 분포·타이틀 중복), `fame`(인지도 눈금), `leagueavg`(리그 평균 기준), `injurymonth`(부상의 달력 배치), `wish`(희망 구단의 무게), `park`(구장 효과 크기), `scenefit`(장면↔자리 일치), `service2`(복무 방침의 값), `ability`(특수능력 보유·상실), `abilitysim`(구현 전 드라이런), `media`(인터뷰의 무게), `backup`(내보내기 왕복·합치기 규칙), `squad`(동료 교체·자리 경쟁), `squadsim`(구현 전 드라이런), `manager`(재임·성향 중립성), `league`(판도 변화·평균 고정), `powerfit`(전력 ↔ 보직), `worldcheck`(동료·감독·리그의 상태 모순), `wl`(투수 승패), `randomcreate`(랜덤 조합 정합성), `agelimit`(AG 연령 제한), `wl`(투수 승패), `ipfmt`(이닝 표기), `titlebar`(부문별 기준선), `asscore`(올스타 스코어↔승패), `asorder`(올스타 정보 유출), `textcheck`(문구 빈칸),
 `service_fa`(서비스타임 ↔ FA 도달), `titlemark`(타이틀↔기록 대응),
 `monthform`(월별 단계 분포·이달의 선수), `mvppay`(성적 대비 제시액),
-`determinism`(같은 시드 ↔ 같은 커리어), `namecheck`(실존 야구인 이름), `codex`(도감이 실제로 채워지는가), `cardcheck`(은퇴 성적표의 빈칸·숫자·팀), `abilitygate`(특수능력 조건 ↔ 통보 문구), `clutch`(승부처 선택지 균형), `clutchwin`(승부처 문구 ↔ 경기 결과), `clutchgame`(승부처 ↔ 출장 기록), `clutchseat`(장면 ↔ 그 달의 자리), `fagate`(FA를 막는 조건),
+`determinism`(같은 시드 ↔ 같은 커리어), `namecheck`(실존 야구인 이름), `codex`(도감이 실제로 채워지는가), `cardcheck`(은퇴 성적표의 빈칸·숫자·팀), `roleshift`(보직 이동 통보의 방향), `abilitygate`(특수능력 조건 ↔ 통보 문구), `clutch`(승부처 선택지 균형), `clutchwin`(승부처 문구 ↔ 경기 결과), `clutchgame`(승부처 ↔ 출장 기록), `clutchseat`(장면 ↔ 그 달의 자리), `fagate`(FA를 막는 조건),
 `aging2`·`aging3`(나이별 기록·OVR 낙폭), `refused`(은퇴 권고 거부 후 협상),
 `games2`(입지별 출전 경기)를 쓴다.
 

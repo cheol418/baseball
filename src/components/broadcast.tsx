@@ -5,7 +5,7 @@ import { fmt2, fmt3, fmtIP } from "./stats";
 import { isHitterLine, mergeLines } from "@/lib/sim";
 import { TOURNAMENTS, clutchGameIndex } from "@/lib/national";
 
-import { roleTier } from "@/lib/roles";
+import { roleShift, roleTier } from "@/lib/roles";
 import { RNG } from "@/lib/rng";
 import type { Clutch, ClutchResult } from "@/lib/clutch";
 import { ClutchCard, ClutchReveal } from "@/components/clutch";
@@ -656,25 +656,31 @@ export function Broadcast({ g, kind, onDone, onAction, busy = false }: {
 /** 1군 콜업 · 2군 말소 통보 */
 function MovePanel({ step }: { step: Extract<Step, { kind: "move" }> }) {
   const t = step.move.type;
-  const promoted = t === "UP" || (t === "ROLE" && roleTier(step.move.role) > roleTier(step.fromRole));
+  // 티어가 같은 이동은 **옆으로 간 것**이다 — 하락으로 적으면 안 한 일을 적는다
+  const shift = roleShift(step.fromRole, step.move.role);
+  const good = t === "UP" || (t === "ROLE" && shift === "UP");
+  const side = t === "ROLE" && shift === "SIDE";
   const title = t === "UP" ? "1군 엔트리 등록"
     : t === "DOWN" ? "1군 엔트리 말소"
-      : promoted ? "보직 상승" : "보직 하락";
+      : shift === "UP" ? "보직 상승" : shift === "SIDE" ? "보직 변경" : "보직 하락";
   return (
     <div className="pop text-center">
       <div className="text-[40px] leading-none">
-        {t === "UP" ? "⬆️" : t === "DOWN" ? "⬇️" : promoted ? "📈" : "📉"}
+        {t === "UP" ? "⬆️" : t === "DOWN" ? "⬇️" : shift === "UP" ? "📈" : side ? "🔁" : "📉"}
       </div>
       <div className="mt-2 text-[10px] font-black uppercase tracking-[0.2em] opacity-60">
         {step.teamName} · {step.month} 종료
       </div>
-      <div className="mt-1 text-[24px] font-black" style={{ color: promoted ? "#e3c07a" : "#dba498" }}>
+      <div className="mt-1 text-[24px] font-black"
+        style={{ color: side ? "#e8e2d6" : good ? "#e3c07a" : "#dba498" }}>
         {title}
       </div>
       <p className="mt-1.5 text-[12.5px] leading-relaxed opacity-85">
         {t === "UP" ? `${step.move.role}(으)로 1군에 올라갑니다.`
           : t === "DOWN" ? "2군에서 다시 준비합니다."
-            : promoted ? "한 달 활약을 인정받았습니다." : "자리를 지키지 못했습니다."}
+            : shift === "UP" ? "한 달 활약을 인정받았습니다."
+              : side ? "같은 무게의 다른 자리를 맡습니다."
+                : "자리를 지키지 못했습니다."}
       </p>
       <div className="mt-3 inline-flex items-center gap-2 rounded-xl bg-white/12 px-3.5 py-2 text-[12px] font-extrabold">
         <span className="opacity-70">{step.fromLabel}</span>

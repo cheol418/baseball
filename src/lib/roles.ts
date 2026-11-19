@@ -67,3 +67,20 @@ export const defaultRoleOf = (p: Player): string =>
 /** 2군으로 내려갈 때의 보직 */
 export const minorRoleOf = (p: Player): string =>
   p.kind === "HITTER" ? "주전" : p.position === "SP" ? "선발" : "불펜";
+
+/**
+ * 보직이 어느 쪽으로 움직였는가 — **판정은 여기 하나뿐이다.**
+ *
+ * 예전엔 중계와 로그가 각자 `roleTier(새) > roleTier(옛)` 하나로만 갈라서,
+ * **같은 티어로 옮기면 전부 "하락"으로 떨어졌다** (실제로 겪음: 1군 불펜 →
+ * 1군 5선발이 "보직 하락 · 자리를 지키지 못했습니다"로 찍혔다).
+ * 5선발과 불펜은 둘 다 tier 3 — 로테이션 뒷자리와 중간계투는 같은 무게다.
+ *
+ * 옆으로 간 것은 **옆으로 갔다고** 말해야 한다.
+ */
+export type RoleShift = "UP" | "SIDE" | "DOWN";
+
+export const roleShift = (from: string | null | undefined, to: string | null | undefined): RoleShift => {
+  const d = roleTier(to) - roleTier(from);
+  return d > 0 ? "UP" : d < 0 ? "DOWN" : "SIDE";
+};

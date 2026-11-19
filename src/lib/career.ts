@@ -25,7 +25,7 @@ import { applyInterview, INTERVIEWS, mediaContext, pickInterview } from "./media
 import { advanceRivals, makeRivals, settleTitles } from "./rivals";
 import { PS_CUT, simPostseason } from "./postseason";
 import {
-  defaultRoleOf, isEverydayRole, isFranchiseRole, isRotationRole, minorRoleOf, roleTier,
+  defaultRoleOf, isEverydayRole, isFranchiseRole, isRotationRole, minorRoleOf, roleShift, roleTier,
 } from "./roles";
 import { placementScore, simAmateurSeason } from "./amateur";
 import { schoolOf } from "./school";
@@ -1654,7 +1654,9 @@ function playHalf(
       if (move.type === "UP") s.calledUpThisSeason = true;
       entry.move = { type: move.type, role: move.role };
 
-      const promoted = move.type === "UP" || (move.type === "ROLE" && roleTier(move.role) > roleTier(role));
+      // 보직이 어느 쪽으로 갔는지는 `roles.ts`가 혼자 말한다 — 같은 티어는 "옆으로"다
+      const shift = roleShift(role, move.role);
+      const promoted = move.type === "UP" || (move.type === "ROLE" && shift === "UP");
       /**
        * 1군↔2군은 **중계를 건너뛰면 놓친다.**
        * 중계 안에도 카드가 서지만 건너뛰기를 누르면 그대로 지나가므로,
@@ -1678,18 +1680,24 @@ function playHalf(
       }
       const title = move.type === "UP" ? "1군 콜업"
         : move.type === "DOWN" ? "2군 이동 통보"
-          : promoted ? "보직 상승" : "보직 하락";
+          : shift === "UP" ? "보직 상승" : shift === "SIDE" ? "보직 변경" : "보직 하락";
       const body = move.type === "UP"
         ? `${m.label}을 마치고 1군 엔트리에 등록되었습니다. ${move.role}(으)로 출발합니다.`
         : move.type === "DOWN"
           ? `${m.label}까지의 부진으로 1군 엔트리에서 말소되었습니다.`
-          : promoted
+          : shift === "UP"
             ? `${m.label} 활약을 인정받아 ${move.role}(으)로 올라섰습니다.`
-            : `${m.label} 부진으로 ${move.role}(으)로 밀렸습니다.`;
+            : shift === "SIDE"
+              ? `${m.label}을 마치고 ${move.role}(으)로 자리를 옮겼습니다.`
+              : `${m.label} 부진으로 ${move.role}(으)로 밀렸습니다.`;
 
       log(s, {
-        icon: move.type === "UP" ? "⬆️" : move.type === "DOWN" ? "⬇️" : promoted ? "📈" : "📉",
-        title, tone: promoted ? "good" : "bad", body,
+        icon: move.type === "UP" ? "⬆️" : move.type === "DOWN" ? "⬇️"
+          : shift === "UP" ? "📈" : shift === "SIDE" ? "🔁" : "📉",
+        title,
+        tone: move.type === "DOWN" ? "bad"
+          : shift === "SIDE" ? "neutral" : promoted ? "good" : "bad",
+        body,
       });
       // 엔트리 이동은 중계 안에서 그 달 자리에 멈춰 확인을 받는다 (통보 큐에 또 넣지 않는다)
     }
